@@ -9,7 +9,7 @@ import { Library } from "./screens/library/Library";
 import { Setlists } from "./screens/setlists/Setlists";
 import { SetlistDetail } from "./screens/setlists/SetlistDetail";
 import { AddEditSong } from "./screens/add-edit-song/AddEditSong";
-import { ImportSong, type ImportMethod } from "./screens/import/ImportSong";
+import { ImportSong, type ImportMethod, type ImportTarget, type ImportFormDraft } from "./screens/import/ImportSong";
 import { Tuner } from "./screens/tuner/Tuner";
 import { Settings } from "./screens/settings/Settings";
 import { Appearance } from "./screens/settings/Appearance";
@@ -37,8 +37,16 @@ function ScreenHost() {
       return <SetlistDetail setlistId={nav.top.params?.setlistId as string} />;
     case "add-edit-song":
       return <AddEditSong songId={nav.top.params?.songId as string | undefined} />;
-    case "import-song":
-      return <ImportSong method={(nav.top.params?.method as ImportMethod) ?? "pdf"} />;
+    case "import-song": {
+      const p = nav.top.params as any;
+      return (
+        <ImportSong
+          method={(p?.method as ImportMethod) ?? "pdf"}
+          target={p?.target as ImportTarget | undefined}
+          formDraft={p?.formDraft as ImportFormDraft | undefined}
+        />
+      );
+    }
     case "tuner":
       return <Tuner />;
     case "settings":

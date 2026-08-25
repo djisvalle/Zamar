@@ -1,9 +1,15 @@
 export type SongSource = "typed" | "chordpro" | "musicxml" | "imported-pdf";
 export type ChartFormat = "chordpro" | "chords-over-lyrics";
 export type AttachmentKind = "image" | "pdf";
+/** Which of the two non-chords views this attachment represents — real
+ * engraved notation vs. any other unconverted reference (a photo of a
+ * handwritten chart, a scanned bulletin insert, etc). Drives which tab label
+ * ("Sheet Music" vs "Static File") the attachment shows under. */
+export type AttachmentRole = "sheet-music" | "static-file";
 
 export interface Attachment {
   kind: AttachmentKind;
+  role: AttachmentRole;
   dataUrl: string; // in-memory only, like everything else in this mockup
   name: string; // original filename, for display
 }
@@ -18,12 +24,11 @@ export interface Song {
   durationSec: number;
   favourite: boolean;
   source: SongSource;
-  chordpro: string; // raw chart, used for the chord/lyric render below
+  chordpro: string; // raw chart, used for the chord/lyric render below — "" if this song has no chords/lyrics view
   chartFormat: ChartFormat; // which syntax the chart was authored in
-  /** "original" means this song is a static image/PDF reference, not a parsed
-   * chart — Live Stage renders `attachment` directly instead of ChordChart.
-   * Undefined behaves the same as "chart" for every existing/typed song. */
-  displayMode?: "chart" | "original";
+  /** An optional second view alongside (or instead of) the chords/lyrics
+   * text — a real sheet-music scan or any other unconverted reference file.
+   * A song can have chordpro, attachment, both, or (rarely) neither. */
   attachment?: Attachment;
 }
 

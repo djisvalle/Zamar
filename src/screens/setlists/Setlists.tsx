@@ -75,7 +75,7 @@ export function Setlists() {
                       {sl.date} · {sl.description}
                     </div>
                   </div>
-                  {isActive ? (
+                  {isActive && (
                     <span
                       style={{
                         display: "flex",
@@ -93,22 +93,6 @@ export function Setlists() {
                       <span style={{ width: 5, height: 5, borderRadius: 99, background: "currentColor" }} />
                       LIVE
                     </span>
-                  ) : (
-                    i === 0 && (
-                      <span
-                        style={{
-                          padding: "3px 7px",
-                          borderRadius: 4,
-                          background: "var(--tint)",
-                          color: "var(--acc-deep)",
-                          fontSize: 9,
-                          fontWeight: 700,
-                          letterSpacing: "0.08em",
-                        }}
-                      >
-                        NEXT UP
-                      </span>
-                    )
                   )}
                 </div>
                 {i === 0 && (

@@ -785,6 +785,17 @@ button {
   font-size: 14.5px;
   line-height: 1.45;
 }
+.chord-section-label {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--acc-deep);
+  margin-top: 12px;
+}
+.chord-section-label:first-child {
+  margin-top: 0;
+}
 
 /* ---- utility ---- */
 .muted {

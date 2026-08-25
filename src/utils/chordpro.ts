@@ -38,12 +38,21 @@ export interface ChordProLine {
   lyric: string;
   chords: ChordPosition[];
   isDirective: boolean;
+  /** A structural section label — "Verse 1", "Chorus", "Tag", etc. ChordPro
+   * has its own provisions for this (e.g. `{start_of_verse}`/{soc}` or a
+   * `{comment: ...}` directive); plain "chords over lyrics" text has no such
+   * syntax, so a standalone line matching a known section keyword is
+   * recognized the same way. Rendered as a header, unlike isDirective lines
+   * (which are hidden). */
+  isSection: boolean;
 }
 
 const DIRECTIVE_RE = /^\{.*\}$/;
 const CHORD_RE = /\[([^\]]+)\]/g;
 const HAS_BRACKET_CHORD_RE = /\[[^\]]+\]/;
 const CHORD_TOKEN_RE = /^[A-G][#b]?(?:maj|min|dim|aug|sus|add|m)?\d{0,2}(?:[#b]\d{1,2})?(?:\/[A-G][#b]?)?$/;
+const SECTION_LABEL_RE =
+  /^(verse|chorus|pre-?chorus|bridge|tag|intro|outro|interlude|refrain|ending|coda|vamp|instrumental|breakdown)\s*\d*:?\s*$/i;
 
 /** A "chords over lyrics" chord line: every whitespace-separated token
  * looks like a chord symbol (e.g. "G       D       Em"), as opposed to a
@@ -52,6 +61,12 @@ function isChordLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
   return trimmed.split(/\s+/).every((tok) => CHORD_TOKEN_RE.test(tok));
+}
+
+/** A standalone structural keyword line — "Verse", "Verse 1", "Chorus",
+ * "Tag", etc. — the plain-text equivalent of a ChordPro section directive. */
+function isSectionLabel(line: string): boolean {
+  return SECTION_LABEL_RE.test(line.trim());
 }
 
 /** Merges a standalone chord line with the lyric line beneath it (or an
@@ -64,7 +79,7 @@ function mergeChordAndLyricLine(chordLine: string, lyricLine: string, semitones:
   while ((match = tokenRe.exec(chordLine))) {
     chords.push({ col: match.index, sym: semitones ? transposeChord(match[0], semitones) : match[0] });
   }
-  return { lyric: lyricLine, chords, isDirective: false };
+  return { lyric: lyricLine, chords, isDirective: false, isSection: false };
 }
 
 /** Unique chord symbols already used in `[Chord]`-bracket text, in order of
@@ -102,7 +117,7 @@ export function extractChordLineChords(text: string): string[] {
  * than hand-placed spacing. */
 export function parseChordProLine(raw: string, semitones = 0): ChordProLine {
   if (DIRECTIVE_RE.test(raw.trim())) {
-    return { lyric: raw, chords: [], isDirective: true };
+    return { lyric: raw, chords: [], isDirective: true, isSection: false };
   }
   let lyric = "";
   const chords: ChordPosition[] = [];
@@ -115,7 +130,7 @@ export function parseChordProLine(raw: string, semitones = 0): ChordProLine {
     lastIndex = CHORD_RE.lastIndex;
   }
   lyric += raw.slice(lastIndex);
-  return { lyric, chords, isDirective: false };
+  return { lyric, chords, isDirective: false, isSection: false };
 }
 
 /** Parses full ChordPro-or-plain-text input into rendered lines. Supports
@@ -133,7 +148,7 @@ export function parseChordPro(text: string, semitones = 0): ChordProLine[] {
       continue;
     }
     if (DIRECTIVE_RE.test(line.trim())) {
-      result.push({ lyric: line, chords: [], isDirective: true });
+      result.push({ lyric: line, chords: [], isDirective: true, isSection: false });
       i++;
       continue;
     }
@@ -142,9 +157,15 @@ export function parseChordPro(text: string, semitones = 0): ChordProLine[] {
       i++;
       continue;
     }
+    if (isSectionLabel(line)) {
+      result.push({ lyric: line.trim(), chords: [], isDirective: false, isSection: true });
+      i++;
+      continue;
+    }
     if (isChordLine(line)) {
       const next = rawLines[i + 1];
-      const nextIsLyric = next !== undefined && next.trim().length > 0 && !isChordLine(next) && !DIRECTIVE_RE.test(next.trim());
+      const nextIsLyric =
+        next !== undefined && next.trim().length > 0 && !isChordLine(next) && !DIRECTIVE_RE.test(next.trim()) && !isSectionLabel(next);
       if (nextIsLyric) {
         result.push(mergeChordAndLyricLine(line, next, semitones));
         i += 2;
@@ -154,7 +175,7 @@ export function parseChordPro(text: string, semitones = 0): ChordProLine[] {
       }
       continue;
     }
-    result.push({ lyric: line, chords: [], isDirective: false });
+    result.push({ lyric: line, chords: [], isDirective: false, isSection: false });
     i++;
   }
   return result;

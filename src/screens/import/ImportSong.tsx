@@ -5,11 +5,28 @@ import { Header } from "../../components/Header";
 import { Dialog } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
-import type { Attachment, Song } from "../../state/types";
+import type { Attachment, AttachmentRole, ChartFormat, Song } from "../../state/types";
 
 export type ImportMethod = "pdf" | "photo" | "musicxml";
 type Phase = "pick" | "converting" | "review" | "error";
 type ContentType = "chords" | "sheet";
+
+/** Where the finished import goes: a brand-new song (Library's default),
+ * an existing song's supplementary sheet-music/static-file view, or back
+ * into an in-progress New/Edit Song form via nav.replace. */
+export type ImportTarget = { kind: "new" } | { kind: "existing"; songId: string } | { kind: "form" };
+
+export interface ImportFormDraft {
+  title: string;
+  artist: string;
+  tempo: string;
+  timeSig: string;
+  manualKey: string;
+  songId?: string; // set when this draft is editing an existing song
+  chordpro: string; // the form's current chart text, preserved when this import only attaches a file
+  chartFormat: ChartFormat;
+  attachment?: Attachment; // the form's current attachment, preserved when this import only converts chords
+}
 
 const METHOD_LABEL: Record<ImportMethod, string> = {
   pdf: "Import PDF",
@@ -34,12 +51,17 @@ const MOCK_CHORDPRO = `{key: G}
 [G]Verse line goes [D]here, edit as [Em]needed to [C]match
 [G]Second line of the [D]imported [Em]chart [C]appears`;
 
-export function ImportSong({ method }: { method: ImportMethod }) {
-  const { dispatch } = useStore();
+export function ImportSong({ method, target, formDraft }: { method: ImportMethod; target?: ImportTarget; formDraft?: ImportFormDraft }) {
+  const { state, dispatch } = useStore();
   const nav = useNavigator();
+  const isExisting = target?.kind === "existing";
+  const isForm = target?.kind === "form";
+  const existingSong = isExisting ? state.songs.find((s) => s.id === target.songId) : undefined;
+
   const [phase, setPhase] = useState<Phase>("pick");
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [contentType, setContentType] = useState<ContentType>("chords");
+  const [existingRole, setExistingRole] = useState<AttachmentRole>("sheet-music");
   const [progress, setProgress] = useState(0);
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -52,6 +74,7 @@ export function ImportSong({ method }: { method: ImportMethod }) {
   const label = METHOD_LABEL[method];
   const canDeclareContent = method !== "musicxml";
   const attachmentKind: Attachment["kind"] = method === "pdf" ? "pdf" : "image";
+  const willAttach = isExisting || (contentType === "sheet" && !!file);
 
   const onFilePicked: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const picked = e.target.files?.[0];
@@ -84,31 +107,83 @@ export function ImportSong({ method }: { method: ImportMethod }) {
     }, 500);
   };
 
-  const saveOriginal = () => {
-    setTitle(file?.name.replace(/\.[^.]+$/, "") || "Untitled import");
+  const goToReview = () => {
+    if (!isExisting) setTitle(file?.name.replace(/\.[^.]+$/, "") || "Untitled import");
     setPhase("review");
   };
 
-  const save = () => {
-    const isOriginal = Boolean(contentType === "sheet" && file);
-    const attachment: Attachment | undefined = isOriginal ? { kind: attachmentKind, dataUrl: file!.dataUrl, name: file!.name } : undefined;
+  const finishNew = () => {
+    const attachment: Attachment | undefined = willAttach
+      ? { kind: attachmentKind, role: "sheet-music", dataUrl: file!.dataUrl, name: file!.name }
+      : undefined;
     const song: Song = {
       id: `song-${Date.now()}`,
       title: title.trim() || "Untitled import",
       artist: artist.trim() || "Unknown",
-      defaultKey: isOriginal ? "—" : "G",
+      defaultKey: willAttach ? "—" : "G",
       tempo: 80,
       timeSig: "4/4",
       durationSec: 240,
       favourite: false,
       source: method === "musicxml" ? "musicxml" : "imported-pdf",
-      chordpro: isOriginal ? "" : MOCK_CHORDPRO,
+      chordpro: willAttach ? "" : MOCK_CHORDPRO,
       chartFormat: "chordpro",
-      displayMode: isOriginal ? "original" : "chart",
       attachment,
     };
     dispatch({ type: "ADD_SONG", song });
     nav.pop();
+  };
+
+  const finishExisting = () => {
+    if (!existingSong || !file) {
+      nav.pop();
+      return;
+    }
+    const attachment: Attachment = { kind: attachmentKind, role: existingRole, dataUrl: file.dataUrl, name: file.name };
+    dispatch({ type: "UPDATE_SONG", song: { ...existingSong, attachment } });
+    nav.pop();
+  };
+
+  const finishForm = () => {
+    // Each import touches only the view it produced — converting chords never
+    // clears a prior attachment, and attaching a file never clears prior chords.
+    const attachment: Attachment | undefined = willAttach
+      ? { kind: attachmentKind, role: "sheet-music", dataUrl: file!.dataUrl, name: file!.name }
+      : formDraft?.attachment;
+    const chordpro = willAttach ? formDraft?.chordpro ?? "" : MOCK_CHORDPRO;
+    const chartFormat = willAttach ? formDraft?.chartFormat ?? "chords-over-lyrics" : ("chordpro" as ChartFormat);
+    nav.replace("add-edit-song", {
+      songId: formDraft?.songId,
+      prefillTitle: formDraft?.title,
+      prefillArtist: formDraft?.artist,
+      prefillTempo: formDraft?.tempo,
+      prefillTimeSig: formDraft?.timeSig,
+      prefillManualKey: formDraft?.manualKey,
+      prefillChordpro: chordpro,
+      prefillChartFormat: chartFormat,
+      prefillAttachment: attachment,
+    });
+  };
+
+  /** Returns to the New/Edit Song form with its draft exactly as it was
+   * before this import started — used when backing out without saving. */
+  const restoreDraft = () =>
+    nav.replace("add-edit-song", {
+      songId: formDraft?.songId,
+      prefillTitle: formDraft?.title,
+      prefillArtist: formDraft?.artist,
+      prefillTempo: formDraft?.tempo,
+      prefillTimeSig: formDraft?.timeSig,
+      prefillManualKey: formDraft?.manualKey,
+      prefillChordpro: formDraft?.chordpro,
+      prefillChartFormat: formDraft?.chartFormat,
+      prefillAttachment: formDraft?.attachment,
+    });
+
+  const handlePrimarySave = () => {
+    if (isExisting) return finishExisting();
+    if (isForm) return finishForm();
+    return finishNew();
   };
 
   if (phase === "converting") {
@@ -173,31 +248,44 @@ export function ImportSong({ method }: { method: ImportMethod }) {
   }
 
   if (phase === "review") {
-    const isOriginal = contentType === "sheet" && file;
+    const canSave = isExisting || isForm ? true : title.trim().length > 0;
     return (
       <div className="screen">
         <div className="hdr">
           <button className="hdr-action" onClick={() => setConfirmDiscard(true)}>
             Cancel
           </button>
-          <span className="hdr-title text-center">Review import</span>
-          <button className="hdr-action" onClick={save} style={{ opacity: title.trim() ? 1 : 0.4 }} disabled={!title.trim()}>
-            Save
+          <span className="hdr-title text-center">{isExisting ? "Attach file" : "Review import"}</span>
+          <button className="hdr-action" onClick={handlePrimarySave} style={{ opacity: canSave ? 1 : 0.4 }} disabled={!canSave}>
+            {isExisting ? "Attach" : isForm ? "Use this" : "Save"}
           </button>
         </div>
         <div className="flex-1 hidden-scroll" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div className="muted" style={{ fontSize: 11 }}>
-            {isOriginal ? `Attached from ${file?.name} — saved as-is, no chords detected.` : `Converted from ${file?.name} — check the details below before saving.`}
-          </div>
-          <div className="field">
-            <label>Title *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Song title" />
-          </div>
-          <div className="field">
-            <label>Artist</label>
-            <input value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Artist or Traditional" />
-          </div>
-          {isOriginal ? (
+          {isExisting ? (
+            <div className="muted" style={{ fontSize: 11, lineHeight: 1.5 }}>
+              Attaching {file?.name} to <strong style={{ color: "var(--fg)" }}>{existingSong?.title}</strong> as{" "}
+              {existingRole === "sheet-music" ? "sheet music" : "a static file"} — its existing chart won't change.
+            </div>
+          ) : (
+            <div className="muted" style={{ fontSize: 11 }}>
+              {willAttach ? `Attached from ${file?.name} — saved as-is, no chords detected.` : `Converted from ${file?.name} — check the details below before saving.`}
+            </div>
+          )}
+
+          {!isExisting && !isForm && (
+            <>
+              <div className="field">
+                <label>Title *</label>
+                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Song title" />
+              </div>
+              <div className="field">
+                <label>Artist</label>
+                <input value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Artist or Traditional" />
+              </div>
+            </>
+          )}
+
+          {willAttach ? (
             attachmentKind === "image" ? (
               <img src={file!.dataUrl} alt={file!.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
             ) : (
@@ -208,7 +296,7 @@ export function ImportSong({ method }: { method: ImportMethod }) {
               <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
                 <ChordChart chordpro={MOCK_CHORDPRO} />
               </div>
-              <div className="field-hint">Detected key: G — fine-tune the chart afterward from Library ⋯ → Edit chart.</div>
+              {!isForm && <div className="field-hint">Detected key: G — fine-tune the chart afterward from Library ⋯ → Edit chart.</div>}
             </>
           )}
         </div>
@@ -216,12 +304,15 @@ export function ImportSong({ method }: { method: ImportMethod }) {
         {confirmDiscard && (
           <Dialog>
             <div className="dialog-title">Discard this import?</div>
-            <div className="dialog-body">{isOriginal ? "The attached file won't be saved." : "The converted chart won't be saved."}</div>
+            <div className="dialog-body">{willAttach ? "The attached file won't be saved." : "The converted chart won't be saved."}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               <button className="btn btn-primary" onClick={() => setConfirmDiscard(false)}>
                 Keep reviewing
               </button>
-              <button className="btn" onClick={() => nav.pop()}>
+              <button
+                className="btn"
+                onClick={() => (isForm ? restoreDraft() : nav.pop())}
+              >
                 Discard
               </button>
             </div>
@@ -233,11 +324,16 @@ export function ImportSong({ method }: { method: ImportMethod }) {
 
   return (
     <div className="screen">
-      <Header title={label} onBack={nav.pop} />
+      <Header
+        title={label}
+        onBack={() => (isForm ? restoreDraft() : nav.pop())}
+      />
       <div className="empty">
         <div className="empty-title">{method === "pdf" ? "Choose a PDF" : method === "photo" ? "Choose a photo" : "Choose a MusicXML file"}</div>
         <div className="empty-body">
-          {method === "pdf"
+          {isExisting && existingSong
+            ? `Attaching to ${existingSong.title}.`
+            : method === "pdf"
             ? "Pick a scanned or exported chart PDF from your device."
             : method === "photo"
             ? "Pick a photo of a printed or handwritten chart."
@@ -249,7 +345,22 @@ export function ImportSong({ method }: { method: ImportMethod }) {
             <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</span>
           </div>
         )}
-        {file && canDeclareContent && (
+        {file && isExisting && (
+          <div style={{ width: "100%", textAlign: "left" }}>
+            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Save as</div>
+            <div style={{ display: "flex" }}>
+              <Segmented
+                options={[
+                  { value: "sheet-music", label: "Sheet music" },
+                  { value: "static-file", label: "Static file" },
+                ]}
+                value={existingRole}
+                onChange={setExistingRole}
+              />
+            </div>
+          </div>
+        )}
+        {file && !isExisting && canDeclareContent && (
           <div style={{ width: "100%", textAlign: "left" }}>
             <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>What's in this file?</div>
             <div style={{ display: "flex" }}>
@@ -275,12 +386,21 @@ export function ImportSong({ method }: { method: ImportMethod }) {
             {file ? "Choose a different file" : method === "pdf" ? "Choose PDF" : method === "photo" ? "Take or choose photo" : "Choose MusicXML file"}
           </button>
           {file && (
-            <button className="btn" onClick={() => (contentType === "sheet" ? saveOriginal() : startConvert(false))}>
-              {contentType === "sheet" ? "Continue" : "Convert to chart"}
+            <button
+              className="btn"
+              onClick={() => {
+                if (isExisting || contentType === "sheet") {
+                  goToReview();
+                } else {
+                  startConvert(false);
+                }
+              }}
+            >
+              {isExisting || contentType === "sheet" ? "Continue" : "Convert to chart"}
             </button>
           )}
         </div>
-        {file && contentType === "chords" && (
+        {file && !isExisting && contentType === "chords" && (
           <button
             className="muted"
             style={{ background: "none", border: "none", fontSize: 11, textDecoration: "underline" }}

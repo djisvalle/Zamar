@@ -3,7 +3,7 @@ import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Sheet, Dialog } from "../../components/Overlays";
-import { flattenSetlist, formatDuration } from "../../utils/setlistCalc";
+import { flattenSetlist } from "../../utils/setlistCalc";
 import { AddToSetDrawer } from "./AddToSetDrawer";
 import { SlotDetailSheet } from "./SlotDetailSheet";
 import { SetDetailsSheet } from "./SetDetailsSheet";
@@ -109,7 +109,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                         {song.title}
                       </div>
                       <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                        {song.artist} · {formatDuration(song.durationSec)} · {song.tempo} BPM · {song.timeSig}
+                        {song.artist} · {song.tempo} BPM · {song.timeSig}
                       </div>
                       {item.note && (
                         <div className="accent-deep" style={{ fontSize: 10.5, marginTop: 3, display: "flex", gap: 5 }}>
@@ -178,6 +178,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
       {slot && (
         <SlotDetailSheet
           setlistId={setlist.id}
+          sections={setlist.sections}
           item={slot.item}
           song={slot.song}
           slotIndex={slot.index}

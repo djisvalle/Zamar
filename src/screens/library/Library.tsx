@@ -21,6 +21,9 @@ export function Library() {
   const [sheetFor, setSheetFor] = useState<Song | null>(null);
   const [keySheetFor, setKeySheetFor] = useState<Song | null>(null);
   const [importSheetOpen, setImportSheetOpen] = useState(false);
+  const [existingPickerOpen, setExistingPickerOpen] = useState(false);
+  const [existingQuery, setExistingQuery] = useState("");
+  const [attachMethodFor, setAttachMethodFor] = useState<Song | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string[] | null>(null);
 
   const filtered = useMemo(() => {
@@ -389,6 +392,76 @@ export function Library() {
             }}
           >
             <span>Import MusicXML</span>
+          </button>
+          <button
+            className="sheet-row"
+            disabled={state.songs.length === 0}
+            onClick={() => {
+              setImportSheetOpen(false);
+              setExistingQuery("");
+              setExistingPickerOpen(true);
+            }}
+          >
+            <span>Attach to an existing song…</span>
+          </button>
+        </Sheet>
+      )}
+
+      {existingPickerOpen && (
+        <Sheet onClose={() => setExistingPickerOpen(false)}>
+          <div className="sheet-title">Attach to which song?</div>
+          <input
+            className="search-bar"
+            style={{ width: "100%" }}
+            placeholder="Search songs"
+            value={existingQuery}
+            onChange={(e) => setExistingQuery(e.target.value)}
+            autoFocus
+          />
+          <div style={{ maxHeight: 320, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            {state.songs
+              .filter(
+                (s) => s.title.toLowerCase().includes(existingQuery.toLowerCase()) || s.artist.toLowerCase().includes(existingQuery.toLowerCase())
+              )
+              .map((s) => (
+                <button
+                  key={s.id}
+                  className="sheet-row"
+                  onClick={() => {
+                    setExistingPickerOpen(false);
+                    setAttachMethodFor(s);
+                  }}
+                >
+                  <span>{s.title}</span>
+                  <span className="muted">{s.artist}</span>
+                </button>
+              ))}
+          </div>
+        </Sheet>
+      )}
+
+      {attachMethodFor && (
+        <Sheet onClose={() => setAttachMethodFor(null)}>
+          <div className="sheet-title">Attach to {attachMethodFor.title}</div>
+          <button
+            className="sheet-row"
+            onClick={() => {
+              const songId = attachMethodFor.id;
+              setAttachMethodFor(null);
+              nav.push("import-song", { method: "pdf", target: { kind: "existing", songId } });
+            }}
+          >
+            <span>Attach a PDF</span>
+          </button>
+          <button
+            className="sheet-row"
+            onClick={() => {
+              const songId = attachMethodFor.id;
+              setAttachMethodFor(null);
+              nav.push("import-song", { method: "photo", target: { kind: "existing", songId } });
+            }}
+          >
+            <span>Attach a photo</span>
           </button>
         </Sheet>
       )}

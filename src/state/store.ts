@@ -65,6 +65,7 @@ export type Action =
   | { type: "REMOVE_ITEM"; setlistId: string; itemId: string }
   | { type: "UPDATE_ITEM"; setlistId: string; itemId: string; patch: Partial<SetlistItem> }
   | { type: "DUPLICATE_ITEM"; setlistId: string; itemId: string }
+  | { type: "MOVE_ITEM"; setlistId: string; itemId: string; toSectionId: string }
   | { type: "STAGE_LOAD"; songId: string; setlistId?: string | null; setlistIndex?: number }
   | { type: "STAGE_SET_VIEW"; view: StageState["view"] }
   | { type: "STAGE_SET_KEY"; key: string }
@@ -81,6 +82,13 @@ export type Action =
 
 function flattenSongIds(setlist: Setlist): string[] {
   return setlist.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song").map((i) => i.songId!));
+}
+
+/** A song with no chords/lyrics text but a sheet-music/static-file
+ * attachment should open on the attachment view, not an empty chart. */
+function defaultView(song: Song | undefined): StageState["view"] {
+  if (song && !song.chordpro.trim() && song.attachment) return "sheet";
+  return "chords";
 }
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -215,6 +223,26 @@ export function reducer(state: AppState, action: Action): AppState {
           };
         }),
       };
+    case "MOVE_ITEM": {
+      return {
+        ...state,
+        setlists: state.setlists.map((sl) => {
+          if (sl.id !== action.setlistId) return sl;
+          let moved: SetlistItem | undefined;
+          const withoutItem = sl.sections.map((sec) => {
+            const idx = sec.items.findIndex((i) => i.id === action.itemId);
+            if (idx === -1) return sec;
+            moved = sec.items[idx];
+            return { ...sec, items: sec.items.filter((i) => i.id !== action.itemId) };
+          });
+          if (!moved) return sl;
+          return {
+            ...sl,
+            sections: withoutItem.map((sec) => (sec.id === action.toSectionId ? { ...sec, items: [...sec.items, moved!] } : sec)),
+          };
+        }),
+      };
+    }
     case "STAGE_LOAD": {
       const setlist = action.setlistId ? state.setlists.find((sl) => sl.id === action.setlistId) : null;
       const song = state.songs.find((s) => s.id === action.songId);
@@ -233,6 +261,7 @@ export function reducer(state: AppState, action: Action): AppState {
           setlistId: action.setlistId ?? null,
           setlistIndex: action.setlistIndex ?? 0,
           dispKey,
+          view: defaultView(song),
         },
       };
     }
@@ -271,7 +300,7 @@ export function reducer(state: AppState, action: Action): AppState {
       }
       return {
         ...state,
-        stage: { ...state.stage, songId: nextId, setlistIndex: nextIndex, dispKey, ended: false },
+        stage: { ...state.stage, songId: nextId, setlistIndex: nextIndex, dispKey, ended: false, view: defaultView(song) },
       };
     }
     case "STAGE_REPLAY": {
@@ -281,7 +310,7 @@ export function reducer(state: AppState, action: Action): AppState {
       const song = state.songs.find((s) => s.id === ids[0]);
       return {
         ...state,
-        stage: { ...state.stage, songId: ids[0], setlistIndex: 0, dispKey: song?.defaultKey ?? null, ended: false },
+        stage: { ...state.stage, songId: ids[0], setlistIndex: 0, dispKey: song?.defaultKey ?? null, ended: false, view: defaultView(song) },
       };
     }
     case "STAGE_EXIT":

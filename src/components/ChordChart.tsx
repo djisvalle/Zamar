@@ -15,18 +15,24 @@ export function ChordChart({
   const lines = parseChordPro(chordpro, semitones).filter((l) => !l.isDirective);
   return (
     <>
-      {lines.map((l, i) => (
-        <div key={i}>
-          {!hideChords && l.chords.length > 0 && (
-            <div className="chord-line" style={{ fontSize: 12 * fontScale }}>
-              {renderChordRow(l.chords)}
-            </div>
-          )}
-          <div className="lyric-line" style={{ fontSize: 14.5 * fontScale }}>
+      {lines.map((l, i) =>
+        l.isSection ? (
+          <div key={i} className="chord-section-label" style={{ fontSize: 11 * fontScale }}>
             {l.lyric}
           </div>
-        </div>
-      ))}
+        ) : (
+          <div key={i}>
+            {!hideChords && l.chords.length > 0 && (
+              <div className="chord-line" style={{ fontSize: 12 * fontScale }}>
+                {renderChordRow(l.chords)}
+              </div>
+            )}
+            <div className="lyric-line" style={{ fontSize: 14.5 * fontScale }}>
+              {l.lyric}
+            </div>
+          </div>
+        )
+      )}
     </>
   );
 }

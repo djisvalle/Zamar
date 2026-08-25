@@ -23,7 +23,7 @@ export function LiveStage() {
   const swipeStartX = useRef<number | null>(null);
 
   const song = stage.songId ? state.songs.find((s) => s.id === stage.songId) : null;
-  const isOriginal = Boolean(song?.displayMode === "original" && song.attachment);
+  const hasChords = Boolean(song && song.chordpro.trim());
   const setlist = stage.setlistId ? state.setlists.find((sl) => sl.id === stage.setlistId) : null;
   const setlistSongIds = activeSetlistSongIds(setlist);
 
@@ -181,61 +181,59 @@ export function LiveStage() {
                 {song.artist}
               </div>
             </div>
-            {isOriginal ? (
-              <span
-                style={{ flex: "none", padding: "3px 7px", borderRadius: 4, background: "var(--tint)", color: "var(--acc-deep)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em" }}
-              >
-                ORIGINAL
-              </span>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: "none" }}>
-                <div style={{ display: "flex", gap: 2, background: "var(--line)", borderRadius: 8, padding: 3 }}>
-                  <button
-                    onClick={() => dispatch({ type: "STAGE_SET_VIEW", view: "chords" })}
-                    style={{
-                      fontSize: 11,
-                      padding: "4px 11px",
-                      borderRadius: 5,
-                      border: "none",
-                      fontWeight: 700,
-                      background: stage.view === "chords" ? "var(--acc)" : "transparent",
-                      color: stage.view === "chords" ? "var(--onacc)" : "var(--mut)",
-                    }}
-                  >
-                    Chord
-                  </button>
-                  <button
-                    onClick={() => dispatch({ type: "STAGE_SET_VIEW", view: "sheet" })}
-                    style={{
-                      fontSize: 11,
-                      padding: "4px 11px",
-                      borderRadius: 5,
-                      border: "none",
-                      fontWeight: 700,
-                      background: stage.view === "sheet" ? "var(--acc)" : "transparent",
-                      color: stage.view === "sheet" ? "var(--onacc)" : "var(--mut)",
-                    }}
-                  >
-                    Sheet
-                  </button>
-                </div>
-                {stage.view === "chords" ? (
-                  <div className="accent-deep" style={{ fontSize: 10, fontWeight: 700 }}>
-                    Key of {stage.dispKey}
-                  </div>
-                ) : (
-                  <button
-                    className="chip"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPartsOpen(true);
-                    }}
-                  >
-                    Parts · 2/3
-                  </button>
-                )}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: "none" }}>
+              <div style={{ display: "flex", gap: 2, background: "var(--line)", borderRadius: 8, padding: 3 }}>
+                <button
+                  disabled={!hasChords}
+                  onClick={() => dispatch({ type: "STAGE_SET_VIEW", view: "chords" })}
+                  style={{
+                    fontSize: 11,
+                    padding: "4px 11px",
+                    borderRadius: 5,
+                    border: "none",
+                    fontWeight: 700,
+                    opacity: hasChords ? 1 : 0.35,
+                    background: stage.view === "chords" ? "var(--acc)" : "transparent",
+                    color: stage.view === "chords" ? "var(--onacc)" : "var(--mut)",
+                  }}
+                >
+                  Chord
+                </button>
+                <button
+                  onClick={() => dispatch({ type: "STAGE_SET_VIEW", view: "sheet" })}
+                  style={{
+                    fontSize: 11,
+                    padding: "4px 11px",
+                    borderRadius: 5,
+                    border: "none",
+                    fontWeight: 700,
+                    background: stage.view === "sheet" ? "var(--acc)" : "transparent",
+                    color: stage.view === "sheet" ? "var(--onacc)" : "var(--mut)",
+                  }}
+                >
+                  {song.attachment?.role === "static-file" ? "File" : "Sheet"}
+                </button>
               </div>
-            )}
+              {stage.view === "chords" ? (
+                <div className="accent-deep" style={{ fontSize: 10, fontWeight: 700 }}>
+                  Key of {stage.dispKey}
+                </div>
+              ) : song.attachment ? (
+                <div className="muted" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
+                  {song.attachment.role === "sheet-music" ? "SHEET MUSIC" : "STATIC FILE"}
+                </div>
+              ) : (
+                <button
+                  className="chip"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPartsOpen(true);
+                  }}
+                >
+                  Parts · 2/3
+                </button>
+              )}
+            </div>
       </div>
 
       <div
@@ -250,32 +248,32 @@ export function LiveStage() {
         onPointerDown={onChartPointerDown}
         onPointerUp={onChartPointerUp}
       >
-        {isOriginal ? (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
-            {song.attachment!.kind === "image" ? (
-              <img
-                src={song.attachment!.dataUrl}
-                alt={song.attachment!.name}
-                style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
-              />
-            ) : (
-              <embed
-                src={song.attachment!.dataUrl}
-                type="application/pdf"
-                style={{ width: "100%", height: "100%", minHeight: 400, borderRadius: 8, border: "1px solid var(--line)" }}
-              />
-            )}
-            <span className="muted" style={{ fontSize: 11 }}>
-              {song.attachment!.name} · saved as-is, no chords detected
-            </span>
-          </div>
-        ) : stage.view === "chords" ? (
+        {stage.view === "chords" ? (
           <ChordChart
             chordpro={song.chordpro}
             semitones={semitones}
             fontScale={stage.zoom / 100}
             hideChords={stage.lyricsOnly}
           />
+        ) : song.attachment ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
+            {song.attachment.kind === "image" ? (
+              <img
+                src={song.attachment.dataUrl}
+                alt={song.attachment.name}
+                style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
+              />
+            ) : (
+              <embed
+                src={song.attachment.dataUrl}
+                type="application/pdf"
+                style={{ width: "100%", height: "100%", minHeight: 400, borderRadius: 8, border: "1px solid var(--line)" }}
+              />
+            )}
+            <span className="muted" style={{ fontSize: 11 }}>
+              {song.attachment.name} · saved as-is, no chords detected
+            </span>
+          </div>
         ) : (
           <div
             style={{
@@ -307,7 +305,7 @@ export function LiveStage() {
         </div>
       )}
 
-      {!stage.chromeHidden && !isOriginal && <MusicToolbar onAnnotate={() => dispatch({ type: "STAGE_TOGGLE_ANNOTATE" })} />}
+      {!stage.chromeHidden && hasChords && <MusicToolbar onAnnotate={() => dispatch({ type: "STAGE_TOGGLE_ANNOTATE" })} />}
 
       {menuOpen && <MenuDrawer onClose={() => setMenuOpen(false)} />}
       {stage.drawer === "add-song" && (

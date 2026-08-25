@@ -3,16 +3,18 @@ import { Sheet } from "../../components/Overlays";
 import { KeyChips } from "../../components/KeyChips";
 import { useStore } from "../../state/store";
 import { formatDuration } from "../../state/mockData";
-import type { SetlistItem, Song } from "../../state/types";
+import type { SetlistItem, SetlistSection, Song } from "../../state/types";
 
 export function SlotDetailSheet({
   setlistId,
+  sections,
   item,
   song,
   slotIndex,
   onClose,
 }: {
   setlistId: string;
+  sections: SetlistSection[];
   item: SetlistItem;
   song: Song;
   slotIndex: number;
@@ -20,6 +22,9 @@ export function SlotDetailSheet({
 }) {
   const { dispatch } = useStore();
   const [note, setNote] = useState(item.note ?? "");
+  const [moveOpen, setMoveOpen] = useState(false);
+
+  const currentSectionId = sections.find((sec) => sec.items.some((i) => i.id === item.id))?.id;
 
   const patch = (p: Partial<SetlistItem>) => dispatch({ type: "UPDATE_ITEM", setlistId, itemId: item.id, patch: p });
 
@@ -81,6 +86,11 @@ export function SlotDetailSheet({
         >
           <span>Duplicate slot</span>
         </button>
+        {sections.length > 1 && (
+          <button className="sheet-row" onClick={() => setMoveOpen(true)}>
+            <span>Move to section</span>
+          </button>
+        )}
         <button
           className="sheet-row"
           style={{ color: "#8c3b3b" }}
@@ -92,6 +102,31 @@ export function SlotDetailSheet({
           <span>Remove from set</span>
         </button>
       </div>
+
+      {moveOpen && (
+        <Sheet onClose={() => setMoveOpen(false)}>
+          <div className="sheet-title">Move to section</div>
+          {sections.map((sec) => {
+            const isCurrent = sec.id === currentSectionId;
+            return (
+              <button
+                key={sec.id}
+                className="sheet-row"
+                disabled={isCurrent}
+                style={isCurrent ? { opacity: 0.4 } : undefined}
+                onClick={() => {
+                  dispatch({ type: "MOVE_ITEM", setlistId, itemId: item.id, toSectionId: sec.id });
+                  setMoveOpen(false);
+                  onClose();
+                }}
+              >
+                <span>{sec.label}</span>
+                {isCurrent && <span className="muted">Current</span>}
+              </button>
+            );
+          })}
+        </Sheet>
+      )}
     </Sheet>
   );
 }
