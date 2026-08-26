@@ -341,14 +341,30 @@ export function StoreProvider({ children, initial }: { children: ReactNode; init
   useEffect(() => {
     const t = setTimeout(() => {
       (async () => {
+        const songIds = new Set(state.songs.map((s) => s.id));
+        const safeSetlists = state.setlists.map((sl) => ({
+          ...sl,
+          sections: sl.sections.map((sec) => ({
+            ...sec,
+            items: sec.items.filter((i) => i.kind !== "song" || (i.songId != null && songIds.has(i.songId))),
+          })),
+        }));
         try {
           await setlistsRepo.replaceAll([]);
           await songsRepo.replaceAll(state.songs);
-          await setlistsRepo.replaceAll(state.setlists);
+          await setlistsRepo.replaceAll(safeSetlists);
+        } catch (err) {
+          console.warn("Zamar: failed to persist songs/setlists", err);
+        }
+        try {
           await settingsRepo.replaceAll(state.settings);
+        } catch (err) {
+          console.warn("Zamar: failed to persist settings", err);
+        }
+        try {
           await persist();
         } catch (err) {
-          console.warn("Zamar: failed to persist app state", err);
+          console.warn("Zamar: failed to flush persisted state to web store", err);
         }
       })();
     }, 250);
