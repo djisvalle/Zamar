@@ -1,6 +1,9 @@
-import { createContext, useContext, useReducer, type Dispatch, type ReactNode, createElement } from "react";
+import { createContext, useContext, useEffect, useReducer, type Dispatch, type ReactNode, createElement } from "react";
 import type { Setlist, SetlistItem, Settings, Song, StageState, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
+import * as songsRepo from "../data/songsRepo";
+import * as setlistsRepo from "../data/setlistsRepo";
+import * as settingsRepo from "../data/settingsRepo";
 
 export interface AppState {
   songs: Song[];
@@ -10,7 +13,7 @@ export interface AppState {
   viewport: Viewport;
 }
 
-const emptyStage: StageState = {
+export const emptyStage: StageState = {
   songId: null,
   setlistId: null,
   setlistIndex: 0,
@@ -41,6 +44,10 @@ export function initialState(): AppState {
     stage: emptyStage,
     viewport: "phone",
   };
+}
+
+export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
+  return { songs, setlists, settings, stage: emptyStage, viewport: "phone" };
 }
 
 export type Action =
@@ -327,8 +334,30 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, initialState);
+export function StoreProvider({ children, initial }: { children: ReactNode; initial: AppState }) {
+  const [state, dispatch] = useReducer(reducer, initial);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      songsRepo.replaceAll(state.songs).catch((err) => console.warn("Zamar: failed to persist songs", err));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [state.songs]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setlistsRepo.replaceAll(state.setlists).catch((err) => console.warn("Zamar: failed to persist setlists", err));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [state.setlists]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      settingsRepo.replaceAll(state.settings).catch((err) => console.warn("Zamar: failed to persist settings", err));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [state.settings]);
+
   return createElement(StoreContext.Provider, { value: { state, dispatch } }, children);
 }
 
