@@ -22,7 +22,7 @@ export function Setlists() {
       time: "",
       description: "",
       status: "upcoming",
-      sections: [{ id: "set", label: "Set", items: [] }],
+      sections: [{ id: `${id}-sec`, label: "Set", items: [] }],
     };
     dispatch({ type: "ADD_SETLIST", setlist });
     nav.push("setlist-detail", { setlistId: id, openDetails: true });

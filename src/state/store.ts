@@ -4,6 +4,7 @@ import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
 import * as songsRepo from "../data/songsRepo";
 import * as setlistsRepo from "../data/setlistsRepo";
 import * as settingsRepo from "../data/settingsRepo";
+import { persist } from "../data/db";
 
 export interface AppState {
   songs: Song[];
@@ -339,24 +340,20 @@ export function StoreProvider({ children, initial }: { children: ReactNode; init
 
   useEffect(() => {
     const t = setTimeout(() => {
-      songsRepo.replaceAll(state.songs).catch((err) => console.warn("Zamar: failed to persist songs", err));
+      (async () => {
+        try {
+          await setlistsRepo.replaceAll([]);
+          await songsRepo.replaceAll(state.songs);
+          await setlistsRepo.replaceAll(state.setlists);
+          await settingsRepo.replaceAll(state.settings);
+          await persist();
+        } catch (err) {
+          console.warn("Zamar: failed to persist app state", err);
+        }
+      })();
     }, 250);
     return () => clearTimeout(t);
-  }, [state.songs]);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setlistsRepo.replaceAll(state.setlists).catch((err) => console.warn("Zamar: failed to persist setlists", err));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [state.setlists]);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      settingsRepo.replaceAll(state.settings).catch((err) => console.warn("Zamar: failed to persist settings", err));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [state.settings]);
+  }, [state.songs, state.setlists, state.settings]);
 
   return createElement(StoreContext.Provider, { value: { state, dispatch } }, children);
 }

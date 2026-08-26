@@ -101,3 +101,8 @@ export function getDb(): Promise<SQLiteDBConnection> {
   }
   return dbPromise;
 }
+
+export async function persist(): Promise<void> {
+  if (Capacitor.getPlatform() !== "web") return;
+  await sqlite.saveToStore(DB_NAME);
+}
