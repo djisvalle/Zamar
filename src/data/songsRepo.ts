@@ -44,6 +44,23 @@ function rowToSong(row: SongRow): Song {
   return song;
 }
 
+export function buildDeleteStatement(): { statement: string; values: unknown[] } {
+  return { statement: "DELETE FROM songs", values: [] };
+}
+
+export function buildInsertStatements(songs: Song[]): { statement: string; values: unknown[] }[] {
+  return songs.map((s) => ({
+    statement: `INSERT INTO songs
+      (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachment_kind, attachment_role, attachment_dataUrl, attachment_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [
+      s.id, s.title, s.artist, s.defaultKey, s.tempo, s.timeSig, s.durationSec,
+      s.favourite ? 1 : 0, s.source, s.chordpro, s.chartFormat,
+      s.attachment?.kind ?? null, s.attachment?.role ?? null, s.attachment?.dataUrl ?? null, s.attachment?.name ?? null,
+    ],
+  }));
+}
+
 export async function loadAll(): Promise<Song[]> {
   const db = await getDb();
   const result = await db.query("SELECT * FROM songs");
@@ -52,30 +69,5 @@ export async function loadAll(): Promise<Song[]> {
 
 export async function replaceAll(songs: Song[]): Promise<void> {
   const db = await getDb();
-  const statements: { statement: string; values: unknown[] }[] = [{ statement: "DELETE FROM songs", values: [] }];
-  for (const s of songs) {
-    statements.push({
-      statement: `INSERT INTO songs
-        (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachment_kind, attachment_role, attachment_dataUrl, attachment_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      values: [
-        s.id,
-        s.title,
-        s.artist,
-        s.defaultKey,
-        s.tempo,
-        s.timeSig,
-        s.durationSec,
-        s.favourite ? 1 : 0,
-        s.source,
-        s.chordpro,
-        s.chartFormat,
-        s.attachment?.kind ?? null,
-        s.attachment?.role ?? null,
-        s.attachment?.dataUrl ?? null,
-        s.attachment?.name ?? null,
-      ],
-    });
-  }
-  await db.executeSet(statements);
+  await db.executeSet([buildDeleteStatement(), ...buildInsertStatements(songs)]);
 }

@@ -67,13 +67,16 @@ export async function loadAll(): Promise<Setlist[]> {
   });
 }
 
-export async function replaceAll(setlists: Setlist[]): Promise<void> {
-  const db = await getDb();
-  const statements: { statement: string; values: unknown[] }[] = [
+export function buildDeleteStatements(): { statement: string; values: unknown[] }[] {
+  return [
     { statement: "DELETE FROM setlist_items", values: [] },
     { statement: "DELETE FROM setlist_sections", values: [] },
     { statement: "DELETE FROM setlists", values: [] },
   ];
+}
+
+export function buildInsertStatements(setlists: Setlist[]): { statement: string; values: unknown[] }[] {
+  const statements: { statement: string; values: unknown[] }[] = [];
   for (const sl of setlists) {
     statements.push({
       statement: "INSERT INTO setlists (id, name, date, time, description, status) VALUES (?, ?, ?, ?, ?, ?)",
@@ -104,5 +107,10 @@ export async function replaceAll(setlists: Setlist[]): Promise<void> {
       });
     });
   }
-  await db.executeSet(statements);
+  return statements;
+}
+
+export async function replaceAll(setlists: Setlist[]): Promise<void> {
+  const db = await getDb();
+  await db.executeSet([...buildDeleteStatements(), ...buildInsertStatements(setlists)]);
 }

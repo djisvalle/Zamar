@@ -90,7 +90,7 @@ export function Settings() {
               className={"btn btn-danger" + (eraseText !== "ERASE" ? " is-disabled" : "")}
               disabled={eraseText !== "ERASE"}
               onClick={() => {
-                dispatch({ type: "DELETE_SONGS", ids: state.songs.map((s) => s.id) });
+                dispatch({ type: "START_EMPTY" });
                 setErasing(false);
                 setEraseText("");
               }}

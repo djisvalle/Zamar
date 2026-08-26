@@ -493,6 +493,16 @@ export function Library() {
             <button
               className="btn btn-danger"
               onClick={() => {
+                const deletedIds = new Set(confirmDelete);
+                for (const setlist of state.setlists) {
+                  for (const section of setlist.sections) {
+                    for (const item of section.items) {
+                      if (item.kind === "song" && item.songId && deletedIds.has(item.songId)) {
+                        dispatch({ type: "REMOVE_ITEM", setlistId: setlist.id, itemId: item.id });
+                      }
+                    }
+                  }
+                }
                 dispatch({ type: "DELETE_SONGS", ids: confirmDelete });
                 setConfirmDelete(null);
                 if (selectMode) exitSelectMode();

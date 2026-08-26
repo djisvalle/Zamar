@@ -1,10 +1,10 @@
-import { createContext, useContext, useEffect, useReducer, type Dispatch, type ReactNode, createElement } from "react";
+import { createContext, useContext, useEffect, useReducer, useRef, type Dispatch, type ReactNode, createElement } from "react";
 import type { Setlist, SetlistItem, Settings, Song, StageState, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
 import * as songsRepo from "../data/songsRepo";
 import * as setlistsRepo from "../data/setlistsRepo";
 import * as settingsRepo from "../data/settingsRepo";
-import { persist } from "../data/db";
+import { getDb, persist } from "../data/db";
 
 export interface AppState {
   songs: Song[];
@@ -338,8 +338,16 @@ const StoreContext = createContext<StoreContextValue | null>(null);
 export function StoreProvider({ children, initial }: { children: ReactNode; initial: AppState }) {
   const [state, dispatch] = useReducer(reducer, initial);
 
+  const firstRun = useRef(true);
+  const persistGen = useRef(0);
+
   useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
     const t = setTimeout(() => {
+      const mine = ++persistGen.current;
       (async () => {
         const songIds = new Set(state.songs.map((s) => s.id));
         const safeSetlists = state.setlists.map((sl) => ({
@@ -349,18 +357,31 @@ export function StoreProvider({ children, initial }: { children: ReactNode; init
             items: sec.items.filter((i) => i.kind !== "song" || (i.songId != null && songIds.has(i.songId))),
           })),
         }));
+        // Songs and setlists are FK-coupled (setlist_items.song_id -> songs.id) and must be
+        // written as ONE atomic transaction, in FK-safe order: clear setlist rows first (removes
+        // any reference to a song about to be deleted), then replace songs, then reinsert
+        // setlists (safe now, since the songs they reference already exist). Splitting this
+        // across multiple separately-committed transactions risks losing all setlist data if
+        // the process dies between commits.
         try {
-          await setlistsRepo.replaceAll([]);
-          await songsRepo.replaceAll(state.songs);
-          await setlistsRepo.replaceAll(safeSetlists);
+          const db = await getDb();
+          if (persistGen.current !== mine) return;
+          await db.executeSet([
+            ...setlistsRepo.buildDeleteStatements(),
+            songsRepo.buildDeleteStatement(),
+            ...songsRepo.buildInsertStatements(state.songs),
+            ...setlistsRepo.buildInsertStatements(safeSetlists),
+          ]);
         } catch (err) {
           console.warn("Zamar: failed to persist songs/setlists", err);
         }
+        if (persistGen.current !== mine) return;
         try {
           await settingsRepo.replaceAll(state.settings);
         } catch (err) {
           console.warn("Zamar: failed to persist settings", err);
         }
+        if (persistGen.current !== mine) return;
         try {
           await persist();
         } catch (err) {
