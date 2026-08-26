@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { useStore } from "./state/store";
 import { useNavigator } from "./navigation/Navigator";
 import { StatusBar } from "./components/StatusBar";
@@ -63,6 +64,19 @@ function ScreenHost() {
 export default function App() {
   const { state, dispatch } = useStore();
   const vp = VIEWPORT_VARS[state.viewport];
+
+  if (Capacitor.isNativePlatform()) {
+    return (
+      <div
+        className="device device--native"
+        data-theme={state.settings.theme}
+        style={{ "--status-h": vp.statusH } as React.CSSProperties}
+      >
+        <StatusBar />
+        <ScreenHost />
+      </div>
+    );
+  }
 
   return (
     <div className="stage">

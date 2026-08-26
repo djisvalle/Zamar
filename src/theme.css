@@ -134,6 +134,12 @@ button {
   flex-direction: column;
   transition: background 0.15s ease, color 0.15s ease;
 }
+.device--native {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+}
 
 .status-bar {
   flex: none;
