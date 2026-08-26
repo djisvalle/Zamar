@@ -93,6 +93,11 @@ async function openDb(): Promise<SQLiteDBConnection> {
 }
 
 export function getDb(): Promise<SQLiteDBConnection> {
-  if (!dbPromise) dbPromise = openDb();
+  if (!dbPromise) {
+    dbPromise = openDb().catch((err) => {
+      dbPromise = null;
+      throw err;
+    });
+  }
   return dbPromise;
 }
