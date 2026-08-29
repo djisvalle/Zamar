@@ -306,3 +306,49 @@ equivalents, both technically and in terms of per-OEM QA surface.
 - Does a "team" concept (§7.3) already exist or is planned elsewhere in the product —
   affects whether persistence sync should be designed single-user-first or
   team-first from the start.
+
+## Addendum: iOS-Only vs. iOS + Android for Live Sync
+
+Direct comparison to inform the platform-strategy decision flagged in §9 and the first
+open question in §11.
+
+### iOS-only
+
+| | |
+|---|---|
+| Local transport (§5.1) | `MultipeerConnectivity` — P2P over Wi-Fi *and* Bluetooth, automatic transport selection/fallback, encrypted, no server, works with zero connectivity. Built and maintained by Apple across the whole radio stack. |
+| Persistence backend (§7.1) | CloudKit — multi-device sync, offline-write queue, and per-user auth "for free" via the user's existing Apple ID. No account system to build. |
+| Device/OS matrix | Small, controlled. Apple ships one BLE/Wi-Fi stack per generation; background-mode and radio behavior is predictable and directly testable on a handful of devices. |
+| Engineering cost | Lowest. §5.1's local transport and §7.1's backend are close to drop-in; most of the spec's remaining work (§6's protocol, §7.2's conflict resolution, §8's data model) is unavoidable regardless of platform. |
+| Ceiling | Locks out any team member on Android. For a worship-team tool, this is a real adoption risk — bands are rarely 100% one platform, and a "the drummer can't join the session" gap undermines the whole feature's value. |
+
+### iOS + Android
+
+| | |
+|---|---|
+| Local transport (§5.1) | No shared native P2P stack — `MultipeerConnectivity` and `Nearby Connections` don't interoperate. Requires either running both stacks and bridging them, or standardizing on the cross-platform local-Wi-Fi WebSocket fallback (leader hosts a local server, mDNS discovery) for any *mixed* session, which adds a LAN dependency the pure-P2P path avoided. |
+| Persistence backend (§7.1) | Needs a platform-neutral backend (e.g. Firestore/Supabase-style) instead of CloudKit, plus a real auth system CloudKit would have given for free. |
+| Device/OS matrix | Large and uneven. `Nearby Connections` needs runtime location permission for BLE scanning, and background radio/networking behavior varies meaningfully across OEM skins (especially aggressive battery-management ROMs that kill background connections) — this is the highest-variance part of the whole spec to QA. |
+| Engineering cost | Materially higher: two local-transport implementations (or one fallback-only implementation that's slower/less reliable than either native path), a backend that replaces two "free" platform services, and roughly double the device-matrix QA surface. |
+| Ceiling | No platform lock-out — every team member can join regardless of device. This is the feature actually working as intended for a real band. |
+
+### The core tradeoff
+
+iOS-only is materially cheaper to build and more reliable in the no-connectivity venue
+scenario that matters most (§3.1) — that's the "inherent advantage" from the original
+discussion, concretely spelled out in transport/backend terms. But live-sync's entire
+value proposition is *everyone in the room seeing the same thing*, and a worship team is
+a mixed-device group by default; shipping iOS-only doesn't make the feature worse, it
+makes it **unavailable** to any team with a single Android user. That's a different kind
+of cost than "more engineering effort" — it's a ceiling on who the feature can ever
+serve, and it doesn't shrink as the engineering budget grows.
+
+### Recommendation
+
+Ship iOS-only for the phase-1 milestones in §11 (local persistence, then local-transport
+live sync) to validate the protocol (§6) and UX cheaply and quickly. Treat Android
+support as a planned second phase, not a maybe — design §6's event schema and §7's data
+model platform-agnostically from the start (they already are) specifically so that
+adding `Nearby Connections` + a cross-platform backend later is additive, not a rewrite.
+Avoid the trap of letting iOS-only convenience quietly become a permanent architectural
+assumption baked into the sync protocol itself.
