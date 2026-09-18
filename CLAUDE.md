@@ -16,6 +16,17 @@ Tuner → Settings → Export — using the app's own (friendlier, rounded) visu
 not the wireframe annotation system. See the "What was intentionally left out" section
 in `github.md`-style spirit: this is a UI/interaction mockup, not a functional build.
 
+### Status: this is now growing real functionality, not staying a pure mockup
+
+The project has started adding live features on top of the click-through shell — the
+first of these is OMR (optical music recognition: turning a photo/PDF of sheet music into
+a usable chart), alongside the existing real chord recognition/transposition logic and
+Live Stage rendering. See "OMR service" below. As more of these land, sections above and
+below that still describe pure simulation (no backend, no persistence, canned conversion
+output) should be read as "true unless a later section says otherwise" rather than as an
+unconditional description of the whole app — update them in place as each simulated piece
+is replaced with a real one, rather than leaving stale claims standing.
+
 ## Tech stack
 
 - **Vite + React 18 + TypeScript**, no other runtime dependencies. Chosen to match the
@@ -94,22 +105,57 @@ Priority mirrors the source doc's own stated order: (1) Live Stage + in-stage ad
 Shared primitives live in `src/components/`: `Header`, `Overlays` (`Dialog`/`Sheet`/
 `SideDrawer`), `Toggle`/`Segmented`, `KeyChips`, `ChordChart`, `StatusBar`.
 
+## OMR service (image/PDF/MusicXML → chords)
+
+`import/`'s "Chords & lyrics" conversion step (PDF, photo, and MusicXML) now runs through
+a real, pluggable OMR (optical music recognition) pipeline instead of always returning a
+canned sample — split across a frontend abstraction and a separate backend service:
+
+- **`src/services/omr/`** defines the `OmrProvider` interface (`submit`/`getJob`) that
+  `ImportSong.tsx` calls instead of its old local `setInterval` simulation.
+  `getOmrProvider()` (`index.ts`) picks the real backend when `VITE_OMR_API_URL` is set,
+  else falls back to `mockOmrProvider.ts` — the original timer-driven simulation,
+  preserved so the app still runs standalone without the backend. This is why the
+  frontend can still claim zero runtime dependencies: all the real conversion logic (and
+  its dependencies — an XML parser, a zip reader) lives in the separate backend below,
+  never bundled into the Vite app.
+- **`server/omr/`** is that backend — a standalone Express/TypeScript service, run and
+  deployed separately from this app. Its own `README.md` is the source of truth for its
+  API contract and setup; the short version:
+  - **MusicXML/.mxl → ChordPro is fully real**, not simulated: `src/musicxml/
+    parseMusicXml.ts` walks the score in true document order and `toChordPro.ts` derives
+    actual chord placement from each note's real beat position, plus real key-signature
+    and tempo detection. No ML is needed for this step — it's parsing structured data
+    notation software already exports correctly.
+  - **PDF/photo → MusicXML is not wired to a real recognizer.** That step is genuine OMR
+    (recovering notation from pixels), which needs a trained model this environment can't
+    install. `src/engine/omrEngine.ts` defines the `OmrEngine` seam and an
+    `AudiverisOmrEngine` stub that fails with a clear "not configured" error rather than
+    fabricating chords — see that file and the backend README for what's needed to wire
+    up a real engine (Audiveris, oemer, a commercial API, etc.).
+
+Follow the same pattern for any other piece of this mockup that graduates from simulated
+to real: keep a working mock/simulated fallback behind the same interface so the app
+never regresses to "broken without a backend," and update the relevant "left out" bullet
+below (or remove it) once the real behavior lands.
+
 ## What was intentionally left out
 
 Stated up front so nobody mistakes this for a functional build:
 
 - **No real microphone / pitch detection** — the Tuner's readings are toggled by a
   "Simulate" button.
-- **No real chord/lyric parsing of imported files, and no real sheet-vs-chords
-  detection.** `src/screens/import/ImportSong.tsx` uses a real `<input type="file">`
-  (PDF, photo, or MusicXML all genuinely upload via `FileReader` → data URL — this part
-  isn't faked), but "converting" that file into a chart is a timer-driven simulation:
-  every conversion produces the same fixed ChordPro sample, never content actually
-  derived from the file. Same spirit as Export's simulated PDF generation (its progress
-  bar is a timer too; there's still no real PDF/MusicXML generation). Whether a PDF/photo
-  contains sheet music or chords/lyrics isn't detected either — the person importing
-  declares it via the "What's in this file?" toggle; nothing inspects the file's actual
-  content. The one path that *is* fully real end-to-end: declaring "Sheet music" skips
+- **No real image/PDF OMR yet, and no real sheet-vs-chords detection.** See "OMR
+  service" above for what changed: MusicXML/.mxl conversion is genuinely real when a
+  `server/omr` backend is configured (`VITE_OMR_API_URL` set); PDF/photo conversion still
+  needs a real recognition engine wired into `server/omr/src/engine/omrEngine.ts`, and
+  falls back to the canned-sample simulation (`src/services/omr/mockOmrProvider.ts`)
+  whenever no backend is configured at all — same spirit as Export's simulated PDF
+  generation (its progress bar is a timer too; there's still no real PDF generation).
+  Whether a PDF/photo contains sheet music or chords/lyrics isn't detected either — the
+  person importing declares it via the "What's in this file?" toggle; nothing inspects
+  the file's actual content. The one path that *is* fully real end-to-end regardless:
+  declaring "Sheet music" skips
   conversion entirely and stores the actual uploaded file as `Song.attachment`
   (`{ kind: "image" | "pdf"; role: "sheet-music" | "static-file"; dataUrl; name }`) — Live
   Stage's Chord/Sheet toggle then renders that real image/PDF full-bleed (via
@@ -143,7 +189,16 @@ Stated up front so nobody mistakes this for a functional build:
   itself (`if (!state.settings.micPermissionAsked) ...`), so it's enforced regardless of
   how the screen was reached. Apply the same pattern to any future contextual gate.
 - **No lint/test tooling is configured.** `npm run build` (`tsc -b && vite build`) is
-  the only verification available — treat a clean build as the correctness bar.
+  the only verification available for the frontend — treat a clean build as the
+  correctness bar. `server/omr` is a separate Node package with its own `npm install`/
+  `npm run typecheck`; it isn't covered by the root build.
+- **Never reintroduce a hardcoded canned conversion result directly in a screen
+  component.** `ImportSong.tsx` used to have `MOCK_CHORDPRO` and a local `setInterval`
+  simulating conversion inline; that logic now lives behind the `OmrProvider` interface
+  (`src/services/omr/`) specifically so a real backend and the offline simulation are
+  interchangeable. If you're tempted to hardcode a "demo" result for a new
+  real-but-not-always-available feature, put it behind a provider interface the same way
+  instead of inlining it into the screen.
 - **`nav.push`/`nav.replace` into and out of a screen must be symmetric, or a dead frame
   is left buried in the stack.** `add-edit-song/`'s "Import" button navigates to
   `import-song` with `nav.replace` (not `push`), because every way `ImportSong` returns

@@ -26,6 +26,10 @@ export interface Song {
   source: SongSource;
   chordpro: string; // raw chart, used for the chord/lyric render below — "" if this song has no chords/lyrics view
   chartFormat: ChartFormat; // which syntax the chart was authored in
+  /** Raw MusicXML behind a chart derived via OMR (see src/services/omr), when
+   * the source was engraved notation — kept alongside chordpro so a future
+   * real notation renderer can use it without re-running recognition. */
+  musicXml?: string;
   /** An optional second view alongside (or instead of) the chords/lyrics
    * text — a real sheet-music scan or any other unconverted reference file.
    * A song can have chordpro, attachment, both, or (rarely) neither. */

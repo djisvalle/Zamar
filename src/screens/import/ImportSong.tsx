@@ -6,6 +6,8 @@ import { Dialog } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
 import type { Attachment, AttachmentRole, ChartFormat, Song } from "../../state/types";
+import { getOmrProvider } from "../../services/omr";
+import type { OmrResult } from "../../services/omr";
 
 export type ImportMethod = "pdf" | "photo" | "musicxml";
 type Phase = "pick" | "converting" | "review" | "error";
@@ -40,16 +42,7 @@ const METHOD_ACCEPT: Record<ImportMethod, string> = {
   musicxml: ".mxl,.musicxml,.xml",
 };
 
-const CONVERT_STEPS: Record<ImportMethod, string[]> = {
-  pdf: ["Reading pages…", "Detecting chords…", "Finishing up…"],
-  photo: ["Reading photo…", "Detecting chords…", "Finishing up…"],
-  musicxml: ["Reading score…", "Detecting chords…", "Building sheet view…"],
-};
-
-const MOCK_CHORDPRO = `{key: G}
-
-[G]Verse line goes [D]here, edit as [Em]needed to [C]match
-[G]Second line of the [D]imported [Em]chart [C]appears`;
+const POLL_INTERVAL_MS = 300;
 
 export function ImportSong({ method, target, formDraft }: { method: ImportMethod; target?: ImportTarget; formDraft?: ImportFormDraft }) {
   const { state, dispatch } = useStore();
@@ -62,12 +55,16 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [contentType, setContentType] = useState<ContentType>("chords");
   const [existingRole, setExistingRole] = useState<AttachmentRole>("sheet-music");
+  const [stepLabels, setStepLabels] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
+  const [omrResult, setOmrResult] = useState<OmrResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const omr = useRef(getOmrProvider());
 
   useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
 
@@ -84,27 +81,30 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
     reader.readAsDataURL(picked);
   };
 
-  const startConvert = (forceFail: boolean) => {
+  const startConvert = async (forceFail: boolean) => {
+    if (!file) return;
     setProgress(0);
+    setOmrResult(null);
+    setErrorMessage("");
     setPhase("converting");
-    const steps = CONVERT_STEPS[method];
-    timer.current = setInterval(() => {
-      setProgress((p) => {
-        const next = p + 1;
-        if (forceFail && next >= 2) {
-          if (timer.current) clearInterval(timer.current);
-          setPhase("error");
-          return next;
-        }
-        if (next >= steps.length) {
-          if (timer.current) clearInterval(timer.current);
-          setTitle(method === "musicxml" ? "Imported Score" : method === "pdf" ? "Imported Chart" : "Scanned Chart");
-          setPhase("review");
-          return next;
-        }
-        return next;
-      });
-    }, 500);
+    const jobId = await omr.current.submit(file, method, { simulateFailure: forceFail });
+    timer.current = setInterval(async () => {
+      const job = await omr.current.getJob(jobId);
+      setStepLabels(job.stepLabels);
+      setProgress(job.step);
+      if (job.status === "error") {
+        if (timer.current) clearInterval(timer.current);
+        setErrorMessage(job.error ?? "Couldn't read this file.");
+        setPhase("error");
+        return;
+      }
+      if (job.status === "done" && job.result) {
+        if (timer.current) clearInterval(timer.current);
+        setOmrResult(job.result);
+        setTitle(method === "musicxml" ? "Imported Score" : method === "pdf" ? "Imported Chart" : "Scanned Chart");
+        setPhase("review");
+      }
+    }, POLL_INTERVAL_MS);
   };
 
   const goToReview = () => {
@@ -120,14 +120,15 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       id: `song-${Date.now()}`,
       title: title.trim() || "Untitled import",
       artist: artist.trim() || "Unknown",
-      defaultKey: willAttach ? "—" : "G",
-      tempo: 80,
+      defaultKey: willAttach ? "—" : omrResult?.detectedKey ?? "C",
+      tempo: omrResult?.detectedTempo ?? 80,
       timeSig: "4/4",
       durationSec: 240,
       favourite: false,
       source: method === "musicxml" ? "musicxml" : "imported-pdf",
-      chordpro: willAttach ? "" : MOCK_CHORDPRO,
+      chordpro: willAttach ? "" : omrResult?.chordpro ?? "",
       chartFormat: "chordpro",
+      musicXml: willAttach ? undefined : omrResult?.musicXml,
       attachment,
     };
     dispatch({ type: "ADD_SONG", song });
@@ -150,7 +151,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
     const attachment: Attachment | undefined = willAttach
       ? { kind: attachmentKind, role: "sheet-music", dataUrl: file!.dataUrl, name: file!.name }
       : formDraft?.attachment;
-    const chordpro = willAttach ? formDraft?.chordpro ?? "" : MOCK_CHORDPRO;
+    const chordpro = willAttach ? formDraft?.chordpro ?? "" : omrResult?.chordpro ?? "";
     const chartFormat = willAttach ? formDraft?.chartFormat ?? "chords-over-lyrics" : ("chordpro" as ChartFormat);
     nav.replace("add-edit-song", {
       songId: formDraft?.songId,
@@ -158,7 +159,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       prefillArtist: formDraft?.artist,
       prefillTempo: formDraft?.tempo,
       prefillTimeSig: formDraft?.timeSig,
-      prefillManualKey: formDraft?.manualKey,
+      prefillManualKey: willAttach ? formDraft?.manualKey : omrResult?.detectedKey ?? formDraft?.manualKey,
       prefillChordpro: chordpro,
       prefillChartFormat: chartFormat,
       prefillAttachment: attachment,
@@ -187,7 +188,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   };
 
   if (phase === "converting") {
-    const steps = CONVERT_STEPS[method];
+    const steps = stepLabels.length ? stepLabels : ["Working…"];
     const stepIdx = Math.min(progress, steps.length - 1);
     return (
       <div className="screen">
@@ -226,13 +227,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
         <div style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ background: "rgba(140,59,59,.09)", border: "1px solid #8c3b3b", borderRadius: 8, padding: 11, display: "flex", flexDirection: "column", gap: 7 }}>
             <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 13, color: "#8c3b3b" }}>Couldn't read this file</div>
-            <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-              {method === "musicxml"
-                ? "The score uses notation this app doesn't recognize yet."
-                : method === "pdf"
-                ? "The scan was too blurry to detect chords and lyrics reliably."
-                : "The photo was too dark or angled to read clearly."}
-            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.5 }}>{errorMessage}</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             <button className="btn btn-primary" onClick={() => startConvert(false)}>
@@ -294,9 +289,13 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
           ) : (
             <>
               <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
-                <ChordChart chordpro={MOCK_CHORDPRO} />
+                <ChordChart chordpro={omrResult?.chordpro ?? ""} />
               </div>
-              {!isForm && <div className="field-hint">Detected key: G — fine-tune the chart afterward from Library ⋯ → Edit chart.</div>}
+              {!isForm && (
+                <div className="field-hint">
+                  Detected key: {omrResult?.detectedKey ?? "—"} — fine-tune the chart afterward from Library ⋯ → Edit chart.
+                </div>
+              )}
             </>
           )}
         </div>
