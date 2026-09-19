@@ -6,7 +6,10 @@ import { ScorePreview } from "../../components/ScorePreview";
 import { MxlScore, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
 import { Icon } from "../../components/Icon";
+import { Sheet } from "../../components/Overlays";
 import { keySemitoneShift } from "../../utils/chordpro";
+import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
+import type { AttachmentKind } from "../../state/types";
 import { MenuDrawer } from "./MenuDrawer";
 import { AddSongDrawer } from "./AddSongDrawer";
 import { QuickEditSheet } from "./QuickEditSheet";
@@ -22,24 +25,38 @@ export function LiveStage() {
   const { stage } = state;
   const [menuOpen, setMenuOpen] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
+  const [versionPickerOpen, setVersionPickerOpen] = useState(false);
   const [scoreInstruments, setScoreInstruments] = useState<ScoreInstrument[]>([]);
   const [hiddenParts, setHiddenParts] = useState<Set<string>>(new Set());
+  const [activeKind, setActiveKind] = useState<AttachmentKind | undefined>(undefined);
+  const [activeVersionId, setActiveVersionId] = useState<string | undefined>(undefined);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const swipeStartX = useRef<number | null>(null);
 
   const song = stage.songId ? state.songs.find((s) => s.id === stage.songId) : null;
   const hasChords = Boolean(song && song.chordpro.trim());
-  const hasScore = song?.attachment?.kind === "musicxml";
+  const hasScore = Boolean(song?.attachments.musicxml);
   const setlist = stage.setlistId ? state.setlists.find((sl) => sl.id === stage.setlistId) : null;
   const setlistSongIds = activeSetlistSongIds(setlist);
 
-  // A song's instrument list (and any hidden parts) belongs to that song —
-  // clear it when the song on stage changes so a leftover "Violin hidden"
-  // selection from the last song can't silently carry over.
+  // Which category/version is on screen belongs to the song currently on
+  // stage — reset to that song's default (highest-priority category, its
+  // bucket's default version) whenever the song changes.
+  useEffect(() => {
+    const attachments = song?.attachments ?? {};
+    const kind = firstAvailableCategory(attachments);
+    setActiveKind(kind);
+    setActiveVersionId(kind ? selectedVersion(attachments[kind]!).id : undefined);
+  }, [song?.id]);
+
+  // A score's instrument list (and any hidden parts) belongs to whichever
+  // version is on screen — clear it whenever that changes so a leftover
+  // "Violin hidden" selection can't silently carry over from a different
+  // song, or a different version of the same song's score.
   useEffect(() => {
     setScoreInstruments([]);
     setHiddenParts(new Set());
-  }, [song?.id]);
+  }, [activeKind, activeVersionId]);
 
   const toggleInstrument = (id: string) => {
     setHiddenParts((prev) => {
@@ -155,6 +172,9 @@ export function LiveStage() {
 
   const semitones = keySemitoneShift(song.defaultKey, stage.dispKey ?? song.defaultKey);
   const songIndex = setlistSongIds.indexOf(song.id);
+  const availableKinds = CATEGORY_PRIORITY.filter((k) => song.attachments[k]);
+  const activeBucket = activeKind ? song.attachments[activeKind] : undefined;
+  const activeVersion = activeBucket ? activeBucket.versions.find((v) => v.id === activeVersionId) ?? selectedVersion(activeBucket) : undefined;
 
   const goToSongOffset = (delta: 1 | -1) => {
     if (!setlist) return;
@@ -233,16 +253,16 @@ export function LiveStage() {
                     color: stage.view === "sheet" ? "var(--onacc)" : "var(--mut)",
                   }}
                 >
-                  {song.attachment?.role === "static-file" ? "File" : "Sheet"}
+                  {activeKind ? ATTACHMENT_LABEL[activeKind] : "Sheet"}
                 </button>
               </div>
               {stage.view === "chords" ? (
                 <div className="accent-deep" style={{ fontSize: 10, fontWeight: 700 }}>
                   Key of {stage.dispKey}
                 </div>
-              ) : song.attachment ? (
+              ) : activeKind ? (
                 <div className="muted" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
-                  {song.attachment.role === "sheet-music" ? "SHEET MUSIC" : "STATIC FILE"}
+                  {ATTACHMENT_LABEL[activeKind].toUpperCase()}
                 </div>
               ) : (
                 <button
@@ -257,6 +277,38 @@ export function LiveStage() {
               )}
             </div>
       </div>
+
+      {stage.view === "sheet" && availableKinds.length > 1 && (
+        <div style={{ display: "flex", gap: 6, padding: "0 14px 8px" }}>
+          {availableKinds.map((k) => (
+            <button
+              key={k}
+              className={"chip" + (activeKind === k ? " active" : "")}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveKind(k);
+                setActiveVersionId(selectedVersion(song.attachments[k]!).id);
+              }}
+            >
+              {ATTACHMENT_LABEL[k]}
+            </button>
+          ))}
+        </div>
+      )}
+      {stage.view === "sheet" && activeBucket && activeVersion && activeBucket.versions.length > 1 && (
+        <div style={{ padding: "0 14px 8px" }}>
+          <button
+            className="chip"
+            style={{ borderColor: "var(--acc-deep)", color: "var(--acc-deep)" }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setVersionPickerOpen(true);
+            }}
+          >
+            ▾ {activeVersion.label}
+          </button>
+        </div>
+      )}
 
       <div
         className="flex-1 hidden-scroll"
@@ -277,23 +329,23 @@ export function LiveStage() {
             fontScale={stage.zoom / 100}
             hideChords={stage.lyricsOnly}
           />
-        ) : song.attachment ? (
+        ) : activeKind && activeVersion ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
-            {song.attachment.kind === "image" ? (
+            {activeKind === "image" ? (
               <img
-                src={song.attachment.dataUrl}
-                alt={song.attachment.name}
+                src={activeVersion.dataUrl}
+                alt={activeVersion.name}
                 style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
               />
-            ) : song.attachment.kind === "musicxml" ? (
-              <MxlScore src={song.attachment.dataUrl} transpose={semitones} hiddenParts={hiddenParts} onInstrumentsChange={setScoreInstruments} />
+            ) : activeKind === "musicxml" ? (
+              <MxlScore src={activeVersion.dataUrl} transpose={semitones} hiddenParts={hiddenParts} onInstrumentsChange={setScoreInstruments} />
             ) : (
-              <PdfPages src={song.attachment.dataUrl} />
+              <PdfPages src={activeVersion.dataUrl} />
             )}
             <span className="muted" style={{ fontSize: 11 }}>
-              {song.attachment.kind === "musicxml"
-                ? `${song.attachment.name} · engraved from the score, no chords detected`
-                : `${song.attachment.name} · saved as-is, no chords detected`}
+              {activeKind === "musicxml"
+                ? `${activeVersion.name} · engraved from the score, no chords detected`
+                : `${activeVersion.name} · saved as-is, no chords detected`}
             </span>
           </div>
         ) : (
@@ -346,6 +398,28 @@ export function LiveStage() {
         <QuickEditSheet songId={song.id} onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
       )}
       {partsOpen && <InstrumentFilterModal onClose={() => setPartsOpen(false)} />}
+      {versionPickerOpen && activeKind && activeBucket && (
+        <Sheet onClose={() => setVersionPickerOpen(false)}>
+          <div className="sheet-title">{ATTACHMENT_LABEL[activeKind]} versions</div>
+          {activeBucket.versions.map((v) => (
+            <button
+              key={v.id}
+              className="sheet-row"
+              onClick={() => {
+                setActiveVersionId(v.id);
+                setVersionPickerOpen(false);
+              }}
+            >
+              <span>
+                {v.label} <span className="muted">· {v.name}</span>
+              </span>
+              <span className="accent-deep" style={{ opacity: v.id === activeVersionId ? 1 : 0, display: "flex" }}>
+                <Icon name="check" size={14} strokeWidth={2.2} />
+              </span>
+            </button>
+          ))}
+        </Sheet>
+      )}
     </div>
   );
 }
