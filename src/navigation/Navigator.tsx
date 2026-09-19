@@ -2,7 +2,6 @@ import { createContext, useContext, useMemo, useState, type ReactNode, createEle
 
 export type ScreenName =
   | "splash"
-  | "firstrun"
   | "live-stage"
   | "library"
   | "setlists"

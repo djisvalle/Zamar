@@ -14,13 +14,27 @@ export interface AppState {
   viewport: Viewport;
 }
 
+/** A song with no chords/lyrics text but a sheet-music/static-file
+ * attachment should open on the attachment view, not an empty chart. */
+function defaultView(song: Song | undefined): StageState["view"] {
+  if (song && !song.chordpro.trim() && song.attachment) return "sheet";
+  return "chords";
+}
+
+/** The Live Stage screen's "nothing else going on" resting state — used on
+ * first boot and whenever a live setlist is exited. Rather than a stark
+ * "no song on stage" blank, it lands on a standing default song so the app
+ * never opens to a truly empty screen. */
+const DEFAULT_SONG_ID = "s11";
+const defaultSong = seedSongs.find((s) => s.id === DEFAULT_SONG_ID);
+
 export const emptyStage: StageState = {
-  songId: null,
+  songId: defaultSong ? DEFAULT_SONG_ID : null,
   setlistId: null,
   setlistIndex: 0,
-  dispKey: null,
+  dispKey: defaultSong?.defaultKey ?? null,
   capo: 0,
-  view: "chords",
+  view: defaultView(defaultSong),
   toolbarExpanded: false,
   drawer: null,
   annotate: false,
@@ -52,7 +66,6 @@ export function hydrateState(songs: Song[], setlists: Setlist[], settings: Setti
 }
 
 export type Action =
-  | { type: "SEED_SAMPLES" }
   | { type: "START_EMPTY" }
   | { type: "SET_THEME"; theme: ThemeMode }
   | { type: "SET_VIEWPORT"; viewport: Viewport }
@@ -92,17 +105,8 @@ function flattenSongIds(setlist: Setlist): string[] {
   return setlist.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song").map((i) => i.songId!));
 }
 
-/** A song with no chords/lyrics text but a sheet-music/static-file
- * attachment should open on the attachment view, not an empty chart. */
-function defaultView(song: Song | undefined): StageState["view"] {
-  if (song && !song.chordpro.trim() && song.attachment) return "sheet";
-  return "chords";
-}
-
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case "SEED_SAMPLES":
-      return { ...state, settings: { ...state.settings, hasSeeded: true } };
     case "START_EMPTY":
       return { ...state, songs: [], setlists: [], settings: { ...state.settings, hasSeeded: true } };
     case "SET_THEME":

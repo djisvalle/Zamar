@@ -1,14 +1,12 @@
 import { useEffect } from "react";
 import { useNavigator } from "../../navigation/Navigator";
-import { useStore } from "../../state/store";
 
 export function Splash() {
   const nav = useNavigator();
-  const { state } = useStore();
 
   useEffect(() => {
     const t = setTimeout(() => {
-      nav.replace(state.settings.hasSeeded ? "live-stage" : "firstrun");
+      nav.replace("live-stage");
     }, 650);
     return () => clearTimeout(t);
   }, []);
