@@ -1,18 +1,27 @@
 export type SongSource = "typed" | "chordpro" | "musicxml" | "imported-pdf";
 export type ChartFormat = "chordpro" | "chords-over-lyrics";
+/** Also doubles as the attachment "category" key — a song can carry one
+ * bucket per kind (a real engraved score, a PDF, a photo) at the same time,
+ * instead of competing for a single slot. */
 export type AttachmentKind = "image" | "pdf" | "musicxml";
-/** Which of the two non-chords views this attachment represents — real
- * engraved notation vs. any other unconverted reference (a photo of a
- * handwritten chart, a scanned bulletin insert, etc). Drives which tab label
- * ("Sheet Music" vs "Static File") the attachment shows under. */
-export type AttachmentRole = "sheet-music" | "static-file";
 
-export interface Attachment {
-  kind: AttachmentKind;
-  role: AttachmentRole;
+export interface AttachmentVersion {
+  id: string;
+  /** User-facing name, e.g. "Violin", "Jazz arrangement". Defaults to the
+   * original filename when the person doesn't type one at import time. */
+  label: string;
   dataUrl: string; // in-memory only, like everything else in this mockup
-  name: string; // original filename, for display
+  name: string; // original filename, always preserved regardless of label
 }
+
+export interface AttachmentBucket {
+  versions: AttachmentVersion[]; // non-empty whenever this bucket exists
+  /** Which version is this bucket's default — what Live Stage and the
+   * Add/Edit Song preview show unless the person switches in-session. */
+  selectedVersionId: string;
+}
+
+export type Attachments = Partial<Record<AttachmentKind, AttachmentBucket>>;
 
 export interface Song {
   id: string;
@@ -26,10 +35,11 @@ export interface Song {
   source: SongSource;
   chordpro: string; // raw chart, used for the chord/lyric render below — "" if this song has no chords/lyrics view
   chartFormat: ChartFormat; // which syntax the chart was authored in
-  /** An optional second view alongside (or instead of) the chords/lyrics
-   * text — a real sheet-music scan or any other unconverted reference file.
-   * A song can have chordpro, attachment, both, or (rarely) neither. */
-  attachment?: Attachment;
+  /** Zero or more categorized, versioned attachments alongside (or instead
+   * of) the chords/lyrics text — a category per file kind, each holding one
+   * or more versions (e.g. a Violin PDF and a Viola PDF for the same song).
+   * A song can have chords, attachments, both, or neither. */
+  attachments: Attachments;
 }
 
 export interface SetlistItem {

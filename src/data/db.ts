@@ -2,9 +2,12 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
-const CREATE_SONGS = `CREATE TABLE IF NOT EXISTS songs (
+// v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
+// original schema for a from-scratch install running the full upgrade
+// chain (0 -> 1 -> 2); v2 below immediately replaces it.
+const CREATE_SONGS_V1 = `CREATE TABLE IF NOT EXISTS songs (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   artist TEXT NOT NULL,
@@ -20,6 +23,24 @@ const CREATE_SONGS = `CREATE TABLE IF NOT EXISTS songs (
   attachment_role TEXT,
   attachment_dataUrl TEXT,
   attachment_name TEXT
+);`;
+
+// v2 — the single-slot attachment_* columns become one JSON column holding
+// the new multi-category, multi-version shape (see
+// docs/superpowers/specs/2026-09-20-attachment-categories-design.md).
+const CREATE_SONGS = `CREATE TABLE IF NOT EXISTS songs (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  artist TEXT NOT NULL,
+  defaultKey TEXT NOT NULL,
+  tempo INTEGER NOT NULL,
+  timeSig TEXT NOT NULL,
+  durationSec INTEGER NOT NULL,
+  favourite INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  chordpro TEXT NOT NULL,
+  chartFormat TEXT NOT NULL,
+  attachments_json TEXT NOT NULL DEFAULT '{}'
 );`;
 
 const CREATE_SETLISTS = `CREATE TABLE IF NOT EXISTS setlists (
@@ -78,8 +99,15 @@ async function openDb(): Promise<SQLiteDBConnection> {
 
   await sqlite.addUpgradeStatement(DB_NAME, [
     {
-      toVersion: DB_VERSION,
-      statements: [CREATE_SONGS, CREATE_SETLISTS, CREATE_SECTIONS, CREATE_ITEMS, CREATE_SETTINGS],
+      toVersion: 1,
+      statements: [CREATE_SONGS_V1, CREATE_SETLISTS, CREATE_SECTIONS, CREATE_ITEMS, CREATE_SETTINGS],
+    },
+    {
+      // No shipped install carries real data yet, so this drops and
+      // recreates rather than migrating the old columns' contents — see the
+      // comment above CREATE_SONGS.
+      toVersion: 2,
+      statements: ["DROP TABLE IF EXISTS songs;", CREATE_SONGS],
     },
   ]);
 

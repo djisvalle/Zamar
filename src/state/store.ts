@@ -14,10 +14,10 @@ export interface AppState {
   viewport: Viewport;
 }
 
-/** A song with no chords/lyrics text but a sheet-music/static-file
- * attachment should open on the attachment view, not an empty chart. */
+/** A song with no chords/lyrics text but at least one attachment should
+ * open on the attachment view, not an empty chart. */
 function defaultView(song: Song | undefined): StageState["view"] {
-  if (song && !song.chordpro.trim() && song.attachment) return "sheet";
+  if (song && !song.chordpro.trim() && Object.keys(song.attachments).length > 0) return "sheet";
   return "chords";
 }
 

@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import type { AttachmentKind, AttachmentRole, Song } from "../state/types";
+import type { Attachments, Song } from "../state/types";
 
 interface SongRow {
   id: string;
@@ -13,14 +13,11 @@ interface SongRow {
   source: string;
   chordpro: string;
   chartFormat: string;
-  attachment_kind: string | null;
-  attachment_role: string | null;
-  attachment_dataUrl: string | null;
-  attachment_name: string | null;
+  attachments_json: string;
 }
 
 function rowToSong(row: SongRow): Song {
-  const song: Song = {
+  return {
     id: row.id,
     title: row.title,
     artist: row.artist,
@@ -32,16 +29,8 @@ function rowToSong(row: SongRow): Song {
     source: row.source as Song["source"],
     chordpro: row.chordpro,
     chartFormat: row.chartFormat as Song["chartFormat"],
+    attachments: JSON.parse(row.attachments_json || "{}") as Attachments,
   };
-  if (row.attachment_kind) {
-    song.attachment = {
-      kind: row.attachment_kind as AttachmentKind,
-      role: row.attachment_role as AttachmentRole,
-      dataUrl: row.attachment_dataUrl ?? "",
-      name: row.attachment_name ?? "",
-    };
-  }
-  return song;
 }
 
 export function buildDeleteStatement(): { statement: string; values: unknown[] } {
@@ -51,12 +40,12 @@ export function buildDeleteStatement(): { statement: string; values: unknown[] }
 export function buildInsertStatements(songs: Song[]): { statement: string; values: unknown[] }[] {
   return songs.map((s) => ({
     statement: `INSERT INTO songs
-      (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachment_kind, attachment_role, attachment_dataUrl, attachment_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachments_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     values: [
       s.id, s.title, s.artist, s.defaultKey, s.tempo, s.timeSig, s.durationSec,
       s.favourite ? 1 : 0, s.source, s.chordpro, s.chartFormat,
-      s.attachment?.kind ?? null, s.attachment?.role ?? null, s.attachment?.dataUrl ?? null, s.attachment?.name ?? null,
+      JSON.stringify(s.attachments),
     ],
   }));
 }

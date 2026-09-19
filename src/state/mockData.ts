@@ -18,11 +18,11 @@ export const songs: Song[] = [
     // Chords/lyrics not transcribed yet — this song leans on its attachment
     // (the real piano score below) until a ChordPro chart is added.
     chordpro: "",
-    attachment: {
-      kind: "musicxml",
-      role: "sheet-music",
-      dataUrl: "/assets/As_The_Deer.mxl",
-      name: "As_The_Deer.mxl",
+    attachments: {
+      musicxml: {
+        versions: [{ id: "att-seed-1", label: "As_The_Deer.mxl", dataUrl: "/assets/As_The_Deer.mxl", name: "As_The_Deer.mxl" }],
+        selectedVersionId: "att-seed-1",
+      },
     },
   },
 ];
