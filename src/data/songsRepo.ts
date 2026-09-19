@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import type { Song } from "../state/types";
+import type { AttachmentKind, AttachmentRole, Song } from "../state/types";
 
 interface SongRow {
   id: string;
@@ -35,8 +35,8 @@ function rowToSong(row: SongRow): Song {
   };
   if (row.attachment_kind) {
     song.attachment = {
-      kind: row.attachment_kind as "image" | "pdf",
-      role: row.attachment_role as "sheet-music" | "static-file",
+      kind: row.attachment_kind as AttachmentKind,
+      role: row.attachment_role as AttachmentRole,
       dataUrl: row.attachment_dataUrl ?? "",
       name: row.attachment_name ?? "",
     };

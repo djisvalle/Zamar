@@ -3,6 +3,8 @@ import { useStore, activeSetlistSongIds } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
 import { ScorePreview } from "../../components/ScorePreview";
+import { MxlScore, type ScoreInstrument } from "../../components/MxlScore";
+import { Icon } from "../../components/Icon";
 import { keySemitoneShift } from "../../utils/chordpro";
 import { MenuDrawer } from "./MenuDrawer";
 import { AddSongDrawer } from "./AddSongDrawer";
@@ -19,13 +21,32 @@ export function LiveStage() {
   const { stage } = state;
   const [menuOpen, setMenuOpen] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
+  const [scoreInstruments, setScoreInstruments] = useState<ScoreInstrument[]>([]);
+  const [hiddenParts, setHiddenParts] = useState<Set<string>>(new Set());
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const swipeStartX = useRef<number | null>(null);
 
   const song = stage.songId ? state.songs.find((s) => s.id === stage.songId) : null;
   const hasChords = Boolean(song && song.chordpro.trim());
+  const hasScore = song?.attachment?.kind === "musicxml";
   const setlist = stage.setlistId ? state.setlists.find((sl) => sl.id === stage.setlistId) : null;
   const setlistSongIds = activeSetlistSongIds(setlist);
+
+  // A song's instrument list (and any hidden parts) belongs to that song —
+  // clear it when the song on stage changes so a leftover "Violin hidden"
+  // selection from the last song can't silently carry over.
+  useEffect(() => {
+    setScoreInstruments([]);
+    setHiddenParts(new Set());
+  }, [song?.id]);
+
+  const toggleInstrument = (id: string) => {
+    setHiddenParts((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   const resetIdle = () => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
@@ -53,7 +74,7 @@ export function LiveStage() {
       <div className="screen" onClick={resetIdle}>
         <div className="hdr tinted">
           <button className="hdr-btn" onClick={() => setMenuOpen(true)}>
-            ☰
+            <Icon name="menu" size={20} strokeWidth={2} />
           </button>
           <span className="live-badge active">
             <span className="dot" />
@@ -84,7 +105,7 @@ export function LiveStage() {
       <div className="screen">
         <div className="hdr">
           <button className="hdr-btn" onClick={() => setMenuOpen(true)}>
-            ☰
+            <Icon name="menu" size={20} strokeWidth={2} />
           </button>
           <span className="live-badge">
             <span className="dot" />
@@ -116,11 +137,11 @@ export function LiveStage() {
           </div>
         </div>
         <div className="fab-stack">
-          <button className="fab" onClick={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" })}>
-            +
+          <button className="fab" onClick={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" })} aria-label="Add song to stage">
+            <Icon name="plus" size={24} strokeWidth={2} />
           </button>
-          <button className="fab-mini" style={{ opacity: 0.4 }} disabled>
-            ✎
+          <button className="fab-mini" style={{ opacity: 0.4 }} disabled aria-label="Quick edit">
+            <Icon name="edit" size={17} strokeWidth={1.9} />
           </button>
         </div>
         {menuOpen && <MenuDrawer onClose={() => setMenuOpen(false)} />}
@@ -166,7 +187,7 @@ export function LiveStage() {
     <div className="screen" onClick={onScreenClick}>
       <div className={"hdr" + (setlist ? " tinted" : "")}>
         <button className="hdr-btn" onClick={() => setMenuOpen(true)}>
-          ☰
+          <Icon name="menu" size={20} strokeWidth={2} />
         </button>
         <span className={"live-badge" + (setlist ? " active" : "")} onClick={() => setlist && resetIdle()}>
           <span className="dot" />
@@ -263,6 +284,8 @@ export function LiveStage() {
                 alt={song.attachment.name}
                 style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
               />
+            ) : song.attachment.kind === "musicxml" ? (
+              <MxlScore src={song.attachment.dataUrl} transpose={semitones} hiddenParts={hiddenParts} onInstrumentsChange={setScoreInstruments} />
             ) : (
               <embed
                 src={song.attachment.dataUrl}
@@ -271,7 +294,9 @@ export function LiveStage() {
               />
             )}
             <span className="muted" style={{ fontSize: 11 }}>
-              {song.attachment.name} · saved as-is, no chords detected
+              {song.attachment.kind === "musicxml"
+                ? `${song.attachment.name} · engraved from the score, no chords detected`
+                : `${song.attachment.name} · saved as-is, no chords detected`}
             </span>
           </div>
         ) : (
@@ -296,16 +321,25 @@ export function LiveStage() {
 
       {!stage.chromeHidden && !stage.toolbarExpanded && (
         <div className="fab-stack">
-          <button className="fab" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" }); }}>
-            +
+          <button className="fab" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" }); }} aria-label="Add song to stage">
+            <Icon name="plus" size={24} strokeWidth={2} />
           </button>
-          <button className="fab-mini" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "quick-edit" }); }}>
-            ✎
+          <button className="fab-mini" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "quick-edit" }); }} aria-label="Quick edit">
+            <Icon name="edit" size={17} strokeWidth={1.9} />
           </button>
         </div>
       )}
 
-      {!stage.chromeHidden && hasChords && <MusicToolbar onAnnotate={() => dispatch({ type: "STAGE_TOGGLE_ANNOTATE" })} />}
+      {!stage.chromeHidden && (hasChords || hasScore) && (
+        <MusicToolbar
+          view={stage.view}
+          hasChords={hasChords}
+          instruments={scoreInstruments}
+          hiddenParts={hiddenParts}
+          onToggleInstrument={toggleInstrument}
+          onAnnotate={() => dispatch({ type: "STAGE_TOGGLE_ANNOTATE" })}
+        />
+      )}
 
       {menuOpen && <MenuDrawer onClose={() => setMenuOpen(false)} />}
       {stage.drawer === "add-song" && (
@@ -353,12 +387,14 @@ function AnnotateMode({ song, onDone }: { song: { chordpro: string }; onDone: ()
       >
         <span style={{ width: 18, height: 18, borderRadius: 99, background: "var(--acc)", border: "2px solid var(--surface)" }} />
         <span style={{ width: 20, height: 1, background: "var(--line)" }} />
-        <span style={{ fontSize: 12, color: "var(--acc)" }}>✎</span>
-        <span className="muted" style={{ fontSize: 12 }}>
-          ▭
+        <span style={{ color: "var(--acc)", display: "flex" }}>
+          <Icon name="edit" size={15} strokeWidth={1.9} />
         </span>
-        <span className="muted" style={{ fontSize: 12 }}>
-          ⌫
+        <span className="muted" style={{ display: "flex" }}>
+          <Icon name="square" size={15} strokeWidth={1.9} />
+        </span>
+        <span className="muted" style={{ display: "flex" }}>
+          <Icon name="eraser" size={15} strokeWidth={1.9} />
         </span>
       </div>
     </div>
