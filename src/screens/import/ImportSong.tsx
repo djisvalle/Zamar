@@ -6,7 +6,8 @@ import { Dialog } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
 import { PdfPages } from "../../components/PdfPages";
-import type { Attachment, AttachmentRole, ChartFormat, Song } from "../../state/types";
+import type { AttachmentKind, AttachmentVersion, Attachments, ChartFormat, Song } from "../../state/types";
+import { ATTACHMENT_LABEL, addVersion } from "../../utils/attachments";
 
 export type ImportMethod = "pdf" | "photo" | "musicxml";
 type Phase = "pick" | "converting" | "review" | "error";
@@ -26,7 +27,7 @@ export interface ImportFormDraft {
   songId?: string; // set when this draft is editing an existing song
   chordpro: string; // the form's current chart text, preserved when this import only attaches a file
   chartFormat: ChartFormat;
-  attachment?: Attachment; // the form's current attachment, preserved when this import only converts chords
+  attachments: Attachments; // the form's current attachments, preserved when this import only converts chords
 }
 
 const METHOD_LABEL: Record<ImportMethod, string> = {
@@ -62,7 +63,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const [phase, setPhase] = useState<Phase>("pick");
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [contentType, setContentType] = useState<ContentType>("chords");
-  const [existingRole, setExistingRole] = useState<AttachmentRole>("sheet-music");
+  const [versionLabel, setVersionLabel] = useState("");
   const [progress, setProgress] = useState(0);
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -74,8 +75,15 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
 
   const label = METHOD_LABEL[method];
   const canDeclareContent = method !== "musicxml";
-  const attachmentKind: Attachment["kind"] = method === "pdf" ? "pdf" : "image";
+  const attachmentKind: AttachmentKind = method === "pdf" ? "pdf" : method === "musicxml" ? "musicxml" : "image";
   const willAttach = isExisting || (contentType === "sheet" && !!file);
+
+  const buildVersion = (): AttachmentVersion => ({
+    id: `att-${Date.now()}`,
+    label: versionLabel.trim() || file!.name,
+    dataUrl: file!.dataUrl,
+    name: file!.name,
+  });
 
   const onFilePicked: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const picked = e.target.files?.[0];
@@ -114,9 +122,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   };
 
   const finishNew = () => {
-    const attachment: Attachment | undefined = willAttach
-      ? { kind: attachmentKind, role: "sheet-music", dataUrl: file!.dataUrl, name: file!.name }
-      : undefined;
+    const attachments: Attachments = willAttach ? addVersion({}, attachmentKind, buildVersion()) : {};
     const song: Song = {
       id: `song-${Date.now()}`,
       title: title.trim() || "Untitled import",
@@ -129,7 +135,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       source: method === "musicxml" ? "musicxml" : "imported-pdf",
       chordpro: willAttach ? "" : MOCK_CHORDPRO,
       chartFormat: "chordpro",
-      attachment,
+      attachments,
     };
     dispatch({ type: "ADD_SONG", song });
     nav.pop();
@@ -140,17 +146,16 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       nav.pop();
       return;
     }
-    const attachment: Attachment = { kind: attachmentKind, role: existingRole, dataUrl: file.dataUrl, name: file.name };
-    dispatch({ type: "UPDATE_SONG", song: { ...existingSong, attachment } });
+    const attachments = addVersion(existingSong.attachments, attachmentKind, buildVersion());
+    dispatch({ type: "UPDATE_SONG", song: { ...existingSong, attachments } });
     nav.pop();
   };
 
   const finishForm = () => {
     // Each import touches only the view it produced — converting chords never
-    // clears a prior attachment, and attaching a file never clears prior chords.
-    const attachment: Attachment | undefined = willAttach
-      ? { kind: attachmentKind, role: "sheet-music", dataUrl: file!.dataUrl, name: file!.name }
-      : formDraft?.attachment;
+    // clears prior attachments, and attaching a file only adds a version to
+    // its own category, never disturbing the others.
+    const attachments = willAttach ? addVersion(formDraft?.attachments ?? {}, attachmentKind, buildVersion()) : formDraft?.attachments ?? {};
     const chordpro = willAttach ? formDraft?.chordpro ?? "" : MOCK_CHORDPRO;
     const chartFormat = willAttach ? formDraft?.chartFormat ?? "chords-over-lyrics" : ("chordpro" as ChartFormat);
     nav.replace("add-edit-song", {
@@ -162,7 +167,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       prefillManualKey: formDraft?.manualKey,
       prefillChordpro: chordpro,
       prefillChartFormat: chartFormat,
-      prefillAttachment: attachment,
+      prefillAttachments: attachments,
     });
   };
 
@@ -178,7 +183,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       prefillManualKey: formDraft?.manualKey,
       prefillChordpro: formDraft?.chordpro,
       prefillChartFormat: formDraft?.chartFormat,
-      prefillAttachment: formDraft?.attachment,
+      prefillAttachments: formDraft?.attachments,
     });
 
   const handlePrimarySave = () => {
@@ -265,7 +270,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
           {isExisting ? (
             <div className="muted" style={{ fontSize: 11, lineHeight: 1.5 }}>
               Attaching {file?.name} to <strong style={{ color: "var(--fg)" }}>{existingSong?.title}</strong> as{" "}
-              {existingRole === "sheet-music" ? "sheet music" : "a static file"} — its existing chart won't change.
+              {ATTACHMENT_LABEL[attachmentKind]} — its existing chart won't change.
             </div>
           ) : (
             <div className="muted" style={{ fontSize: 11 }}>
@@ -348,19 +353,14 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</span>
           </div>
         )}
-        {file && isExisting && (
-          <div style={{ width: "100%", textAlign: "left" }}>
-            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Save as</div>
-            <div style={{ display: "flex" }}>
-              <Segmented
-                options={[
-                  { value: "sheet-music", label: "Sheet music" },
-                  { value: "static-file", label: "Static file" },
-                ]}
-                value={existingRole}
-                onChange={setExistingRole}
-              />
-            </div>
+        {file && willAttach && (
+          <div className="field" style={{ width: "100%" }}>
+            <label>Name this version (optional)</label>
+            <input
+              value={versionLabel}
+              onChange={(e) => setVersionLabel(e.target.value)}
+              placeholder="e.g. Violin, Jazz arrangement, Handwritten copy"
+            />
           </div>
         )}
         {file && !isExisting && canDeclareContent && (
