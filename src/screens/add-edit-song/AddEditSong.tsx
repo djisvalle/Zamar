@@ -4,6 +4,7 @@ import { useNavigator } from "../../navigation/Navigator";
 import { Dialog, Sheet } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
+import { Icon } from "../../components/Icon";
 import { extractBracketChords, extractChordLineChords } from "../../utils/chordpro";
 import type { ImportMethod } from "../import/ImportSong";
 import type { Attachment, ChartFormat, Song, SongSource } from "../../state/types";
@@ -188,7 +189,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
 
           <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
             <button className="btn" style={{ flex: 1, height: 34 }} onClick={() => setImportMethodOpen(true)}>
-              ⇩ Import
+              <Icon name="import" size={14} strokeWidth={2} />
+              Import
             </button>
             <div style={{ flex: 1 }}>
               <Segmented

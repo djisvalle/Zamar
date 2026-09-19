@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon } from "./Icon";
 
 export function Dialog({ children }: { children: ReactNode }) {
   return (
@@ -32,7 +33,7 @@ export function SideDrawer({
   children: ReactNode;
   /** Contextual action panels (add-to-setlist, add-song) match the source
    * spec's right-side slide-in. A hamburger-triggered nav drawer opens from
-   * the same side as its trigger icon (top-left ☰) — pass "left" for those. */
+   * the same side as its trigger icon (top-left menu icon) — pass "left" for those. */
   side?: "left" | "right";
 }) {
   return (
@@ -42,7 +43,7 @@ export function SideDrawer({
           <div className="drawer-hdr">
             <span>{title}</span>
             <button onClick={onClose} aria-label="Close">
-              ✕
+              <Icon name="close" size={16} strokeWidth={2} />
             </button>
           </div>
         )}

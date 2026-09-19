@@ -4,6 +4,7 @@ import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Toggle } from "../../components/Toggle";
 import { Dialog } from "../../components/Overlays";
+import { Icon } from "../../components/Icon";
 
 export function Settings() {
   const { state, dispatch } = useStore();
@@ -37,8 +38,9 @@ export function Settings() {
               Dark chart on stage, light everywhere else.
             </div>
           </div>
-          <span className="accent-deep" style={{ fontSize: 12 }}>
-            {state.settings.theme === "dark" ? "On" : "Off"} ›
+          <span className="accent-deep" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 2 }}>
+            {state.settings.theme === "dark" ? "On" : "Off"}
+            <Icon name="chevron-right" size={14} strokeWidth={2} />
           </span>
         </button>
 
@@ -50,13 +52,17 @@ export function Settings() {
               {state.songs.length} songs and {state.setlists.length} setlists as a .zip.
             </div>
           </div>
-          <span className="muted">›</span>
+          <span className="muted" style={{ display: "flex" }}>
+            <Icon name="chevron-right" size={14} strokeWidth={2} />
+          </span>
         </div>
         <button className="list-row" onClick={() => setErasing(true)}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 500 }}>Reset app data</div>
           </div>
-          <span style={{ color: "#8c3b3b", fontWeight: 600 }}>›</span>
+          <span style={{ color: "#8c3b3b", fontWeight: 600, display: "flex" }}>
+          <Icon name="chevron-right" size={14} strokeWidth={2} />
+        </span>
         </button>
         <div className="muted text-center" style={{ fontSize: 11, marginTop: "auto", padding: "10px 0" }}>
           Zamar 2.0 · everything stored on this device
