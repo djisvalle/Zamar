@@ -4,6 +4,7 @@ import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
 import { ScorePreview } from "../../components/ScorePreview";
 import { MxlScore, type ScoreInstrument } from "../../components/MxlScore";
+import { PdfPages } from "../../components/PdfPages";
 import { Icon } from "../../components/Icon";
 import { keySemitoneShift } from "../../utils/chordpro";
 import { MenuDrawer } from "./MenuDrawer";
@@ -287,11 +288,7 @@ export function LiveStage() {
             ) : song.attachment.kind === "musicxml" ? (
               <MxlScore src={song.attachment.dataUrl} transpose={semitones} hiddenParts={hiddenParts} onInstrumentsChange={setScoreInstruments} />
             ) : (
-              <embed
-                src={song.attachment.dataUrl}
-                type="application/pdf"
-                style={{ width: "100%", height: "100%", minHeight: 400, borderRadius: 8, border: "1px solid var(--line)" }}
-              />
+              <PdfPages src={song.attachment.dataUrl} />
             )}
             <span className="muted" style={{ fontSize: 11 }}>
               {song.attachment.kind === "musicxml"

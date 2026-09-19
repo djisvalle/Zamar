@@ -5,6 +5,7 @@ import { Header } from "../../components/Header";
 import { Dialog } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
+import { PdfPages } from "../../components/PdfPages";
 import type { Attachment, AttachmentRole, ChartFormat, Song } from "../../state/types";
 
 export type ImportMethod = "pdf" | "photo" | "musicxml";
@@ -289,7 +290,9 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             attachmentKind === "image" ? (
               <img src={file!.dataUrl} alt={file!.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
             ) : (
-              <embed src={file!.dataUrl} type="application/pdf" style={{ width: "100%", height: 320, borderRadius: 8, border: "1px solid var(--line)" }} />
+              <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden" }}>
+                <PdfPages src={file!.dataUrl} />
+              </div>
             )
           ) : (
             <>

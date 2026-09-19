@@ -4,6 +4,7 @@ import { useNavigator } from "../../navigation/Navigator";
 import { Dialog, Sheet } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
+import { PdfPages } from "../../components/PdfPages";
 import { Icon } from "../../components/Icon";
 import { extractBracketChords, extractChordLineChords } from "../../utils/chordpro";
 import type { ImportMethod } from "../import/ImportSong";
@@ -275,7 +276,9 @@ export function AddEditSong({ songId }: { songId?: string }) {
           {attachment.kind === "image" ? (
             <img src={attachment.dataUrl} alt={attachment.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
           ) : (
-            <embed src={attachment.dataUrl} type="application/pdf" style={{ width: "100%", height: 320, borderRadius: 8, border: "1px solid var(--line)" }} />
+            <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden" }}>
+              <PdfPages src={attachment.dataUrl} />
+            </div>
           )}
           <div className="muted" style={{ fontSize: 11 }}>
             {attachment.name} · {attachment.role === "sheet-music" ? "Sheet music" : "Static file"}
