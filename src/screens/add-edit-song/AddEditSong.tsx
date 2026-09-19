@@ -5,10 +5,12 @@ import { Dialog, Sheet } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
 import { PdfPages } from "../../components/PdfPages";
+import { MxlScore } from "../../components/MxlScore";
 import { Icon } from "../../components/Icon";
 import { extractBracketChords, extractChordLineChords } from "../../utils/chordpro";
+import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, removeVersion, renameVersion, selectVersion, selectedVersion } from "../../utils/attachments";
 import type { ImportMethod } from "../import/ImportSong";
-import type { Attachment, ChartFormat, Song, SongSource } from "../../state/types";
+import type { AttachmentKind, Attachments, ChartFormat, Song, SongSource } from "../../state/types";
 
 const KEY_RE = /^[A-G](#|b)?$/;
 const KEY_DIRECTIVE_RE = /\{key:\s*([^}]+)\}/i;
@@ -26,8 +28,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const prefillManualKey = params?.prefillManualKey as string | undefined;
   const prefillChordpro = params?.prefillChordpro as string | undefined;
   const prefillChartFormat = params?.prefillChartFormat as ChartFormat | undefined;
-  const prefillAttachment = params?.prefillAttachment as Attachment | undefined;
-  const hadPrefillAttachment = "prefillAttachment" in (params ?? {});
+  const prefillAttachments = params?.prefillAttachments as Attachments | undefined;
+  const hadPrefillAttachments = "prefillAttachments" in (params ?? {});
 
   const [title, setTitle] = useState(prefillTitle ?? existing?.title ?? "");
   const [artist, setArtist] = useState(prefillArtist ?? existing?.artist ?? "");
@@ -36,11 +38,15 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const [manualKey, setManualKey] = useState(prefillManualKey ?? existing?.defaultKey ?? "");
   const [chordpro, setChordpro] = useState(prefillChordpro ?? existing?.chordpro ?? "");
   const [chartFormat, setChartFormat] = useState<ChartFormat>(prefillChartFormat ?? existing?.chartFormat ?? "chords-over-lyrics");
-  const [attachment, setAttachment] = useState<Attachment | undefined>(hadPrefillAttachment ? prefillAttachment : existing?.attachment);
-  const [tab, setTab] = useState<"source" | "preview" | "attachment">("source");
+  const [attachments, setAttachments] = useState<Attachments>(hadPrefillAttachments ? prefillAttachments ?? {} : existing?.attachments ?? {});
+  const [tab, setTab] = useState<"source" | "preview" | AttachmentKind>("source");
   const [showErrors, setShowErrors] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [importMethodOpen, setImportMethodOpen] = useState(false);
+  const [versionSheetFor, setVersionSheetFor] = useState<{ kind: AttachmentKind; id: string; label: string } | null>(null);
+  const [renameVersionFor, setRenameVersionFor] = useState<{ kind: AttachmentKind; id: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [confirmDeleteVersion, setConfirmDeleteVersion] = useState<{ kind: AttachmentKind; id: string; label: string } | null>(null);
   const chartRef = useRef<HTMLTextAreaElement>(null);
 
   const insertAtCursor = (snippet: string, cursorOffset?: number) => {
@@ -75,7 +81,11 @@ export function AddEditSong({ songId }: { songId?: string }) {
     chordpro !== (existing?.chordpro ?? "") ||
     chartFormat !== (existing?.chartFormat ?? "chords-over-lyrics") ||
     timeSig !== (existing?.timeSig ?? "4/4") ||
-    (attachment?.dataUrl ?? null) !== (existing?.attachment?.dataUrl ?? null);
+    JSON.stringify(attachments) !== JSON.stringify(existing?.attachments ?? {});
+
+  const activeKind: AttachmentKind | null = tab === "musicxml" || tab === "pdf" || tab === "image" ? tab : null;
+  const activeBucket = activeKind ? attachments[activeKind] : undefined;
+  const activeVersion = activeBucket ? selectedVersion(activeBucket) : undefined;
 
   const attemptClose = () => {
     if (dirty) setConfirmDiscard(true);
@@ -99,7 +109,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
       source: (existing?.source ?? "typed") as SongSource,
       chordpro,
       chartFormat,
-      attachment,
+      attachments,
     };
     dispatch({ type: existing ? "UPDATE_SONG" : "ADD_SONG", song } as any);
     nav.pop();
@@ -110,14 +120,15 @@ export function AddEditSong({ songId }: { songId?: string }) {
     nav.replace("import-song", {
       method,
       target: { kind: "form" },
-      formDraft: { title, artist, tempo, timeSig, manualKey, songId: existing?.id, chordpro, chartFormat, attachment },
+      formDraft: { title, artist, tempo, timeSig, manualKey, songId: existing?.id, chordpro, chartFormat, attachments },
     });
   };
 
-  const removeAttachment = () => {
-    setAttachment(undefined);
-    setTab("source");
-  };
+  // "Add another version" inside a category tab already knows its kind, so
+  // it skips the "Import a PDF/photo/MusicXML" chooser sheet and imports
+  // that exact kind directly.
+  const KIND_TO_METHOD: Record<AttachmentKind, ImportMethod> = { pdf: "pdf", image: "photo", musicxml: "musicxml" };
+  const addVersionFor = (kind: AttachmentKind) => startImport(KIND_TO_METHOD[kind]);
 
   return (
     <div className="screen">
@@ -138,11 +149,11 @@ export function AddEditSong({ songId }: { songId?: string }) {
         <button className={"chip" + (tab === "preview" ? " active" : "")} onClick={() => setTab("preview")}>
           Preview
         </button>
-        {attachment && (
-          <button className={"chip" + (tab === "attachment" ? " active" : "")} onClick={() => setTab("attachment")}>
-            {attachment.role === "sheet-music" ? "Sheet Music" : "Static File"}
+        {CATEGORY_PRIORITY.filter((kind) => attachments[kind]).map((kind) => (
+          <button key={kind} className={"chip" + (tab === kind ? " active" : "")} onClick={() => setTab(kind)}>
+            {ATTACHMENT_LABEL[kind]}
           </button>
-        )}
+        ))}
       </div>
 
       {tab === "source" && (
@@ -271,22 +282,160 @@ export function AddEditSong({ songId }: { songId?: string }) {
         </div>
       )}
 
-      {tab === "attachment" && attachment && (
+      {activeKind && activeBucket && activeVersion && (
         <div className="flex-1 hidden-scroll" style={{ margin: "0 14px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {attachment.kind === "image" ? (
-            <img src={attachment.dataUrl} alt={attachment.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
+          {activeKind === "image" ? (
+            <img src={activeVersion.dataUrl} alt={activeVersion.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
+          ) : activeKind === "musicxml" ? (
+            <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden", padding: 8 }}>
+              <MxlScore src={activeVersion.dataUrl} />
+            </div>
           ) : (
             <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden" }}>
-              <PdfPages src={attachment.dataUrl} />
+              <PdfPages src={activeVersion.dataUrl} />
             </div>
           )}
           <div className="muted" style={{ fontSize: 11 }}>
-            {attachment.name} · {attachment.role === "sheet-music" ? "Sheet music" : "Static file"}
+            {activeVersion.name} · {ATTACHMENT_LABEL[activeKind]}
           </div>
-          <button className="btn" style={{ color: "#8c3b3b" }} onClick={removeAttachment}>
-            Remove attachment
+
+          {activeBucket.versions.length > 1 && (
+            <>
+              <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--mut)" }}>
+                Versions
+              </div>
+              {activeBucket.versions.map((v) => (
+                <button
+                  key={v.id}
+                  className="list-row"
+                  style={v.id === activeBucket.selectedVersionId ? { borderColor: "var(--acc-deep)" } : undefined}
+                  onClick={() => setVersionSheetFor({ kind: activeKind, id: v.id, label: v.label })}
+                >
+                  <span
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 99,
+                      flex: "none",
+                      border: "2px solid var(--acc-deep)",
+                      background: v.id === activeBucket.selectedVersionId ? "var(--acc)" : "transparent",
+                    }}
+                  />
+                  <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{v.label}</div>
+                    <div className="muted" style={{ fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {v.name}
+                    </div>
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
+
+          <button className="btn" onClick={() => addVersionFor(activeKind)}>
+            <Icon name="plus" size={14} strokeWidth={2} />
+            Add another {ATTACHMENT_LABEL[activeKind].toLowerCase()} version
+          </button>
+          <button
+            className="btn"
+            style={{ color: "#8c3b3b" }}
+            onClick={() => setConfirmDeleteVersion({ kind: activeKind, id: activeVersion.id, label: activeVersion.label })}
+          >
+            Remove this version
           </button>
         </div>
+      )}
+
+      {versionSheetFor && (
+        <Sheet onClose={() => setVersionSheetFor(null)}>
+          <div className="sheet-title">{versionSheetFor.label}</div>
+          {attachments[versionSheetFor.kind]?.selectedVersionId !== versionSheetFor.id && (
+            <button
+              className="sheet-row"
+              onClick={() => {
+                const target = versionSheetFor;
+                setVersionSheetFor(null);
+                setAttachments((prev) => selectVersion(prev, target.kind, target.id));
+              }}
+            >
+              <span>Use this version</span>
+            </button>
+          )}
+          <button
+            className="sheet-row"
+            onClick={() => {
+              const target = versionSheetFor;
+              setVersionSheetFor(null);
+              setRenameValue(target.label);
+              setRenameVersionFor(target);
+            }}
+          >
+            <span>Rename version</span>
+          </button>
+          <button
+            className="sheet-row"
+            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            onClick={() => {
+              const target = versionSheetFor;
+              setVersionSheetFor(null);
+              setConfirmDeleteVersion(target);
+            }}
+          >
+            <span>Remove version</span>
+          </button>
+        </Sheet>
+      )}
+
+      {renameVersionFor && (
+        <Dialog>
+          <div className="dialog-title">Rename version</div>
+          <div className="field">
+            <label>Version name</label>
+            <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
+          </div>
+          <div className="btn-row" style={{ marginTop: 2 }}>
+            <button className="btn" onClick={() => setRenameVersionFor(null)}>
+              Cancel
+            </button>
+            <button
+              className={"btn btn-primary" + (!renameValue.trim() ? " is-disabled" : "")}
+              disabled={!renameValue.trim()}
+              onClick={() => {
+                const target = renameVersionFor;
+                setRenameVersionFor(null);
+                setAttachments((prev) => renameVersion(prev, target.kind, target.id, renameValue.trim()));
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </Dialog>
+      )}
+
+      {confirmDeleteVersion && (
+        <Dialog>
+          <div className="dialog-title">Remove "{confirmDeleteVersion.label}"?</div>
+          <div className="dialog-body">This can't be undone.</div>
+          <div className="btn-row" style={{ marginTop: 2 }}>
+            <button className="btn" onClick={() => setConfirmDeleteVersion(null)}>
+              Keep
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={() => {
+                const target = confirmDeleteVersion;
+                setConfirmDeleteVersion(null);
+                setAttachments((prev) => {
+                  const next = removeVersion(prev, target.kind, target.id);
+                  if (!next[target.kind] && tab === target.kind) setTab("source");
+                  return next;
+                });
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        </Dialog>
       )}
 
       {confirmDiscard && (
