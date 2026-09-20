@@ -216,6 +216,27 @@ export function LiveStage() {
         </span>
       </div>
 
+      {setlist && (
+        <div style={{ padding: "8px 14px 0" }}>
+          <div className="muted" style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+            {songIndex + 1 < setlistSongIds.length
+              ? `Next: ${state.songs.find((s) => s.id === setlistSongIds[songIndex + 1])?.title ?? ""}`
+              : "Last song"}
+          </div>
+          <div style={{ width: "100%", height: 4, background: "var(--line)", borderRadius: 99 }}>
+            <div
+              style={{
+                width: `${((songIndex + 1) / setlistSongIds.length) * 100}%`,
+                height: 4,
+                background: "var(--acc)",
+                borderRadius: 99,
+                transition: "width .2s",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, padding: "10px 14px 8px" }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>

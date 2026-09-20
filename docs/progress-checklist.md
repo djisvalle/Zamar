@@ -39,17 +39,14 @@ working tree on 2026-09-19.
       if the deleted setlist was the one currently on stage) is wired to a "Delete set" entry
       in `SetlistDetail.tsx`'s `⋯` menu, with the same Keep/Delete confirm-dialog style already
       used for song batch delete and section delete.
-- [ ] **Live Stage.** Single-song stage view is fully done. Whole-setlist playback also
+- [x] **Live Stage.** Single-song stage view is fully done. Whole-setlist playback also
       works — swipe gestures advance through `setlistSongIds` (`STAGE_ADVANCE` in
-      `store.ts`), and an end-of-setlist "Set complete" screen exists — but while a song is
-      actively on stage there is **no current-song-position indicator, no next-song preview,
-      and no progress bar**. `songIndex`/`setlistSongIds.length` are already computed in
-      `LiveStage.tsx` but never rendered. The only "next song" UI in the codebase is
-      `AddSongDrawer.tsx`'s `upNext()`, which appends to the setlist — a queue-building
-      action, unrelated to an on-stage display.
-      **To do:** add a compact "Song X of N" / next-song-title indicator and a progress bar
-      to `LiveStage.tsx`'s setlist-mode header, using the already-computed `songIndex` and
-      `setlistSongIds`.
+      `store.ts`), and an end-of-setlist "Set complete" screen exists. A next-song preview
+      and progress bar are now rendered in `LiveStage.tsx`'s setlist-mode header (above the
+      title/artist row): `Next: {title}` (or "Last song" on the final slot) plus a thin
+      `var(--acc)`-fill bar sized to `(songIndex + 1) / setlistSongIds.length`, using the
+      already-computed `songIndex`/`setlistSongIds`. No numeric "Song X of N" counter by
+      design — just the next-song name and the bar.
 - [ ] **Annotate / custom notes on a song.** Should let the user write or mark up custom
       notes on a song regardless of its chart type — chords+lyrics, PDF/image, or `.mxl`.
       **Currently missing across the board:**
@@ -105,6 +102,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Idle auto-hide chrome (6s), end-of-setlist state
 - [x] Chord/Sheet toggle renders the real attached file — MusicXML via OpenSheetMusicDisplay,
       or photo/PDF via `<img>`/`<embed>` — with real pinch-to-zoom and drag-to-pan
+- [x] Setlist-mode next-song preview and progress bar in the stage header
 
 ### Library
 - [x] A–Z grouped list, live search, filter chips
