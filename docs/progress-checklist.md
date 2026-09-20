@@ -8,6 +8,87 @@ This app has moved past the original CLAUDE.md description of an in-memory mocku
 real Capacitor + SQLite app, with a few pieces still deliberately simulated. See notes on
 each item for what "done" actually means.
 
+## Core functionality — high priority
+
+The load-bearing capabilities the app is built around. Verified against the current
+working tree on 2026-09-19.
+
+- [x] **Chord & Lyrics.** Songs support lyrics plus chords entered as either ChordPro
+      (`[C]lyric`) or Chords-over-Lyrics, toggled via a `Segmented` control in
+      `add-edit-song/AddEditSong.tsx`. Both formats are genuinely parsed (not just accepted
+      as text) by `src/utils/chordpro.ts` — `parseChordProLine` for bracket syntax,
+      `isChordLine`/`mergeChordAndLyricLine` for the over-lyrics format — and both feed the
+      same real transpose math.
+- [x] **Music Sheet.** Songs can carry sheet music as `.mxl`, image, or PDF
+      (`Song.attachment`). Live Stage and the Add/Edit Song preview render it via
+      `MxlScore.tsx` (MusicXML), `<img>` (image), or `<embed type="application/pdf">` (PDF)
+      inside a `overflow-y: auto` / `touchAction: pan-y` container — a vertical scrolling
+      viewer, not a horizontal pager. Note: the PDF `<embed>` defers to the browser's native
+      PDF plugin for its internal scroll/zoom, which isn't itself under app control.
+- [x] **Transposition.** Chord letters transpose by real semitone distance
+      (`chordpro.ts`'s `transposeChord`/`keySemitoneShift`). Sheet music transposes too, not
+      just chords: `MxlScore.tsx` sets `osmd.TransposeCalculator` and `osmd.Sheet.Transpose`
+      and re-renders whenever the `transpose` prop changes, driven by the same semitone value
+      `LiveStage.tsx` computes from the selected key — genuine OSMD re-engraving in the new
+      key (e.g. C → Eb), not a cosmetic shift.
+- [x] **Song & Set Library.** Song CRUD is complete (`ADD_SONG`/`UPDATE_SONG`/
+      `DUPLICATE_SONG`/`DELETE_SONGS` in `store.ts`, wired from `Library.tsx`). Setlist CRUD
+      is now complete too: sections and items within a setlist have full
+      add/update/remove/duplicate/move actions, `ADD_SETLIST`/`UPDATE_SETLIST_META` manage
+      metadata, and a `DELETE_SETLIST` reducer action (which also clears live `stage` state
+      if the deleted setlist was the one currently on stage) is wired to a "Delete set" entry
+      in `SetlistDetail.tsx`'s `⋯` menu, with the same Keep/Delete confirm-dialog style already
+      used for song batch delete and section delete.
+- [ ] **Live Stage.** Single-song stage view is fully done. Whole-setlist playback also
+      works — swipe gestures advance through `setlistSongIds` (`STAGE_ADVANCE` in
+      `store.ts`), and an end-of-setlist "Set complete" screen exists — but while a song is
+      actively on stage there is **no current-song-position indicator, no next-song preview,
+      and no progress bar**. `songIndex`/`setlistSongIds.length` are already computed in
+      `LiveStage.tsx` but never rendered. The only "next song" UI in the codebase is
+      `AddSongDrawer.tsx`'s `upNext()`, which appends to the setlist — a queue-building
+      action, unrelated to an on-stage display.
+      **To do:** add a compact "Song X of N" / next-song-title indicator and a progress bar
+      to `LiveStage.tsx`'s setlist-mode header, using the already-computed `songIndex` and
+      `setlistSongIds`.
+- [ ] **Annotate / custom notes on a song.** Should let the user write or mark up custom
+      notes on a song regardless of its chart type — chords+lyrics, PDF/image, or `.mxl`.
+      **Currently missing across the board:**
+      - Live Stage's "Annotate" mode (`stage.annotate` in `store.ts`/`types.ts`, rendered by
+        `AnnotateMode` in `LiveStage.tsx`) is a decorative shell: it shows a chord chart with
+        chords hidden plus a floating tool palette (pen/square/eraser/color-dot icons), but
+        none of those icons have click handlers, there's no `<canvas>` or stroke state, and
+        nothing is persisted — "Done"/"Undo" just toggle the mode off. No real drawing exists
+        yet on the chords+lyrics view either.
+      - The Annotate control is only ever rendered when `view === "chords"`
+        (`MusicToolbar.tsx`) — switching to the sheet/attachment view (PDF, image, or
+        MusicXML) removes the Annotate icon entirely, and a chord-less attachment-only song
+        may not even get a toolbar (`hasChords || hasScore` gate in `LiveStage.tsx`). So
+        there is no path to annotate a PDF/image or a rendered `.mxl` score at all.
+      - `Song` (`src/state/types.ts`) has no freeform `notes` field, and `add-edit-song/` has
+        no notes textarea — the only freeform text in the data model today is
+        `SetlistItem.note` (the run-sheet "note for the band," edited in
+        `SlotDetailSheet.tsx`), which is scoped to one song's slot in one setlist, not to the
+        song itself, and is unrelated to chart/attachment display.
+      **To do:** decide on a real annotation model (e.g. per-song freeform notes field, and/or
+      persisted markup strokes keyed by song + chart type), wire actual drawing/writing
+      interactions for chords+lyrics, and extend the same capability to the PDF/image and
+      MusicXML sheet views instead of gating Annotate to `view === "chords"` only.
+
+## Nice-to-have — R&D / spike candidates
+
+Not core functionality, not scheduled — flagged here so they don't get lost.
+
+- [ ] **PDF/Image → `.mxl` conversion (OMR).** Optical Music Recognition to convert an
+      imported PDF or photo of sheet music into real `.mxl`/MusicXML (so it could then get
+      genuine transposition/re-engraving via `MxlScore.tsx`, instead of staying a static
+      image/PDF attachment). Note this is a different problem from `import/`'s existing
+      "Chords & lyrics" conversion path, which is already a simulated/canned conversion for
+      text charts — OMR would mean actually recognizing musical notation from a raster/PDF
+      source, which is a much harder, open-ended problem (accuracy on real-world scans,
+      licensing/bundling an OMR engine or model, on-device feasibility offline). **Action:**
+      spike/R&D only for now — evaluate feasibility and candidate approaches before
+      committing to a real implementation.
+
 ## Done — working functionality
 
 ### Shell & persistence

@@ -79,6 +79,7 @@ export type Action =
   | { type: "DELETE_SONGS"; ids: string[] }
   | { type: "ADD_SETLIST"; setlist: Setlist }
   | { type: "UPDATE_SETLIST_META"; setlistId: string; patch: Partial<Setlist> }
+  | { type: "DELETE_SETLIST"; setlistId: string }
   | { type: "ADD_SECTION"; setlistId: string; label: string }
   | { type: "UPDATE_SECTION"; setlistId: string; sectionId: string; label: string }
   | { type: "REMOVE_SECTION"; setlistId: string; sectionId: string }
@@ -145,6 +146,12 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         setlists: state.setlists.map((sl) => (sl.id === action.setlistId ? { ...sl, ...action.patch } : sl)),
+      };
+    case "DELETE_SETLIST":
+      return {
+        ...state,
+        setlists: state.setlists.filter((sl) => sl.id !== action.setlistId),
+        stage: state.stage.setlistId === action.setlistId ? emptyStage : state.stage,
       };
     case "ADD_SECTION":
       return {

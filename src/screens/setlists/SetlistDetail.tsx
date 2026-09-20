@@ -24,6 +24,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const [renameSectionFor, setRenameSectionFor] = useState<SetlistSection | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<SetlistSection | null>(null);
+  const [confirmDeleteSet, setConfirmDeleteSet] = useState(false);
 
   if (!setlist) {
     return (
@@ -173,6 +174,16 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
           >
             Export set
           </button>
+          <button
+            className="sheet-row"
+            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            onClick={() => {
+              setMenuOpen(false);
+              setConfirmDeleteSet(true);
+            }}
+          >
+            Delete set
+          </button>
         </Sheet>
       )}
       {addOpen && <AddToSetDrawer setlist={setlist} onClose={() => setAddOpen(false)} />}
@@ -257,6 +268,28 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
               onClick={() => {
                 dispatch({ type: "REMOVE_SECTION", setlistId: setlist.id, sectionId: confirmDeleteSection.id });
                 setConfirmDeleteSection(null);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </Dialog>
+      )}
+
+      {confirmDeleteSet && (
+        <Dialog>
+          <div className="dialog-title">Delete "{setlist.name}"?</div>
+          <div className="dialog-body">This removes the whole setlist. This can't be undone.</div>
+          <div className="btn-row" style={{ marginTop: 2 }}>
+            <button className="btn" onClick={() => setConfirmDeleteSet(false)}>
+              Keep
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={() => {
+                dispatch({ type: "DELETE_SETLIST", setlistId: setlist.id });
+                setConfirmDeleteSet(false);
+                nav.pop();
               }}
             >
               Delete
