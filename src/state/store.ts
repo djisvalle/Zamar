@@ -60,8 +60,6 @@ export function initialState(): AppState {
     songs: seedSongs,
     setlists: seedSetlists,
     settings: {
-      keepAwake: true,
-      autoscroll: false,
       theme: "light",
       textScale: DEFAULT_TEXT_SCALE,
       hasSeeded: false,
@@ -82,7 +80,6 @@ export type Action =
   | { type: "SET_VIEWPORT"; viewport: Viewport }
   | { type: "SET_TEXT_SCALE"; value: number }
   | { type: "SET_MIC_ASKED" }
-  | { type: "UPDATE_SETTINGS"; patch: Partial<Settings> }
   | { type: "TOGGLE_FAVOURITE"; songId: string }
   | { type: "ADD_SONG"; song: Song }
   | { type: "UPDATE_SONG"; song: Song }
@@ -128,8 +125,6 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, settings: { ...state.settings, textScale: action.value } };
     case "SET_MIC_ASKED":
       return { ...state, settings: { ...state.settings, micPermissionAsked: true } };
-    case "UPDATE_SETTINGS":
-      return { ...state, settings: { ...state.settings, ...action.patch } };
     case "TOGGLE_FAVOURITE":
       return {
         ...state,
@@ -354,13 +349,26 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-export function StoreProvider({ children, initial }: { children: ReactNode; initial: AppState }) {
+export function StoreProvider({
+  children,
+  initial,
+  persistEnabled = true,
+}: {
+  children: ReactNode;
+  initial: AppState;
+  /** False when the initial load from disk failed (see main.tsx's loadInitial) — we can't tell
+   * whether that failure means "nothing was ever persisted" or "real data is on disk but
+   * unreadable right now," so persistence stays off for the rest of this session rather than
+   * risk the debounced write below silently overwriting real data with fresh seed data. */
+  persistEnabled?: boolean;
+}) {
   const [state, dispatch] = useReducer(reducer, initial);
 
   const firstRun = useRef(true);
   const persistGen = useRef(0);
 
   useEffect(() => {
+    if (!persistEnabled) return;
     if (firstRun.current) {
       firstRun.current = false;
       return;
@@ -376,12 +384,15 @@ export function StoreProvider({ children, initial }: { children: ReactNode; init
             items: sec.items.filter((i) => i.kind !== "song" || (i.songId != null && songIds.has(i.songId))),
           })),
         }));
-        // Songs and setlists are FK-coupled (setlist_items.song_id -> songs.id) and must be
-        // written as ONE atomic transaction, in FK-safe order: clear setlist rows first (removes
-        // any reference to a song about to be deleted), then replace songs, then reinsert
-        // setlists (safe now, since the songs they reference already exist). Splitting this
-        // across multiple separately-committed transactions risks losing all setlist data if
-        // the process dies between commits.
+        // Songs, setlists, and settings all go in ONE atomic transaction. Songs and setlists
+        // are FK-coupled (setlist_items.song_id -> songs.id), so they must be written in
+        // FK-safe order: clear setlist rows first (removes any reference to a song about to be
+        // deleted), then replace songs, then reinsert setlists (safe now, since the songs they
+        // reference already exist). Settings rides along in the same executeSet call rather than
+        // a separate commit — splitting any of this across multiple separately-committed
+        // transactions risks a crash between commits leaving a settings row that disagrees with
+        // the songs/setlists actually on disk (see main.tsx's first-run recovery logic, which
+        // exists to handle exactly that mismatch from before this was atomic).
         try {
           const db = await getDb();
           if (persistGen.current !== mine) return;
@@ -390,15 +401,10 @@ export function StoreProvider({ children, initial }: { children: ReactNode; init
             songsRepo.buildDeleteStatement(),
             ...songsRepo.buildInsertStatements(state.songs),
             ...setlistsRepo.buildInsertStatements(safeSetlists),
+            settingsRepo.buildUpsertStatement(state.settings),
           ]);
         } catch (err) {
-          console.warn("Zamar: failed to persist songs/setlists", err);
-        }
-        if (persistGen.current !== mine) return;
-        try {
-          await settingsRepo.replaceAll(state.settings);
-        } catch (err) {
-          console.warn("Zamar: failed to persist settings", err);
+          console.warn("Zamar: failed to persist songs/setlists/settings", err);
         }
         if (persistGen.current !== mine) return;
         try {
@@ -409,7 +415,7 @@ export function StoreProvider({ children, initial }: { children: ReactNode; init
       })();
     }, 250);
     return () => clearTimeout(t);
-  }, [state.songs, state.setlists, state.settings]);
+  }, [state.songs, state.setlists, state.settings, persistEnabled]);
 
   return createElement(StoreContext.Provider, { value: { state, dispatch } }, children);
 }

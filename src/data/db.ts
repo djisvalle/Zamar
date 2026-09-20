@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -77,10 +77,21 @@ const CREATE_ITEMS = `CREATE TABLE IF NOT EXISTS setlist_items (
   position INTEGER NOT NULL
 );`;
 
-const CREATE_SETTINGS = `CREATE TABLE IF NOT EXISTS settings (
+// v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
+// original schema (with the never-wired keepAwake/autoscroll columns) for a
+// from-scratch install running the full upgrade chain; v4 below drops them.
+const CREATE_SETTINGS_V1 = `CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   keepAwake INTEGER NOT NULL,
   autoscroll INTEGER NOT NULL,
+  theme TEXT NOT NULL,
+  textScale INTEGER NOT NULL,
+  hasSeeded INTEGER NOT NULL,
+  micPermissionAsked INTEGER NOT NULL
+);`;
+
+const CREATE_SETTINGS_V4 = `CREATE TABLE IF NOT EXISTS settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
   theme TEXT NOT NULL,
   textScale INTEGER NOT NULL,
   hasSeeded INTEGER NOT NULL,
@@ -106,7 +117,7 @@ async function openDb(): Promise<SQLiteDBConnection> {
   await sqlite.addUpgradeStatement(DB_NAME, [
     {
       toVersion: 1,
-      statements: [CREATE_SONGS_V1, CREATE_SETLISTS, CREATE_SECTIONS, CREATE_ITEMS, CREATE_SETTINGS],
+      statements: [CREATE_SONGS_V1, CREATE_SETLISTS, CREATE_SECTIONS, CREATE_ITEMS, CREATE_SETTINGS_V1],
     },
     {
       // No shipped install carries real data yet, so this drops and
@@ -124,6 +135,15 @@ async function openDb(): Promise<SQLiteDBConnection> {
         "ALTER TABLE songs ADD COLUMN notes TEXT NOT NULL DEFAULT '';",
         "ALTER TABLE songs ADD COLUMN annotations_json TEXT NOT NULL DEFAULT '{}';",
       ],
+    },
+    {
+      // keepAwake/autoscroll were never wired to real behavior (no Wake Lock
+      // call, no scroll timer) and are being removed rather than implemented.
+      // No shipped install carries real settings data yet, so this drops and
+      // recreates rather than migrating around the removed columns (same
+      // call as the v1->v2 songs change above).
+      toVersion: 4,
+      statements: ["DROP TABLE IF EXISTS settings;", CREATE_SETTINGS_V4],
     },
   ]);
 

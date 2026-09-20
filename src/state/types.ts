@@ -108,8 +108,6 @@ export type ThemeMode = "light" | "dark";
 export type Viewport = "phone" | "tablet";
 
 export interface Settings {
-  keepAwake: boolean;
-  autoscroll: boolean;
   theme: ThemeMode;
   textScale: number; // percent, 100 = default
   hasSeeded: boolean;

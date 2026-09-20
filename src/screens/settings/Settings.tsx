@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
-import { Toggle } from "../../components/Toggle";
 import { Dialog } from "../../components/Overlays";
 import { Icon } from "../../components/Icon";
 
@@ -16,20 +15,6 @@ export function Settings() {
     <div className="screen">
       <Header title="Settings" onBack={nav.pop} />
       <div className="flex-1 hidden-scroll" style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
-        <SectionLabel>Stage</SectionLabel>
-        <SettingRow
-          title="Keep screen awake"
-          body="The display never dims while a song is open."
-          on={state.settings.keepAwake}
-          onChange={() => dispatch({ type: "UPDATE_SETTINGS", patch: { keepAwake: !state.settings.keepAwake } })}
-        />
-        <SettingRow
-          title="Autoscroll on load"
-          body="Starts scrolling as soon as a song opens."
-          on={state.settings.autoscroll}
-          onChange={() => dispatch({ type: "UPDATE_SETTINGS", patch: { autoscroll: !state.settings.autoscroll } })}
-        />
-
         <SectionLabel>Appearance</SectionLabel>
         <button className="list-row" onClick={() => nav.push("appearance")}>
           <div style={{ flex: 1 }}>
@@ -114,20 +99,6 @@ function SectionLabel({ children }: { children: string }) {
   return (
     <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--mut)", padding: "6px 2px 0" }}>
       {children}
-    </div>
-  );
-}
-
-function SettingRow({ title, body, on, onChange }: { title: string; body: string; on: boolean; onChange: () => void }) {
-  return (
-    <div className="list-row">
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 500 }}>{title}</div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
-          {body}
-        </div>
-      </div>
-      <Toggle on={on} onChange={onChange} />
     </div>
   );
 }
