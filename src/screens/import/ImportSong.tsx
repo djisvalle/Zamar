@@ -10,6 +10,10 @@ import type { Attachment, AttachmentRole, ChartFormat, Song } from "../../state/
 export type ImportMethod = "pdf" | "photo" | "musicxml";
 type Phase = "pick" | "converting" | "review" | "error";
 type ContentType = "chords" | "sheet";
+/** How a freshly-converted chart should combine with a chart the destination
+ * song already has — only reachable for the in-form target, since that's
+ * the only path that can silently clobber existing chords (see finishForm). */
+type MergeStrategy = "replace" | "append" | "review";
 
 /** Where the finished import goes: a brand-new song (Library's default),
  * an existing song's supplementary sheet-music/static-file view, or back
@@ -62,6 +66,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [contentType, setContentType] = useState<ContentType>("chords");
   const [existingRole, setExistingRole] = useState<AttachmentRole>("sheet-music");
+  const [mergeStrategy, setMergeStrategy] = useState<MergeStrategy>("replace");
   const [progress, setProgress] = useState(0);
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -75,6 +80,12 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const canDeclareContent = method !== "musicxml";
   const attachmentKind: Attachment["kind"] = method === "pdf" ? "pdf" : "image";
   const willAttach = isExisting || (contentType === "sheet" && !!file);
+  /** True only when converting chords back into a draft that already has a
+   * non-empty chart — the one case where a plain "Save" would silently
+   * discard the person's existing chords, so it needs a Replace/Append/
+   * Review choice instead of the unconditional overwrite below. */
+  const hasExistingChart = isForm && !willAttach && Boolean(formDraft?.chordpro?.trim());
+  const mergedChordpro = mergeStrategy === "append" ? `${formDraft?.chordpro}\n\n${MOCK_CHORDPRO}` : MOCK_CHORDPRO;
 
   const onFilePicked: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const picked = e.target.files?.[0];
@@ -150,7 +161,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
     const attachment: Attachment | undefined = willAttach
       ? { kind: attachmentKind, role: "sheet-music", dataUrl: file!.dataUrl, name: file!.name }
       : formDraft?.attachment;
-    const chordpro = willAttach ? formDraft?.chordpro ?? "" : MOCK_CHORDPRO;
+    const chordpro = willAttach ? formDraft?.chordpro ?? "" : hasExistingChart ? mergedChordpro : MOCK_CHORDPRO;
     const chartFormat = willAttach ? formDraft?.chartFormat ?? "chords-over-lyrics" : ("chordpro" as ChartFormat);
     nav.replace("add-edit-song", {
       songId: formDraft?.songId,
@@ -248,7 +259,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   }
 
   if (phase === "review") {
-    const canSave = isExisting || isForm ? true : title.trim().length > 0;
+    const canSave = isExisting || isForm ? !(hasExistingChart && mergeStrategy === "review") : title.trim().length > 0;
     return (
       <div className="screen">
         <div className="hdr">
@@ -291,6 +302,42 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             ) : (
               <embed src={file!.dataUrl} type="application/pdf" style={{ width: "100%", height: 320, borderRadius: 8, border: "1px solid var(--line)" }} />
             )
+          ) : hasExistingChart ? (
+            <>
+              <div style={{ width: "100%" }}>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>This song already has a chart</div>
+                <Segmented
+                  options={[
+                    { value: "replace", label: "Replace" },
+                    { value: "append", label: "Append" },
+                    { value: "review", label: "Review" },
+                  ]}
+                  value={mergeStrategy}
+                  onChange={setMergeStrategy}
+                />
+              </div>
+              {mergeStrategy === "review" ? (
+                <>
+                  <div>
+                    <div className="muted" style={{ fontSize: 10, letterSpacing: "0.08em", marginBottom: 4 }}>CURRENT CHART</div>
+                    <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
+                      <ChordChart chordpro={formDraft?.chordpro ?? ""} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="muted" style={{ fontSize: 10, letterSpacing: "0.08em", marginBottom: 4 }}>IMPORTED CHART</div>
+                    <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
+                      <ChordChart chordpro={MOCK_CHORDPRO} />
+                    </div>
+                  </div>
+                  <div className="muted" style={{ fontSize: 11 }}>Choose Replace or Append above to continue.</div>
+                </>
+              ) : (
+                <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
+                  <ChordChart chordpro={mergedChordpro} />
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>

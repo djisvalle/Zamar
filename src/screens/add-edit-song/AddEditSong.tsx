@@ -5,7 +5,7 @@ import { Dialog, Sheet } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
 import { Icon } from "../../components/Icon";
-import { extractBracketChords, extractChordLineChords } from "../../utils/chordpro";
+import { extractBracketChords, extractChordLineChords, findChordProIssues } from "../../utils/chordpro";
 import type { ImportMethod } from "../import/ImportSong";
 import type { Attachment, ChartFormat, Song, SongSource } from "../../state/types";
 
@@ -64,6 +64,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
     const m = chordpro.match(KEY_DIRECTIVE_RE);
     return m ? m[1].trim() : null;
   }, [chordpro]);
+
+  const chordProIssues = useMemo(() => findChordProIssues(chordpro), [chordpro]);
 
   const effectiveKey = detectedKey ?? manualKey;
   const keyValid = !effectiveKey || KEY_RE.test(effectiveKey);
@@ -231,6 +233,16 @@ export function AddEditSong({ songId }: { songId?: string }) {
               </button>
             ))}
           </div>
+          {chordProIssues.length > 0 && (
+            <div style={{ background: "rgba(140,59,59,.1)", border: "1px solid #8c3b3b", borderRadius: 8, padding: "8px 11px", fontSize: 12, color: "#8c3b3b", display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ fontWeight: 600 }}>
+                {chordProIssues.length === 1 ? "1 possible chart syntax issue" : `${chordProIssues.length} possible chart syntax issues`}
+              </div>
+              <div style={{ fontWeight: 400 }}>
+                Line {chordProIssues[0].line}: {chordProIssues[0].message}
+              </div>
+            </div>
+          )}
           <textarea
             ref={chartRef}
             value={chordpro}

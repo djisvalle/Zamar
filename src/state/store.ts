@@ -78,6 +78,7 @@ export type Action =
   | { type: "DUPLICATE_SONG"; songId: string }
   | { type: "DELETE_SONGS"; ids: string[] }
   | { type: "ADD_SETLIST"; setlist: Setlist }
+  | { type: "DELETE_SETLIST"; setlistId: string }
   | { type: "UPDATE_SETLIST_META"; setlistId: string; patch: Partial<Setlist> }
   | { type: "ADD_SECTION"; setlistId: string; label: string }
   | { type: "UPDATE_SECTION"; setlistId: string; sectionId: string; label: string }
@@ -87,6 +88,7 @@ export type Action =
   | { type: "UPDATE_ITEM"; setlistId: string; itemId: string; patch: Partial<SetlistItem> }
   | { type: "DUPLICATE_ITEM"; setlistId: string; itemId: string }
   | { type: "MOVE_ITEM"; setlistId: string; itemId: string; toSectionId: string }
+  | { type: "REORDER_ITEM"; setlistId: string; sectionId: string; fromIndex: number; toIndex: number }
   | { type: "STAGE_LOAD"; songId: string; setlistId?: string | null; setlistIndex?: number }
   | { type: "STAGE_SET_VIEW"; view: StageState["view"] }
   | { type: "STAGE_SET_KEY"; key: string }
@@ -141,6 +143,14 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, songs: state.songs.filter((s) => !action.ids.includes(s.id)) };
     case "ADD_SETLIST":
       return { ...state, setlists: [...state.setlists, action.setlist] };
+    case "DELETE_SETLIST":
+      return {
+        ...state,
+        setlists: state.setlists.filter((sl) => sl.id !== action.setlistId),
+        // A deleted setlist can't stay "live" — fall back to the resting stage state
+        // rather than leaving stage.setlistId pointing at a setlist that no longer exists.
+        stage: state.stage.setlistId === action.setlistId ? emptyStage : state.stage,
+      };
     case "UPDATE_SETLIST_META":
       return {
         ...state,
@@ -251,6 +261,26 @@ export function reducer(state: AppState, action: Action): AppState {
           return {
             ...sl,
             sections: withoutItem.map((sec) => (sec.id === action.toSectionId ? { ...sec, items: [...sec.items, moved!] } : sec)),
+          };
+        }),
+      };
+    }
+    case "REORDER_ITEM": {
+      return {
+        ...state,
+        setlists: state.setlists.map((sl) => {
+          if (sl.id !== action.setlistId) return sl;
+          return {
+            ...sl,
+            sections: sl.sections.map((sec) => {
+              if (sec.id !== action.sectionId || action.fromIndex === action.toIndex) return sec;
+              const items = [...sec.items];
+              const [moved] = items.splice(action.fromIndex, 1);
+              if (!moved) return sec;
+              const insertAt = Math.max(0, Math.min(action.toIndex, items.length));
+              items.splice(insertAt, 0, moved);
+              return { ...sec, items };
+            }),
           };
         }),
       };

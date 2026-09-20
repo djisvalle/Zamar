@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
@@ -24,6 +24,9 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const [renameSectionFor, setRenameSectionFor] = useState<SetlistSection | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<SetlistSection | null>(null);
+  const [confirmDeleteSetlist, setConfirmDeleteSetlist] = useState(false);
+  const [dragItem, setDragItem] = useState<{ sectionId: string; index: number } | null>(null);
+  const [dragOver, setDragOver] = useState<{ sectionId: string; index: number } | null>(null);
 
   if (!setlist) {
     return (
@@ -42,6 +45,14 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
     if (songEntries.length === 0) return;
     dispatch({ type: "STAGE_LOAD", songId: songEntries[0].song!.id, setlistId: setlist.id, setlistIndex: 0 });
     nav.reset("live-stage");
+  };
+
+  const dropOnto = (sectionId: string, toIndex: number) => {
+    if (dragItem && dragItem.sectionId === sectionId && dragItem.index !== toIndex) {
+      dispatch({ type: "REORDER_ITEM", setlistId: setlist.id, sectionId, fromIndex: dragItem.index, toIndex });
+    }
+    setDragItem(null);
+    setDragOver(null);
   };
 
   let songSlotIndex = -1;
@@ -75,12 +86,48 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                   <Icon name="more" size={14} />
                 </span>
               </div>
-              {section.items.map((item) => {
+              {section.items.map((item, i) => {
                 const entry = flat.find((e) => e.item.id === item.id)!;
+                const isDragging = dragItem?.sectionId === section.id && dragItem.index === i;
+                const showDropLine =
+                  dragOver?.sectionId === section.id && dragOver.index === i && !(dragItem?.sectionId === section.id && dragItem.index === i);
+                const rowDragProps = {
+                  onDragOver: (e: DragEvent) => {
+                    if (!dragItem) return;
+                    e.preventDefault();
+                    setDragOver({ sectionId: section.id, index: i });
+                  },
+                  onDrop: (e: DragEvent) => {
+                    e.preventDefault();
+                    dropOnto(section.id, i);
+                  },
+                  onDragEnd: () => {
+                    setDragItem(null);
+                    setDragOver(null);
+                  },
+                };
                 if (item.kind === "note") {
                   return (
-                    <div key={item.id} style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 9 }}>
-                      <span className="muted" style={{ flex: "none", display: "flex" }}>
+                    <div
+                      key={item.id}
+                      {...rowDragProps}
+                      style={{
+                        border: "1px dashed var(--line)",
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 9,
+                        opacity: isDragging ? 0.4 : 1,
+                        boxShadow: showDropLine ? "inset 0 2px 0 var(--acc-deep)" : undefined,
+                      }}
+                    >
+                      <span
+                        className="muted"
+                        draggable
+                        onDragStart={() => setDragItem({ sectionId: section.id, index: i })}
+                        style={{ flex: "none", display: "flex", cursor: "grab" }}
+                      >
                         <Icon name="note" size={13} strokeWidth={1.8} />
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -99,10 +146,23 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                   <button
                     key={item.id}
                     className="list-row"
-                    style={{ alignItems: "flex-start" }}
+                    {...rowDragProps}
+                    style={{
+                      alignItems: "flex-start",
+                      opacity: isDragging ? 0.4 : 1,
+                      boxShadow: showDropLine ? "inset 0 2px 0 var(--acc-deep)" : undefined,
+                    }}
                     onClick={() => setSlot({ item, song, index: idx })}
                   >
-                    <span className="muted" style={{ display: "flex", flex: "none", alignSelf: "center" }}>
+                    <span
+                      className="muted"
+                      draggable
+                      onDragStart={(e) => {
+                        e.stopPropagation();
+                        setDragItem({ sectionId: section.id, index: i });
+                      }}
+                      style={{ display: "flex", flex: "none", alignSelf: "center", cursor: "grab" }}
+                    >
                       <Icon name="grip" size={15} strokeWidth={1.6} />
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -172,6 +232,16 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
             }}
           >
             Export set
+          </button>
+          <button
+            className="sheet-row"
+            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            onClick={() => {
+              setMenuOpen(false);
+              setConfirmDeleteSetlist(true);
+            }}
+          >
+            Delete setlist
           </button>
         </Sheet>
       )}
@@ -257,6 +327,32 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
               onClick={() => {
                 dispatch({ type: "REMOVE_SECTION", setlistId: setlist.id, sectionId: confirmDeleteSection.id });
                 setConfirmDeleteSection(null);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </Dialog>
+      )}
+
+      {confirmDeleteSetlist && (
+        <Dialog>
+          <div className="dialog-title">Delete "{setlist.name}"?</div>
+          <div className="dialog-body">
+            {songEntries.length > 0
+              ? `This removes the whole set, including ${songEntries.length} song${songEntries.length > 1 ? "s" : ""}. This can't be undone.`
+              : "This can't be undone."}
+          </div>
+          <div className="btn-row" style={{ marginTop: 2 }}>
+            <button className="btn" onClick={() => setConfirmDeleteSetlist(false)}>
+              Keep
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={() => {
+                dispatch({ type: "DELETE_SETLIST", setlistId: setlist.id });
+                setConfirmDeleteSetlist(false);
+                nav.pop();
               }}
             >
               Delete

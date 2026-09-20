@@ -180,3 +180,41 @@ export function parseChordPro(text: string, semitones = 0): ChordProLine[] {
   }
   return result;
 }
+
+export interface ChordProIssue {
+  line: number; // 1-indexed
+  message: string;
+}
+
+/** Scans raw ChordPro text for unbalanced `[`/`]` bracket chords and unclosed
+ * `{directive}` braces — syntax the regex-driven parser above never rejects,
+ * it just silently folds the stray bracket/brace into plain lyric text. This
+ * surfaces those cases instead of leaving them invisible in the editor. */
+export function findChordProIssues(text: string): ChordProIssue[] {
+  const issues: ChordProIssue[] = [];
+  text.split("\n").forEach((raw, i) => {
+    const lineNo = i + 1;
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{")) {
+      const opens = (trimmed.match(/\{/g) ?? []).length;
+      const closes = (trimmed.match(/\}/g) ?? []).length;
+      if (!trimmed.endsWith("}") || opens !== closes) {
+        issues.push({ line: lineNo, message: `Unclosed "{" — directive is missing its closing "}"` });
+        return;
+      }
+    }
+    let depth = 0;
+    for (const ch of raw) {
+      if (ch === "[") depth++;
+      else if (ch === "]") {
+        depth--;
+        if (depth < 0) {
+          issues.push({ line: lineNo, message: `Unmatched "]" with no opening "[" before it` });
+          depth = 0;
+        }
+      }
+    }
+    if (depth > 0) issues.push({ line: lineNo, message: `Unmatched "[" — missing its closing "]"` });
+  });
+  return issues;
+}
