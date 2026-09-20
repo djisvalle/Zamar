@@ -1,8 +1,8 @@
 import type { Setlist, Song } from "./types";
 
 // A fresh install ships with exactly one song — the built-in default — not a
-// bundle of sample content. See src/state/store.ts's emptyStage for how this
-// becomes what Live Stage shows on first boot.
+// bundle of sample content. See src/state/store.ts's makeEmptyStage for how
+// this becomes what Live Stage shows on first boot.
 export const songs: Song[] = [
   {
     id: "s11",

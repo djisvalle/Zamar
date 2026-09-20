@@ -28,20 +28,32 @@ function defaultView(song: Song | undefined): StageState["view"] {
 const DEFAULT_SONG_ID = "s11";
 const defaultSong = seedSongs.find((s) => s.id === DEFAULT_SONG_ID);
 
-export const emptyStage: StageState = {
-  songId: defaultSong ? DEFAULT_SONG_ID : null,
-  setlistId: null,
-  setlistIndex: 0,
-  dispKey: defaultSong?.defaultKey ?? null,
-  capo: 0,
-  view: defaultView(defaultSong),
-  toolbarExpanded: false,
-  drawer: null,
-  chromeHidden: false,
-  ended: false,
-  lyricsOnly: false,
-  zoom: 100,
-};
+/** The Live Stage screen's "nothing else going on" resting state — used on
+ * first boot and whenever a live setlist is exited. Rather than a stark
+ * "no song on stage" blank, it lands on a standing default song so the app
+ * never opens to a truly empty screen. `zoom` starts from the persisted
+ * `settings.textScale` (set in Settings > Appearance) so that setting
+ * actually determines the size a chart opens at; the toolbar's live +/-
+ * buttons then adjust `stage.zoom` for the rest of that session only,
+ * same as the rest of `stage` (see "Single global reducer" in CLAUDE.md). */
+export function makeEmptyStage(textScale: number): StageState {
+  return {
+    songId: defaultSong ? DEFAULT_SONG_ID : null,
+    setlistId: null,
+    setlistIndex: 0,
+    dispKey: defaultSong?.defaultKey ?? null,
+    capo: 0,
+    view: defaultView(defaultSong),
+    toolbarExpanded: false,
+    drawer: null,
+    chromeHidden: false,
+    ended: false,
+    lyricsOnly: false,
+    zoom: textScale,
+  };
+}
+
+const DEFAULT_TEXT_SCALE = 100;
 
 export function initialState(): AppState {
   return {
@@ -51,17 +63,17 @@ export function initialState(): AppState {
       keepAwake: true,
       autoscroll: false,
       theme: "light",
-      textScale: 100,
+      textScale: DEFAULT_TEXT_SCALE,
       hasSeeded: false,
       micPermissionAsked: false,
     },
-    stage: emptyStage,
+    stage: makeEmptyStage(DEFAULT_TEXT_SCALE),
     viewport: "phone",
   };
 }
 
 export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
-  return { songs, setlists, settings, stage: emptyStage, viewport: "phone" };
+  return { songs, setlists, settings, stage: makeEmptyStage(settings.textScale), viewport: "phone" };
 }
 
 export type Action =
@@ -149,7 +161,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         setlists: state.setlists.filter((sl) => sl.id !== action.setlistId),
-        stage: state.stage.setlistId === action.setlistId ? emptyStage : state.stage,
+        stage: state.stage.setlistId === action.setlistId ? makeEmptyStage(state.settings.textScale) : state.stage,
       };
     case "ADD_SECTION":
       return {
@@ -273,7 +285,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         stage: {
-          ...emptyStage,
+          ...makeEmptyStage(state.settings.textScale),
           songId: action.songId,
           setlistId: action.setlistId ?? null,
           setlistIndex: action.setlistIndex ?? 0,
@@ -329,7 +341,7 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
     case "STAGE_EXIT":
-      return { ...state, stage: emptyStage };
+      return { ...state, stage: makeEmptyStage(state.settings.textScale) };
     default:
       return state;
   }
