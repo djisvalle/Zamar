@@ -25,10 +25,16 @@ const CREATE_SONGS_V1 = `CREATE TABLE IF NOT EXISTS songs (
   attachment_name TEXT
 );`;
 
-// v2 — the single-slot attachment_* columns become one JSON column holding
-// the new multi-category, multi-version shape (see
-// docs/superpowers/specs/2026-09-20-attachment-categories-design.md).
-const CREATE_SONGS = `CREATE TABLE IF NOT EXISTS songs (
+// v2 shape — kept only so `addUpgradeStatement`'s v2 step still creates the
+// table exactly as v2 actually had it (single-slot attachment_* columns
+// replaced by one JSON column holding the multi-category, multi-version
+// shape — see docs/superpowers/specs/2026-09-20-attachment-categories-design.md)
+// for a from-scratch install running the full upgrade chain (0 -> 1 -> 2 -> 3);
+// v3's ALTER TABLE statements below immediately add the notes/annotations
+// columns on top of this. Frozen at this shape for the same reason
+// CREATE_SONGS_V1 is frozen above: it must stay exactly what v2 created, or a
+// fresh install's v3 step tries to add columns that already exist.
+const CREATE_SONGS_V2 = `CREATE TABLE IF NOT EXISTS songs (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   artist TEXT NOT NULL,
@@ -40,9 +46,7 @@ const CREATE_SONGS = `CREATE TABLE IF NOT EXISTS songs (
   source TEXT NOT NULL,
   chordpro TEXT NOT NULL,
   chartFormat TEXT NOT NULL,
-  attachments_json TEXT NOT NULL DEFAULT '{}',
-  notes TEXT NOT NULL DEFAULT '',
-  annotations_json TEXT NOT NULL DEFAULT '{}'
+  attachments_json TEXT NOT NULL DEFAULT '{}'
 );`;
 
 const CREATE_SETLISTS = `CREATE TABLE IF NOT EXISTS setlists (
@@ -107,9 +111,9 @@ async function openDb(): Promise<SQLiteDBConnection> {
     {
       // No shipped install carries real data yet, so this drops and
       // recreates rather than migrating the old columns' contents — see the
-      // comment above CREATE_SONGS.
+      // comment above CREATE_SONGS_V2.
       toVersion: 2,
-      statements: ["DROP TABLE IF EXISTS songs;", CREATE_SONGS, "DELETE FROM setlist_items;"],
+      statements: ["DROP TABLE IF EXISTS songs;", CREATE_SONGS_V2, "DELETE FROM setlist_items;"],
     },
     {
       // Additive columns on an existing table — unlike the v1->v2 change,

@@ -190,9 +190,15 @@ ALTER TABLE songs ADD COLUMN notes TEXT NOT NULL DEFAULT '';
 ALTER TABLE songs ADD COLUMN annotations_json TEXT NOT NULL DEFAULT '{}';
 ```
 
-`CREATE_SONGS` also gains both columns (for a from-scratch install running the full
-upgrade chain). `SongRow`/`rowToSong`/`buildInsertStatements` in `songsRepo.ts` gain the
-two fields, same as every other column.
+The `toVersion: 2` create statement (`CREATE_SONGS_V2`) stays frozen at the shape it
+actually had before this feature — it must NOT also gain these columns, or a
+from-scratch install running the full upgrade chain (0 -> 1 -> 2 -> 3) hits `ALTER
+TABLE ADD COLUMN` on a column that already exists at step 3 and throws. The two
+`ALTER TABLE` statements above are the sole path that adds `notes`/`annotations_json`,
+for both a fresh install (added right after v2 creates the table) and an existing v2
+install upgrading in place (added the same way it always would have).
+`SongRow`/`rowToSong`/`buildInsertStatements` in `songsRepo.ts` gain the two fields,
+same as every other column.
 
 ## Migration / seed data (`src/state/mockData.ts`)
 
