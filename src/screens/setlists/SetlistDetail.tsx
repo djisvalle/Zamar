@@ -3,6 +3,7 @@ import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Sheet, Dialog } from "../../components/Overlays";
+import { Icon } from "../../components/Icon";
 import { flattenSetlist } from "../../utils/setlistCalc";
 import { AddToSetDrawer } from "./AddToSetDrawer";
 import { SlotDetailSheet } from "./SlotDetailSheet";
@@ -47,7 +48,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
 
   return (
     <div className="screen">
-      <Header title={setlist.name} onBack={nav.pop} right={<button className="hdr-action" onClick={() => setMenuOpen(true)}>⋯</button>} />
+      <Header title={setlist.name} onBack={nav.pop} right={<button className="hdr-action" style={{ display: "flex" }} onClick={() => setMenuOpen(true)}><Icon name="more" size={16} /></button>} />
 
       <div style={{ padding: "0 14px 9px", display: "flex", flexDirection: "column", gap: 6 }}>
         <div className="muted" style={{ fontSize: 11 }}>
@@ -69,9 +70,9 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                   aria-label="Section options"
                   onClick={() => setSectionSheetFor(section)}
                   className="muted"
-                  style={{ fontSize: 14, padding: "0 2px" }}
+                  style={{ display: "flex", padding: "0 2px" }}
                 >
-                  ⋯
+                  <Icon name="more" size={14} />
                 </span>
               </div>
               {section.items.map((item) => {
@@ -79,8 +80,8 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                 if (item.kind === "note") {
                   return (
                     <div key={item.id} style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 9 }}>
-                      <span className="muted" style={{ width: 11, flex: "none", textAlign: "right", fontSize: 11 }}>
-                        ▤
+                      <span className="muted" style={{ flex: "none", display: "flex" }}>
+                        <Icon name="note" size={13} strokeWidth={1.8} />
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12.5 }}>{item.label}</div>
@@ -101,8 +102,8 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                     style={{ alignItems: "flex-start" }}
                     onClick={() => setSlot({ item, song, index: idx })}
                   >
-                    <span className="muted" style={{ fontSize: 14, lineHeight: 1, flex: "none", alignSelf: "center" }}>
-                      ⋮⋮
+                    <span className="muted" style={{ display: "flex", flex: "none", alignSelf: "center" }}>
+                      <Icon name="grip" size={15} strokeWidth={1.6} />
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -112,8 +113,8 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                         {song.artist} · {song.tempo} BPM · {song.timeSig}
                       </div>
                       {item.note && (
-                        <div className="accent-deep" style={{ fontSize: 10.5, marginTop: 3, display: "flex", gap: 5 }}>
-                          <span>✎</span>
+                        <div className="accent-deep" style={{ fontSize: 10.5, marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
+                          <Icon name="edit" size={11} strokeWidth={1.9} />
                           <span>{item.note}</span>
                         </div>
                       )}
@@ -144,10 +145,11 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
 
       <div style={{ flex: "none", padding: "10px 14px 14px", borderTop: "1px solid var(--line)", background: "var(--bg)", display: "flex", gap: 8 }}>
         <button className="btn btn-primary" style={{ flex: 1 }} onClick={startSong} disabled={songEntries.length === 0}>
-          ▶ Start Set
+          <Icon name="play" size={12} />
+          Start Set
         </button>
-        <button className="btn" style={{ width: 44, padding: 0 }} onClick={() => nav.push("export", { setlistId })}>
-          ⇪
+        <button className="btn" style={{ width: 44, padding: 0 }} onClick={() => nav.push("export", { setlistId })} aria-label="Export setlist">
+          <Icon name="share" size={16} strokeWidth={1.9} />
         </button>
       </div>
 

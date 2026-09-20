@@ -5,7 +5,9 @@ export function Splash() {
   const nav = useNavigator();
 
   useEffect(() => {
-    const t = setTimeout(() => nav.replace("firstrun"), 650);
+    const t = setTimeout(() => {
+      nav.replace("live-stage");
+    }, 650);
     return () => clearTimeout(t);
   }, []);
 

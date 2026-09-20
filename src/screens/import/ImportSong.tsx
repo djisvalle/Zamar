@@ -296,7 +296,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
               <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
                 <ChordChart chordpro={MOCK_CHORDPRO} />
               </div>
-              {!isForm && <div className="field-hint">Detected key: G — fine-tune the chart afterward from Library ⋯ → Edit chart.</div>}
+              {!isForm && <div className="field-hint">Detected key: G — fine-tune the chart afterward from the song's Library menu → Edit chart.</div>}
             </>
           )}
         </div>

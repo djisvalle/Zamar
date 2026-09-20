@@ -1,4 +1,5 @@
 import { SideDrawer } from "../../components/Overlays";
+import { Icon, type IconName } from "../../components/Icon";
 import { useNavigator, type ScreenName } from "../../navigation/Navigator";
 
 const PROFILE_NAME = "Sunday Team";
@@ -23,19 +24,21 @@ export function MenuDrawer({ onClose }: { onClose: () => void }) {
       </div>
       <div className="drawer-section-label">Zamar</div>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        <MenuItem icon="♪" label="Library" onClick={() => go("library")} />
-        <MenuItem icon="▤" label="Setlists" onClick={() => go("setlists")} />
-        <MenuItem icon="〰" label="Tuner" onClick={() => go("tuner")} />
-        <MenuItem icon="⚙" label="Settings" onClick={() => go("settings")} />
+        <MenuItem icon="music" label="Library" onClick={() => go("library")} />
+        <MenuItem icon="list" label="Setlists" onClick={() => go("setlists")} />
+        <MenuItem icon="tuner" label="Tuner" onClick={() => go("tuner")} />
+        <MenuItem icon="settings" label="Settings" onClick={() => go("settings")} />
       </div>
     </SideDrawer>
   );
 }
 
-function MenuItem({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+function MenuItem({ icon, label, onClick }: { icon: IconName; label: string; onClick: () => void }) {
   return (
     <button className="drawer-menu-item" onClick={onClick}>
-      <span className="drawer-menu-icon">{icon}</span>
+      <span className="drawer-menu-icon">
+        <Icon name={icon} size={16} strokeWidth={1.9} />
+      </span>
       {label}
     </button>
   );

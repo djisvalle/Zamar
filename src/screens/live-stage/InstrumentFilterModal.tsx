@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Sheet } from "../../components/Overlays";
+import { Icon } from "../../components/Icon";
 
 const ALL_PARTS = ["Piano", "Vocal", "Bass", "Drums", "Guitar"];
 const IN_FILE = new Set(["Piano", "Vocal", "Guitar"]);
@@ -20,8 +21,8 @@ export function InstrumentFilterModal({ onClose }: { onClose: () => void }) {
     <Sheet onClose={onClose}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span className="sheet-title">Instruments</span>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--mut)", fontSize: 15 }}>
-          ✕
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--mut)", display: "flex" }}>
+          <Icon name="close" size={16} strokeWidth={2} />
         </button>
       </div>
       <div style={{ display: "flex", gap: 7 }}>
@@ -66,7 +67,7 @@ export function InstrumentFilterModal({ onClose }: { onClose: () => void }) {
                 border: active ? "none" : "1px dashed var(--line)",
               }}
             >
-              {active ? "✓" : ""}
+              {active && <Icon name="check" size={11} strokeWidth={2.6} />}
             </span>
             {p}
             {!inFile && <span style={{ fontSize: 10 }}>(not in file)</span>}

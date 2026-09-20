@@ -4,6 +4,7 @@ import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Sheet, Dialog } from "../../components/Overlays";
 import { KeyChips } from "../../components/KeyChips";
+import { Icon } from "../../components/Icon";
 import type { Song } from "../../state/types";
 
 type Filter = "all" | "favourites" | "recent";
@@ -88,11 +89,13 @@ export function Library() {
       />
       <div style={{ padding: "10px 14px 8px" }}>
         <div className={"search-bar" + (query ? " active" : "")}>
-          <span>⌕</span>
+          <span style={{ display: "flex" }}>
+            <Icon name="search" size={15} strokeWidth={2} />
+          </span>
           <input placeholder="Search songs" value={query} onChange={(e) => setQuery(e.target.value)} />
           {query && (
-            <button className="muted" style={{ background: "none", border: "none" }} onClick={() => setQuery("")}>
-              ×
+            <button className="muted" style={{ background: "none", border: "none", display: "flex" }} onClick={() => setQuery("")}>
+              <Icon name="close" size={14} strokeWidth={2.1} />
             </button>
           )}
         </div>
@@ -226,14 +229,14 @@ export function Library() {
                             border: isSel ? "none" : "1px solid var(--line)",
                           }}
                         >
-                          {isSel ? "✓" : ""}
+                          {isSel && <Icon name="check" size={11} strokeWidth={2.6} />}
                         </span>
                       ) : (
                         <span
                           className="accent-deep"
-                          style={{ fontSize: 13, flex: "none", opacity: s.favourite ? 1 : 0.25 }}
+                          style={{ display: "flex", flex: "none", opacity: s.favourite ? 1 : 0.25 }}
                         >
-                          ★
+                          <Icon name="star" size={14} strokeWidth={1.8} filled={s.favourite} />
                         </span>
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -254,9 +257,9 @@ export function Library() {
                             setSheetFor(s);
                           }}
                           className="muted"
-                          style={{ fontSize: 15, padding: "0 2px" }}
+                          style={{ display: "flex", padding: "0 2px" }}
                         >
-                          ⋯
+                          <Icon name="more" size={15} />
                         </span>
                       )}
                     </button>
@@ -272,10 +275,10 @@ export function Library() {
       {!selectMode && (
         <div className="fab-stack" style={{ bottom: 18 }}>
           <button className="fab" onClick={() => nav.push("add-edit-song")} aria-label="Add a song">
-            +
+            <Icon name="plus" size={24} strokeWidth={2} />
           </button>
           <button className="fab-mini" onClick={() => setImportSheetOpen(true)} aria-label="Import a chart">
-            ⇩
+            <Icon name="import" size={18} strokeWidth={1.9} />
           </button>
         </div>
       )}
@@ -329,7 +332,9 @@ export function Library() {
             }}
           >
             <span>{sheetFor.favourite ? "Remove from favourites" : "Add to favourites"}</span>
-            <span className="accent-deep">★</span>
+            <span className="accent-deep" style={{ display: "flex" }}>
+              <Icon name="star" size={14} strokeWidth={1.8} filled={sheetFor.favourite} />
+            </span>
           </button>
           <button
             className="sheet-row"
@@ -493,6 +498,16 @@ export function Library() {
             <button
               className="btn btn-danger"
               onClick={() => {
+                const deletedIds = new Set(confirmDelete);
+                for (const setlist of state.setlists) {
+                  for (const section of setlist.sections) {
+                    for (const item of section.items) {
+                      if (item.kind === "song" && item.songId && deletedIds.has(item.songId)) {
+                        dispatch({ type: "REMOVE_ITEM", setlistId: setlist.id, itemId: item.id });
+                      }
+                    }
+                  }
+                }
                 dispatch({ type: "DELETE_SONGS", ids: confirmDelete });
                 setConfirmDelete(null);
                 if (selectMode) exitSelectMode();

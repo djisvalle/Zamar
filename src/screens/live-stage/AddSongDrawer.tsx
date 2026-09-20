@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { SideDrawer } from "../../components/Overlays";
+import { Icon } from "../../components/Icon";
 import { useStore } from "../../state/store";
 import type { Song } from "../../state/types";
 
@@ -162,6 +163,7 @@ export function AddSongDrawer({ onClose }: { onClose: () => void }) {
                     </button>
                     <button
                       onClick={() => playNow(s.id)}
+                      aria-label="Load on stage"
                       style={{
                         width: 28,
                         height: 28,
@@ -169,10 +171,12 @@ export function AddSongDrawer({ onClose }: { onClose: () => void }) {
                         background: "var(--acc)",
                         color: "var(--onacc)",
                         border: "none",
-                        fontSize: 11,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
                     >
-                      ▶
+                      <Icon name="play" size={12} />
                     </button>
                   </div>
                 ))}

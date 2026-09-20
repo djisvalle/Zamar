@@ -1,6 +1,6 @@
 export type SongSource = "typed" | "chordpro" | "musicxml" | "imported-pdf";
 export type ChartFormat = "chordpro" | "chords-over-lyrics";
-export type AttachmentKind = "image" | "pdf";
+export type AttachmentKind = "image" | "pdf" | "musicxml";
 /** Which of the two non-chords views this attachment represents — real
  * engraved notation vs. any other unconverted reference (a photo of a
  * handwritten chart, a scanned bulletin insert, etc). Drives which tab label

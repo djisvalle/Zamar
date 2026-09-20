@@ -1,9 +1,9 @@
+import { Capacitor } from "@capacitor/core";
 import { useStore } from "./state/store";
 import { useNavigator } from "./navigation/Navigator";
 import { StatusBar } from "./components/StatusBar";
 import { DeviceNotch } from "./components/DeviceNotch";
 import { Splash } from "./screens/onboarding/Splash";
-import { FirstRun } from "./screens/onboarding/FirstRun";
 import { LiveStage } from "./screens/live-stage/LiveStage";
 import { Library } from "./screens/library/Library";
 import { Setlists } from "./screens/setlists/Setlists";
@@ -25,8 +25,6 @@ function ScreenHost() {
   switch (nav.top.screen) {
     case "splash":
       return <Splash />;
-    case "firstrun":
-      return <FirstRun />;
     case "live-stage":
       return <LiveStage />;
     case "library":
@@ -63,6 +61,19 @@ function ScreenHost() {
 export default function App() {
   const { state, dispatch } = useStore();
   const vp = VIEWPORT_VARS[state.viewport];
+
+  if (Capacitor.isNativePlatform()) {
+    return (
+      <div
+        className="device device--native"
+        data-theme={state.settings.theme}
+        style={{ "--status-h": vp.statusH } as React.CSSProperties}
+      >
+        <StatusBar />
+        <ScreenHost />
+      </div>
+    );
+  }
 
   return (
     <div className="stage">

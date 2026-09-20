@@ -1,6 +1,10 @@
-import { createContext, useContext, useReducer, type Dispatch, type ReactNode, createElement } from "react";
+import { createContext, useContext, useEffect, useReducer, useRef, type Dispatch, type ReactNode, createElement } from "react";
 import type { Setlist, SetlistItem, Settings, Song, StageState, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
+import * as songsRepo from "../data/songsRepo";
+import * as setlistsRepo from "../data/setlistsRepo";
+import * as settingsRepo from "../data/settingsRepo";
+import { getDb, persist } from "../data/db";
 
 export interface AppState {
   songs: Song[];
@@ -10,13 +14,27 @@ export interface AppState {
   viewport: Viewport;
 }
 
-const emptyStage: StageState = {
-  songId: null,
+/** A song with no chords/lyrics text but a sheet-music/static-file
+ * attachment should open on the attachment view, not an empty chart. */
+function defaultView(song: Song | undefined): StageState["view"] {
+  if (song && !song.chordpro.trim() && song.attachment) return "sheet";
+  return "chords";
+}
+
+/** The Live Stage screen's "nothing else going on" resting state — used on
+ * first boot and whenever a live setlist is exited. Rather than a stark
+ * "no song on stage" blank, it lands on a standing default song so the app
+ * never opens to a truly empty screen. */
+const DEFAULT_SONG_ID = "s11";
+const defaultSong = seedSongs.find((s) => s.id === DEFAULT_SONG_ID);
+
+export const emptyStage: StageState = {
+  songId: defaultSong ? DEFAULT_SONG_ID : null,
   setlistId: null,
   setlistIndex: 0,
-  dispKey: null,
+  dispKey: defaultSong?.defaultKey ?? null,
   capo: 0,
-  view: "chords",
+  view: defaultView(defaultSong),
   toolbarExpanded: false,
   drawer: null,
   annotate: false,
@@ -43,8 +61,11 @@ export function initialState(): AppState {
   };
 }
 
+export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
+  return { songs, setlists, settings, stage: emptyStage, viewport: "phone" };
+}
+
 export type Action =
-  | { type: "SEED_SAMPLES" }
   | { type: "START_EMPTY" }
   | { type: "SET_THEME"; theme: ThemeMode }
   | { type: "SET_VIEWPORT"; viewport: Viewport }
@@ -84,17 +105,8 @@ function flattenSongIds(setlist: Setlist): string[] {
   return setlist.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song").map((i) => i.songId!));
 }
 
-/** A song with no chords/lyrics text but a sheet-music/static-file
- * attachment should open on the attachment view, not an empty chart. */
-function defaultView(song: Song | undefined): StageState["view"] {
-  if (song && !song.chordpro.trim() && song.attachment) return "sheet";
-  return "chords";
-}
-
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case "SEED_SAMPLES":
-      return { ...state, settings: { ...state.settings, hasSeeded: true } };
     case "START_EMPTY":
       return { ...state, songs: [], setlists: [], settings: { ...state.settings, hasSeeded: true } };
     case "SET_THEME":
@@ -327,8 +339,63 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, initialState);
+export function StoreProvider({ children, initial }: { children: ReactNode; initial: AppState }) {
+  const [state, dispatch] = useReducer(reducer, initial);
+
+  const firstRun = useRef(true);
+  const persistGen = useRef(0);
+
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      const mine = ++persistGen.current;
+      (async () => {
+        const songIds = new Set(state.songs.map((s) => s.id));
+        const safeSetlists = state.setlists.map((sl) => ({
+          ...sl,
+          sections: sl.sections.map((sec) => ({
+            ...sec,
+            items: sec.items.filter((i) => i.kind !== "song" || (i.songId != null && songIds.has(i.songId))),
+          })),
+        }));
+        // Songs and setlists are FK-coupled (setlist_items.song_id -> songs.id) and must be
+        // written as ONE atomic transaction, in FK-safe order: clear setlist rows first (removes
+        // any reference to a song about to be deleted), then replace songs, then reinsert
+        // setlists (safe now, since the songs they reference already exist). Splitting this
+        // across multiple separately-committed transactions risks losing all setlist data if
+        // the process dies between commits.
+        try {
+          const db = await getDb();
+          if (persistGen.current !== mine) return;
+          await db.executeSet([
+            ...setlistsRepo.buildDeleteStatements(),
+            songsRepo.buildDeleteStatement(),
+            ...songsRepo.buildInsertStatements(state.songs),
+            ...setlistsRepo.buildInsertStatements(safeSetlists),
+          ]);
+        } catch (err) {
+          console.warn("Zamar: failed to persist songs/setlists", err);
+        }
+        if (persistGen.current !== mine) return;
+        try {
+          await settingsRepo.replaceAll(state.settings);
+        } catch (err) {
+          console.warn("Zamar: failed to persist settings", err);
+        }
+        if (persistGen.current !== mine) return;
+        try {
+          await persist();
+        } catch (err) {
+          console.warn("Zamar: failed to flush persisted state to web store", err);
+        }
+      })();
+    }, 250);
+    return () => clearTimeout(t);
+  }, [state.songs, state.setlists, state.settings]);
+
   return createElement(StoreContext.Provider, { value: { state, dispatch } }, children);
 }
 

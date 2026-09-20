@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
+import { Icon } from "../../components/Icon";
 import type { Setlist } from "../../state/types";
 
 type Tab = "upcoming" | "past" | "template";
@@ -22,7 +23,7 @@ export function Setlists() {
       time: "",
       description: "",
       status: "upcoming",
-      sections: [{ id: "set", label: "Set", items: [] }],
+      sections: [{ id: `${id}-sec`, label: "Set", items: [] }],
     };
     dispatch({ type: "ADD_SETLIST", setlist });
     nav.push("setlist-detail", { setlistId: id, openDetails: true });
@@ -30,7 +31,7 @@ export function Setlists() {
 
   return (
     <div className="screen">
-      <Header title="Setlists" onBack={nav.pop} right={<span className="hdr-action">⋯</span>} />
+      <Header title="Setlists" onBack={nav.pop} right={<span className="hdr-action" style={{ display: "flex" }}><Icon name="more" size={16} /></span>} />
       <div style={{ padding: "2px 14px 8px", display: "flex", gap: 6 }}>
         {(["upcoming", "past", "template"] as Tab[]).map((t) => (
           <button key={t} className={"chip" + (tab === t ? " active" : "")} onClick={() => setTab(t)}>
@@ -112,7 +113,8 @@ export function Setlists() {
                       }
                     }}
                   >
-                    {isActive ? "⏹ Stop Set" : "▶ Start Set"}
+                    <Icon name={isActive ? "stop" : "play"} size={12} />
+                    {isActive ? "Stop Set" : "Start Set"}
                   </span>
                 )}
               </button>
@@ -121,8 +123,8 @@ export function Setlists() {
         </div>
       )}
 
-      <button className="fab" style={{ position: "absolute", right: 14, bottom: 18 }} onClick={createSetlist}>
-        +
+      <button className="fab" style={{ position: "absolute", right: 14, bottom: 18 }} onClick={createSetlist} aria-label="New setlist">
+        <Icon name="plus" size={24} strokeWidth={2} />
       </button>
     </div>
   );

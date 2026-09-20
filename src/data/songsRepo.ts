@@ -1,0 +1,73 @@
+import { getDb } from "./db";
+import type { AttachmentKind, AttachmentRole, Song } from "../state/types";
+
+interface SongRow {
+  id: string;
+  title: string;
+  artist: string;
+  defaultKey: string;
+  tempo: number;
+  timeSig: string;
+  durationSec: number;
+  favourite: number;
+  source: string;
+  chordpro: string;
+  chartFormat: string;
+  attachment_kind: string | null;
+  attachment_role: string | null;
+  attachment_dataUrl: string | null;
+  attachment_name: string | null;
+}
+
+function rowToSong(row: SongRow): Song {
+  const song: Song = {
+    id: row.id,
+    title: row.title,
+    artist: row.artist,
+    defaultKey: row.defaultKey,
+    tempo: row.tempo,
+    timeSig: row.timeSig,
+    durationSec: row.durationSec,
+    favourite: row.favourite === 1,
+    source: row.source as Song["source"],
+    chordpro: row.chordpro,
+    chartFormat: row.chartFormat as Song["chartFormat"],
+  };
+  if (row.attachment_kind) {
+    song.attachment = {
+      kind: row.attachment_kind as AttachmentKind,
+      role: row.attachment_role as AttachmentRole,
+      dataUrl: row.attachment_dataUrl ?? "",
+      name: row.attachment_name ?? "",
+    };
+  }
+  return song;
+}
+
+export function buildDeleteStatement(): { statement: string; values: unknown[] } {
+  return { statement: "DELETE FROM songs", values: [] };
+}
+
+export function buildInsertStatements(songs: Song[]): { statement: string; values: unknown[] }[] {
+  return songs.map((s) => ({
+    statement: `INSERT INTO songs
+      (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachment_kind, attachment_role, attachment_dataUrl, attachment_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [
+      s.id, s.title, s.artist, s.defaultKey, s.tempo, s.timeSig, s.durationSec,
+      s.favourite ? 1 : 0, s.source, s.chordpro, s.chartFormat,
+      s.attachment?.kind ?? null, s.attachment?.role ?? null, s.attachment?.dataUrl ?? null, s.attachment?.name ?? null,
+    ],
+  }));
+}
+
+export async function loadAll(): Promise<Song[]> {
+  const db = await getDb();
+  const result = await db.query("SELECT * FROM songs");
+  return ((result.values ?? []) as SongRow[]).map(rowToSong);
+}
+
+export async function replaceAll(songs: Song[]): Promise<void> {
+  const db = await getDb();
+  await db.executeSet([buildDeleteStatement(), ...buildInsertStatements(songs)]);
+}

@@ -1,10 +1,34 @@
 import { KeyChips } from "../../components/KeyChips";
+import { Icon, type IconName } from "../../components/Icon";
 import { useStore } from "../../state/store";
+import type { ScoreInstrument } from "../../components/MxlScore";
+import type { ChartView } from "../../state/types";
 
-export function MusicToolbar({ onAnnotate }: { onAnnotate: () => void }) {
+export function MusicToolbar({
+  view,
+  hasChords,
+  instruments,
+  hiddenParts,
+  onToggleInstrument,
+  onAnnotate,
+}: {
+  view: ChartView;
+  hasChords: boolean;
+  instruments: ScoreInstrument[];
+  hiddenParts: ReadonlySet<string>;
+  onToggleInstrument: (id: string) => void;
+  onAnnotate: () => void;
+}) {
   const { state, dispatch } = useStore();
   const { stage } = state;
   const key = stage.dispKey ?? "C";
+  // The key-transpose row always applies (it shifts real notated pitches in
+  // sheet view, chord letters in chord view). The second row's controls
+  // (capo, lyrics-only, zoom, annotate) are chord-chart-specific and don't
+  // mean anything against real engraving, so sheet view swaps it for a
+  // per-instrument show/hide row instead — and only offers that row at all
+  // once there's more than one part to choose between.
+  const showSecondRow = view === "chords" ? hasChords : instruments.length > 1;
 
   return (
     <div
@@ -19,25 +43,27 @@ export function MusicToolbar({ onAnnotate }: { onAnnotate: () => void }) {
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <button
-        onClick={() => dispatch({ type: "STAGE_TOGGLE_TOOLBAR" })}
-        style={{
-          width: "100%",
-          border: "none",
-          background: "none",
-          padding: "4px 0 2px",
-          fontSize: 16,
-          color: stage.toolbarExpanded ? "var(--acc)" : "var(--mut)",
-        }}
-      >
-        {stage.toolbarExpanded ? "﹀" : "︿"}
-      </button>
+      {showSecondRow && (
+        <button
+          onClick={() => dispatch({ type: "STAGE_TOGGLE_TOOLBAR" })}
+          style={{
+            width: "100%",
+            border: "none",
+            background: "none",
+            padding: "4px 0 2px",
+            fontSize: 16,
+            color: stage.toolbarExpanded ? "var(--acc)" : "var(--mut)",
+          }}
+        >
+          {stage.toolbarExpanded ? "﹀" : "︿"}
+        </button>
+      )}
 
       <div style={{ padding: "2px 14px 10px" }}>
         <KeyChips active={key} onSelect={(k) => dispatch({ type: "STAGE_SET_KEY", key: k })} />
       </div>
 
-      {stage.toolbarExpanded && (
+      {showSecondRow && stage.toolbarExpanded && view === "chords" && (
         <div
           style={{
             padding: "9px 10px 12px",
@@ -61,7 +87,29 @@ export function MusicToolbar({ onAnnotate }: { onAnnotate: () => void }) {
           />
           <ToolbarIcon glyph="－" label="Zoom−" onClick={() => dispatch({ type: "STAGE_SET_ZOOM", zoom: stage.zoom - 10 })} />
           <ToolbarIcon glyph="＋" label="Zoom+" onClick={() => dispatch({ type: "STAGE_SET_ZOOM", zoom: stage.zoom + 10 })} />
-          <ToolbarIcon glyph="✎" label="Annotate" onClick={onAnnotate} />
+          <ToolbarIcon icon="annotate" label="Annotate" onClick={onAnnotate} />
+        </div>
+      )}
+
+      {showSecondRow && stage.toolbarExpanded && view === "sheet" && (
+        <div
+          style={{
+            padding: "9px 14px 12px",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 6,
+            borderTop: "1px solid var(--line)",
+          }}
+        >
+          {instruments.map((inst) => (
+            <button
+              key={inst.id}
+              className={"chip" + (hiddenParts.has(inst.id) ? "" : " active")}
+              onClick={() => onToggleInstrument(inst.id)}
+            >
+              {inst.name}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -121,11 +169,13 @@ function ToolbarStepper({
 
 function ToolbarIcon({
   glyph,
+  icon,
   label,
   onClick,
   active,
 }: {
-  glyph: string;
+  glyph?: string;
+  icon?: IconName;
   label: string;
   onClick: () => void;
   active?: boolean;
@@ -137,13 +187,15 @@ function ToolbarIcon({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 2,
+        gap: 3,
         flex: 1,
         background: "none",
         border: "none",
       }}
     >
-      <span style={{ fontSize: 19, color: active ? "var(--acc-deep)" : "var(--acc)" }}>{glyph}</span>
+      <span style={{ fontSize: 19, lineHeight: 1, display: "flex", color: active ? "var(--acc-deep)" : "var(--acc)" }}>
+        {icon ? <Icon name={icon} size={19} strokeWidth={1.8} /> : glyph}
+      </span>
       <span style={{ fontSize: 10, fontWeight: 600, color: "var(--mut)" }}>{label}</span>
     </button>
   );
