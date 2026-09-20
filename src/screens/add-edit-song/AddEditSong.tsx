@@ -39,7 +39,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const [chordpro, setChordpro] = useState(prefillChordpro ?? existing?.chordpro ?? "");
   const [chartFormat, setChartFormat] = useState<ChartFormat>(prefillChartFormat ?? existing?.chartFormat ?? "chords-over-lyrics");
   const [attachments, setAttachments] = useState<Attachments>(hadPrefillAttachments ? prefillAttachments ?? {} : existing?.attachments ?? {});
-  const [tab, setTab] = useState<"source" | "preview" | AttachmentKind>("source");
+  const [notes, setNotes] = useState(existing?.notes ?? "");
+  const [tab, setTab] = useState<"source" | "preview" | "notes" | AttachmentKind>("source");
   const [showErrors, setShowErrors] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [importMethodOpen, setImportMethodOpen] = useState(false);
@@ -81,6 +82,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
     chordpro !== (existing?.chordpro ?? "") ||
     chartFormat !== (existing?.chartFormat ?? "chords-over-lyrics") ||
     timeSig !== (existing?.timeSig ?? "4/4") ||
+    notes !== (existing?.notes ?? "") ||
     JSON.stringify(attachments) !== JSON.stringify(existing?.attachments ?? {});
 
   const activeKind: AttachmentKind | null = tab === "musicxml" || tab === "pdf" || tab === "image" ? tab : null;
@@ -110,6 +112,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
       chordpro,
       chartFormat,
       attachments,
+      notes,
+      annotations: existing?.annotations ?? {},
     };
     dispatch({ type: existing ? "UPDATE_SONG" : "ADD_SONG", song } as any);
     nav.pop();
@@ -148,6 +152,9 @@ export function AddEditSong({ songId }: { songId?: string }) {
         </button>
         <button className={"chip" + (tab === "preview" ? " active" : "")} onClick={() => setTab("preview")}>
           Preview
+        </button>
+        <button className={"chip" + (tab === "notes" ? " active" : "")} onClick={() => setTab("notes")}>
+          Notes
         </button>
         {CATEGORY_PRIORITY.filter((kind) => attachments[kind]).map((kind) => (
           <button key={kind} className={"chip" + (tab === kind ? " active" : "")} onClick={() => setTab(kind)}>
@@ -279,6 +286,28 @@ export function AddEditSong({ songId }: { songId?: string }) {
           <div className="muted" style={{ fontSize: 11, marginTop: "auto" }}>
             Renders with the stage engine at stage text size.
           </div>
+        </div>
+      )}
+
+      {tab === "notes" && (
+        <div className="flex-1 hidden-scroll" style={{ padding: "0 14px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Reminders, cues, anything worth having on hand for this song — works the same whether it's a chord chart, a PDF, or sheet music."
+            style={{
+              flex: 1,
+              minHeight: 160,
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              padding: "9px 10px",
+              fontSize: 13,
+              lineHeight: 1.5,
+              background: "var(--surface)",
+              color: "var(--fg)",
+              resize: "vertical",
+            }}
+          />
         </div>
       )}
 
