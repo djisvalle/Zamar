@@ -35,7 +35,7 @@ export function Settings() {
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 500 }}>Stage Dark</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
-              Dark chart on stage, light everywhere else.
+              One theme for the whole device, applied everywhere at once.
             </div>
           </div>
           <span className="accent-deep" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 2 }}>
