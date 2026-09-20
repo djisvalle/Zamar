@@ -10,7 +10,7 @@ export interface AttachmentVersion {
   /** User-facing name, e.g. "Violin", "Jazz arrangement". Defaults to the
    * original filename when the person doesn't type one at import time. */
   label: string;
-  dataUrl: string; // in-memory only, like everything else in this mockup
+  dataUrl: string;
   name: string; // original filename, always preserved regardless of label
 }
 
