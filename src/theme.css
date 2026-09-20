@@ -445,6 +445,9 @@ button {
   border-color: var(--acc);
   font-weight: 700;
 }
+.key-row-btn:disabled {
+  opacity: 0.4;
+}
 
 /* ---- form fields ---- */
 .field label {

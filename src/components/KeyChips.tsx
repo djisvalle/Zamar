@@ -1,7 +1,15 @@
 import { useEffect, useRef } from "react";
 import { CHROMATIC } from "../utils/chordpro";
 
-export function KeyChips({ active, onSelect }: { active: string | null; onSelect: (key: string) => void }) {
+export function KeyChips({
+  active,
+  onSelect,
+  disabled = false,
+}: {
+  active: string | null;
+  onSelect: (key: string) => void;
+  disabled?: boolean;
+}) {
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -17,6 +25,7 @@ export function KeyChips({ active, onSelect }: { active: string | null; onSelect
             key={k}
             ref={isActive ? activeRef : undefined}
             className={"key-row-btn" + (isActive ? " active" : "")}
+            disabled={disabled}
             onClick={() => onSelect(k)}
           >
             {k}
