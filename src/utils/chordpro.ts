@@ -1,8 +1,10 @@
 export const CHROMATIC = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 const FLAT_TO_SHARP: Record<string, string> = {
+  Cb: "B",
   Db: "C#",
   Eb: "D#",
+  Fb: "E",
   Gb: "F#",
   Ab: "G#",
   Bb: "A#",
