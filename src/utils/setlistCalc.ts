@@ -34,6 +34,22 @@ export function setlistItemCount(setlist: Setlist): number {
   return setlist.sections.reduce((n, sec) => n + sec.items.length, 0);
 }
 
+/** "template" is a manual designation, kept as-is. Everything else is derived from
+ * `date` rather than trusted from the stored field, so a setlist's Upcoming/Past
+ * bucket updates on its own once its date passes instead of staying wherever it
+ * was created. An empty or unparseable date reads as "upcoming" (never crosses
+ * into the past on its own). */
+export function setlistStatus(setlist: Setlist): "upcoming" | "past" | "template" {
+  if (setlist.status === "template") return "template";
+  if (!setlist.date.trim()) return "upcoming";
+  const parsed = new Date(setlist.date);
+  if (Number.isNaN(parsed.getTime())) return "upcoming";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  parsed.setHours(0, 0, 0, 0);
+  return parsed.getTime() < today.getTime() ? "past" : "upcoming";
+}
+
 export function setlistDurationSec(setlist: Setlist, songs: Song[]): number {
   return flattenSetlist(setlist, songs).reduce((sum, e) => sum + (e.song ? e.song.durationSec : 60), 0);
 }

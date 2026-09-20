@@ -3,6 +3,7 @@ import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Icon } from "../../components/Icon";
+import { setlistStatus } from "../../utils/setlistCalc";
 import type { Setlist } from "../../state/types";
 
 type Tab = "upcoming" | "past" | "template";
@@ -12,7 +13,7 @@ export function Setlists() {
   const nav = useNavigator();
   const [tab, setTab] = useState<Tab>("upcoming");
 
-  const list = state.setlists.filter((sl) => sl.status === tab);
+  const list = state.setlists.filter((sl) => setlistStatus(sl) === tab);
 
   const createSetlist = () => {
     const id = `set-${Date.now()}`;
