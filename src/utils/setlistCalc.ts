@@ -61,6 +61,9 @@ export function setlistKeyPath(setlist: Setlist, songs: Song[]): string {
     .join(" → ");
 }
 
+/** `baseTime` is expected in "H:MM AM/PM" form — `SetDetailsSheet` validates
+ * that shape at entry, so a missing AM/PM suffix here should only happen for
+ * a setlist's still-blank default time, not a real ambiguous value. */
 export function startClockLabel(baseTime: string, offsetSec: number): string {
   const m = baseTime.match(/(\d+):(\d+)\s*(AM|PM)?/i);
   if (!m) return baseTime;
