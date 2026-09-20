@@ -6,6 +6,7 @@ import { Dialog } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
 import { PdfPages } from "../../components/PdfPages";
+import { MxlScore } from "../../components/MxlScore";
 import type { AttachmentKind, AttachmentVersion, Attachments, ChartFormat, Song } from "../../state/types";
 import { ATTACHMENT_LABEL, addVersion } from "../../utils/attachments";
 
@@ -15,8 +16,13 @@ type ContentType = "chords" | "sheet";
 
 /** Where the finished import goes: a brand-new song (Library's default),
  * an existing song's supplementary sheet-music/static-file view, or back
- * into an in-progress New/Edit Song form via nav.replace. */
-export type ImportTarget = { kind: "new" } | { kind: "existing"; songId: string } | { kind: "form" };
+ * into an in-progress New/Edit Song form via nav.replace. `attachOnly` is
+ * set when a "form" target is specifically adding another version to a
+ * category the draft already has (Add/Edit Song's "Add another … version"
+ * button) — there's no ambiguity about what the file is in that case, so
+ * the "what's in this file?" question should never be asked, the same way
+ * it's never asked for `kind: "existing"`. */
+export type ImportTarget = { kind: "new" } | { kind: "existing"; songId: string } | { kind: "form"; attachOnly?: boolean };
 
 export interface ImportFormDraft {
   title: string;
@@ -59,6 +65,10 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const isExisting = target?.kind === "existing";
   const isForm = target?.kind === "form";
   const existingSong = isExisting ? state.songs.find((s) => s.id === target.songId) : undefined;
+  // Skips the "what's in this file?" declaration entirely — true both for
+  // attaching to an existing song (never ambiguous) and for adding another
+  // version to a category the in-progress draft already has.
+  const skipContentDeclaration = isExisting || (target?.kind === "form" && !!target.attachOnly);
 
   const [phase, setPhase] = useState<Phase>("pick");
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
@@ -76,7 +86,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const label = METHOD_LABEL[method];
   const canDeclareContent = method !== "musicxml";
   const attachmentKind: AttachmentKind = method === "pdf" ? "pdf" : method === "musicxml" ? "musicxml" : "image";
-  const willAttach = isExisting || (contentType === "sheet" && !!file);
+  const willAttach = skipContentDeclaration || (contentType === "sheet" && !!file);
 
   const buildVersion = (): AttachmentVersion => ({
     id: `att-${Date.now()}`,
@@ -294,6 +304,10 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
           {willAttach ? (
             attachmentKind === "image" ? (
               <img src={file!.dataUrl} alt={file!.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
+            ) : attachmentKind === "musicxml" ? (
+              <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden", padding: 8 }}>
+                <MxlScore src={file!.dataUrl} />
+              </div>
             ) : (
               <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden" }}>
                 <PdfPages src={file!.dataUrl} />
@@ -363,7 +377,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             />
           </div>
         )}
-        {file && !isExisting && canDeclareContent && (
+        {file && !skipContentDeclaration && canDeclareContent && (
           <div style={{ width: "100%", textAlign: "left" }}>
             <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>What's in this file?</div>
             <div style={{ display: "flex" }}>
@@ -392,18 +406,18 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             <button
               className="btn"
               onClick={() => {
-                if (isExisting || contentType === "sheet") {
+                if (skipContentDeclaration || contentType === "sheet") {
                   goToReview();
                 } else {
                   startConvert(false);
                 }
               }}
             >
-              {isExisting || contentType === "sheet" ? "Continue" : "Convert to chart"}
+              {skipContentDeclaration || contentType === "sheet" ? "Continue" : "Convert to chart"}
             </button>
           )}
         </div>
-        {file && !isExisting && contentType === "chords" && (
+        {file && !skipContentDeclaration && contentType === "chords" && (
           <button
             className="muted"
             style={{ background: "none", border: "none", fontSize: 11, textDecoration: "underline" }}

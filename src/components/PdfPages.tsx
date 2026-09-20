@@ -116,6 +116,17 @@ export function PdfPages({ src }: { src: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Tracked outside the async body so cleanup can release pdf.js
+    // resources on unmount or a `src` change — otherwise switching between
+    // PDF categories/versions (now fast and common, via this feature's
+    // category chips and version picker) stacks up undestroyed documents
+    // and abandoned render tasks on the pdf.js worker. The loading task
+    // (not the resolved PDFDocumentProxy, which has no destroy() of its
+    // own) is what actually needs destroying — this is pdf.js's documented
+    // cleanup pattern, and destroying it internally tears down the loaded
+    // document too.
+    let loadingTask: any = null;
+    let currentRenderTask: any = null;
     setStatus("loading");
 
     (async () => {
@@ -125,7 +136,8 @@ export function PdfPages({ src }: { src: string }) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
       try {
-        const doc = await pdfjsLib.getDocument({ url: src }).promise;
+        loadingTask = pdfjsLib.getDocument({ url: src });
+        const doc = await loadingTask.promise;
         if (cancelled || !containerRef.current) return;
         containerRef.current.innerHTML = "";
         const width = containerRef.current.clientWidth || 360;
@@ -157,7 +169,10 @@ export function PdfPages({ src }: { src: string }) {
 
           const ctx = canvas.getContext("2d");
           if (!ctx) continue;
-          await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+          const task = page.render({ canvasContext: ctx, viewport, canvas });
+          currentRenderTask = task;
+          await task.promise;
+          currentRenderTask = null;
           if (cancelled || !containerRef.current) return;
           containerRef.current.appendChild(canvas);
         }
@@ -170,6 +185,8 @@ export function PdfPages({ src }: { src: string }) {
 
     return () => {
       cancelled = true;
+      currentRenderTask?.cancel();
+      loadingTask?.destroy();
     };
   }, [src]);
 

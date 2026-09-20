@@ -12,7 +12,7 @@ export const ATTACHMENT_LABEL: Record<AttachmentKind, string> = {
 export const CATEGORY_PRIORITY: AttachmentKind[] = ["musicxml", "pdf", "image"];
 
 export function firstAvailableCategory(attachments: Attachments): AttachmentKind | undefined {
-  return CATEGORY_PRIORITY.find((kind) => attachments[kind]);
+  return CATEGORY_PRIORITY.find((kind) => (attachments[kind]?.versions.length ?? 0) > 0);
 }
 
 export function selectedVersion(bucket: AttachmentBucket): AttachmentVersion {

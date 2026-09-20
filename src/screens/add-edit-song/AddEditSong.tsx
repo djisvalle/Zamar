@@ -115,11 +115,11 @@ export function AddEditSong({ songId }: { songId?: string }) {
     nav.pop();
   };
 
-  const startImport = (method: ImportMethod) => {
+  const startImport = (method: ImportMethod, attachOnly = false) => {
     setImportMethodOpen(false);
     nav.replace("import-song", {
       method,
-      target: { kind: "form" },
+      target: { kind: "form", attachOnly },
       formDraft: { title, artist, tempo, timeSig, manualKey, songId: existing?.id, chordpro, chartFormat, attachments },
     });
   };
@@ -128,7 +128,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
   // it skips the "Import a PDF/photo/MusicXML" chooser sheet and imports
   // that exact kind directly.
   const KIND_TO_METHOD: Record<AttachmentKind, ImportMethod> = { pdf: "pdf", image: "photo", musicxml: "musicxml" };
-  const addVersionFor = (kind: AttachmentKind) => startImport(KIND_TO_METHOD[kind]);
+  const addVersionFor = (kind: AttachmentKind) => startImport(KIND_TO_METHOD[kind], true);
 
   return (
     <div className="screen">
@@ -334,7 +334,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
 
           <button className="btn" onClick={() => addVersionFor(activeKind)}>
             <Icon name="plus" size={14} strokeWidth={2} />
-            Add another {ATTACHMENT_LABEL[activeKind].toLowerCase()} version
+            Add another {ATTACHMENT_LABEL[activeKind]} version
           </button>
           <button
             className="btn"
@@ -425,11 +425,9 @@ export function AddEditSong({ songId }: { songId?: string }) {
               onClick={() => {
                 const target = confirmDeleteVersion;
                 setConfirmDeleteVersion(null);
-                setAttachments((prev) => {
-                  const next = removeVersion(prev, target.kind, target.id);
-                  if (!next[target.kind] && tab === target.kind) setTab("source");
-                  return next;
-                });
+                const willEmptyBucket = (attachments[target.kind]?.versions.length ?? 0) <= 1;
+                setAttachments((prev) => removeVersion(prev, target.kind, target.id));
+                if (willEmptyBucket && tab === target.kind) setTab("source");
               }}
             >
               Remove

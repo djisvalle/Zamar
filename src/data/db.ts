@@ -107,7 +107,7 @@ async function openDb(): Promise<SQLiteDBConnection> {
       // recreates rather than migrating the old columns' contents — see the
       // comment above CREATE_SONGS.
       toVersion: 2,
-      statements: ["DROP TABLE IF EXISTS songs;", CREATE_SONGS],
+      statements: ["DROP TABLE IF EXISTS songs;", CREATE_SONGS, "DELETE FROM setlist_items;"],
     },
   ]);
 
