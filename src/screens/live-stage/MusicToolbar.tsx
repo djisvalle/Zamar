@@ -35,7 +35,7 @@ export function MusicToolbar({
   const key = stage.dispKey ?? "C";
   // The key-transpose row always applies (it shifts real notated pitches in
   // sheet view, chord letters in chord view). The second row's controls
-  // (capo, lyrics-only, zoom, annotate) are chord-chart-specific and don't
+  // (capo, lyrics-only, zoom) are chord-chart-specific and don't
   // mean anything against real engraving, so sheet view swaps it for a
   // per-instrument show/hide row instead — and only offers that row at all
   // once there's more than one part to choose between.
