@@ -10,14 +10,25 @@ export function MusicToolbar({
   instruments,
   hiddenParts,
   onToggleInstrument,
-  onAnnotate,
+  transposeLocked,
+  chordsLocked,
+  instrumentsLocked,
 }: {
   view: ChartView;
   hasChords: boolean;
   instruments: ScoreInstrument[];
   hiddenParts: ReadonlySet<string>;
   onToggleInstrument: (id: string) => void;
-  onAnnotate: () => void;
+  /** Disables the key-transpose row — locked once either the "chords" or
+   * "musicxml" annotation layer has strokes, since both views share the
+   * same `stage.dispKey`. */
+  transposeLocked: boolean;
+  /** Disables capo/lyrics-only/zoom — locked once the "chords" annotation
+   * layer has strokes. */
+  chordsLocked: boolean;
+  /** Disables the instrument show/hide chips — locked once the "musicxml"
+   * annotation layer has strokes. */
+  instrumentsLocked: boolean;
 }) {
   const { state, dispatch } = useStore();
   const { stage } = state;
@@ -60,7 +71,7 @@ export function MusicToolbar({
       )}
 
       <div style={{ padding: "2px 14px 10px" }}>
-        <KeyChips active={key} onSelect={(k) => dispatch({ type: "STAGE_SET_KEY", key: k })} />
+        <KeyChips active={key} onSelect={(k) => dispatch({ type: "STAGE_SET_KEY", key: k })} disabled={transposeLocked} />
       </div>
 
       {showSecondRow && stage.toolbarExpanded && view === "chords" && (
@@ -71,11 +82,13 @@ export function MusicToolbar({
             alignItems: "center",
             borderTop: "1px solid var(--line)",
             gap: 2,
+            opacity: chordsLocked ? 0.4 : 1,
           }}
         >
           <ToolbarStepper
             label="Capo"
             value={stage.capo}
+            disabled={chordsLocked}
             onDec={() => dispatch({ type: "STAGE_SET_CAPO", capo: stage.capo - 1 })}
             onInc={() => dispatch({ type: "STAGE_SET_CAPO", capo: stage.capo + 1 })}
           />
@@ -83,11 +96,21 @@ export function MusicToolbar({
             glyph="Aa"
             label="Lyrics"
             active={stage.lyricsOnly}
+            disabled={chordsLocked}
             onClick={() => dispatch({ type: "STAGE_TOGGLE_LYRICS_ONLY" })}
           />
-          <ToolbarIcon glyph="－" label="Zoom−" onClick={() => dispatch({ type: "STAGE_SET_ZOOM", zoom: stage.zoom - 10 })} />
-          <ToolbarIcon glyph="＋" label="Zoom+" onClick={() => dispatch({ type: "STAGE_SET_ZOOM", zoom: stage.zoom + 10 })} />
-          <ToolbarIcon icon="annotate" label="Annotate" onClick={onAnnotate} />
+          <ToolbarIcon
+            glyph="－"
+            label="Zoom−"
+            disabled={chordsLocked}
+            onClick={() => dispatch({ type: "STAGE_SET_ZOOM", zoom: stage.zoom - 10 })}
+          />
+          <ToolbarIcon
+            glyph="＋"
+            label="Zoom+"
+            disabled={chordsLocked}
+            onClick={() => dispatch({ type: "STAGE_SET_ZOOM", zoom: stage.zoom + 10 })}
+          />
         </div>
       )}
 
@@ -105,6 +128,8 @@ export function MusicToolbar({
             <button
               key={inst.id}
               className={"chip" + (hiddenParts.has(inst.id) ? "" : " active")}
+              disabled={instrumentsLocked}
+              style={{ opacity: instrumentsLocked ? 0.4 : 1 }}
               onClick={() => onToggleInstrument(inst.id)}
             >
               {inst.name}
@@ -121,17 +146,20 @@ function ToolbarStepper({
   value,
   onDec,
   onInc,
+  disabled = false,
 }: {
   label: string;
   value: number;
   onDec: () => void;
   onInc: () => void;
+  disabled?: boolean;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flex: 1 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <button
           onClick={onDec}
+          disabled={disabled}
           style={{
             width: 30,
             height: 30,
@@ -148,6 +176,7 @@ function ToolbarStepper({
         <span style={{ fontSize: 15, fontWeight: 700, color: "var(--acc)", minWidth: 16, textAlign: "center" }}>{value}</span>
         <button
           onClick={onInc}
+          disabled={disabled}
           style={{
             width: 30,
             height: 30,
@@ -173,16 +202,19 @@ function ToolbarIcon({
   label,
   onClick,
   active,
+  disabled = false,
 }: {
   glyph?: string;
   icon?: IconName;
   label: string;
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
         display: "flex",
         flexDirection: "column",
