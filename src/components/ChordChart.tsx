@@ -17,17 +17,17 @@ export function ChordChart({
     <>
       {lines.map((l, i) =>
         l.isSection ? (
-          <div key={i} className="chord-section-label" style={{ fontSize: 11 * fontScale }}>
+          <div key={i} className="chord-section-label" style={{ fontSize: 12 * fontScale }}>
             {l.lyric}
           </div>
         ) : (
           <div key={i}>
             {!hideChords && l.chords.length > 0 && (
-              <div className="chord-line" style={{ fontSize: 12 * fontScale }}>
+              <div className="chord-line" style={{ fontSize: 14 * fontScale }}>
                 {renderChordRow(l.chords)}
               </div>
             )}
-            <div className="lyric-line" style={{ fontSize: 14.5 * fontScale }}>
+            <div className="lyric-line" style={{ fontSize: 17 * fontScale }}>
               {l.lyric}
             </div>
           </div>

@@ -784,7 +784,7 @@ button {
 /* ---- chord chart ---- */
 .chord-line {
   font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   white-space: pre;
   line-height: 1.9;
@@ -799,7 +799,7 @@ button {
   display: inline-block;
 }
 .lyric-line {
-  font-size: 14.5px;
+  font-size: 17px;
   line-height: 1.45;
 }
 .chord-section-label {
