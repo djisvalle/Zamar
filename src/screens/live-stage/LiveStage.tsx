@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useStore, activeSetlistSongIds } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
-import { ScorePreview } from "../../components/ScorePreview";
 import { MxlScore, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
 import { Icon } from "../../components/Icon";
@@ -279,6 +278,7 @@ export function LiveStage() {
                   Chord
                 </button>
                 <button
+                  disabled={availableKinds.length === 0}
                   onClick={() => dispatch({ type: "STAGE_SET_VIEW", view: "sheet" })}
                   style={{
                     fontSize: 11,
@@ -286,6 +286,7 @@ export function LiveStage() {
                     borderRadius: 5,
                     border: "none",
                     fontWeight: 700,
+                    opacity: availableKinds.length === 0 ? 0.35 : 1,
                     background: stage.view === "sheet" ? "var(--acc)" : "transparent",
                     color: stage.view === "sheet" ? "var(--onacc)" : "var(--mut)",
                   }}
@@ -392,21 +393,9 @@ export function LiveStage() {
             </span>
           </div>
         ) : (
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              padding: "8px 0",
-            }}
-          >
-            <ScorePreview />
-            <span className="muted" style={{ fontSize: 11 }}>
-              Rendered MusicXML score
-            </span>
+          <div className="empty">
+            <div className="empty-title">No sheet music attached</div>
+            <div className="empty-body">Attach a PDF, photo, or MusicXML score from Add/Edit Song to see it here.</div>
           </div>
         )}
       </div>
