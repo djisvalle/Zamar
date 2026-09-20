@@ -142,45 +142,76 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ## To-do — confirmed still open (verified against current working tree)
 
-- [ ] **Dead Settings toggles.** `keepAwake` / `autoscroll` persist a boolean but nothing reads
-      either flag anywhere (no Wake Lock call, no scroll timer). Either wire them up or remove
-      them.
-- [ ] **"Stage Dark" copy vs. behavior mismatch.** Settings still claims *"Dark chart on stage,
-      light everywhere else,"* but `App.tsx` applies `data-theme` to the whole `.device` root —
-      it darkens the entire app. Fix the copy to match the simplification, or scope the theme.
-- [ ] **Text-size slider disconnected from the real chart.** `Appearance.tsx`'s sample is driven
-      by `settings.textScale`; the actual Live Stage chart is driven by a separate
-      `stage.zoom` (session-only, resets every session). Unify these into one value.
-- [ ] **Persistence "first run" gate is still fragile.** `main.tsx` still treats
-      `settingsRepo.loadAll() === null` as the sole first-run signal, while `store.ts`'s persist
-      effect still writes songs/setlists and then settings as two separate steps (not one
-      transaction). A crash between the two writes still risks a silent reseed-over-real-data on
-      next boot. The fix-round commits addressed overlap/race timing, not this root design.
-- [ ] **Setlist status is a static field, not derived from date.** `createSetlist()` hardcodes
-      `status: "upcoming"`; nothing recomputes "upcoming" vs. "past" from the setlist's actual
-      date. Currently masked because seed data ships with zero setlists — will resurface as soon
-      as a real setlist's date passes.
-- [ ] **Library FABs can cover the last list rows.** The scrollable list has no bottom padding
-      reserved for `.fab-stack`; last 1–2 rows (and their "⋯" menu) can sit under the FABs.
-- [ ] **New setlist writes to the store immediately.** Tapping "+" / "Build a set" dispatches
-      `ADD_SETLIST` before the user enters any details, with no cancel/discard path — inconsistent
-      with Add/Edit Song, which waits for Save.
-- [ ] Stale comment in `types.ts`: `dataUrl` still documented as "in-memory only, like everything
-      else in this mockup" — no longer accurate once SQLite persistence landed.
-- [ ] CLAUDE.md itself is stale on "Single global reducer, no persistence" and the mockup framing
-      generally — needs a pass once the above items settle.
-- [ ] `chordpro.ts`'s `normalizeRoot` only maps 5 flats; an uncommon root silently no-ops instead
-      of erroring.
-- [ ] `setlistCalc.ts` treats a missing AM/PM suffix as AM with no validation.
-- [ ] Heavy use of ad-hoc inline `style={{...}}` objects instead of shared CSS classes.
+- [x] **Dead Settings toggles.** Fixed: removed `keepAwake`/`autoscroll` entirely (Settings row,
+      `Settings`/`AppState` types, the SQLite `settings` table via a v3→v4 drop-and-recreate
+      migration, and the now-unused generic `UPDATE_SETTINGS` action) rather than wiring them up
+      — neither had a real mechanism behind it (Wake Lock plugin, scroll timer) worth adding as a
+      new native dependency in this pass.
+- [x] **"Stage Dark" copy vs. behavior mismatch.** Fixed: Settings' Appearance row now reads "One
+      theme for the whole device, applied everywhere at once," matching `App.tsx`'s actual
+      `data-theme`-on-`.device`-root behavior instead of describing the per-surface scoping this
+      app doesn't implement.
+- [x] **Text-size slider disconnected from the real chart.** Fixed: `store.ts`'s `emptyStage`
+      constant became `makeEmptyStage(textScale)`, called wherever the stage resets (boot,
+      `STAGE_LOAD`, `STAGE_EXIT`, deleting the on-stage setlist) with `settings.textScale` — so
+      the Appearance slider now sets the size a chart actually opens at. `stage.zoom` still
+      adjusts session-only from there via the toolbar's +/- buttons, same as every other `stage`
+      field (see "Single global reducer" in CLAUDE.md); it was never meant to persist on its own.
+- [x] **Persistence "first run" gate is still fragile.** Fixed: `main.tsx`'s `loadInitial()` now
+      loads settings/songs/setlists together and only treats the install as first-run when
+      songs and setlists are *also* empty. If a crash left real song/setlist data with no
+      settings row, that data is carried forward with default settings instead of being
+      silently reseeded over. Songs+setlists were already one atomic transaction in
+      `store.ts`; settings still persists as a separate write, but losing just the settings
+      row no longer causes data loss on next boot.
+- [x] **Setlist status is a static field, not derived from date.** Fixed: added
+      `setlistStatus()` to `setlistCalc.ts`, which derives "upcoming"/"past" from `date`
+      (comparing to today, `"template"` still a manual override) instead of trusting the
+      stored `status` field. `Setlists.tsx`'s tab filter uses it instead of `sl.status`.
+- [x] **Library FABs can cover the last list rows.** Fixed: the scrollable list in
+      `Library.tsx` now reserves `paddingBottom: 150` (roughly the FAB stack's footprint)
+      when not in select mode, so the last rows scroll clear of `.fab-stack`. Same issue
+      existed in `Setlists.tsx` (single FAB over its list) — fixed there too with
+      `paddingBottom: 90`, sized to that screen's smaller single-FAB footprint.
+- [x] **New setlist writes to the store immediately.** Fixed: `Setlists.tsx` now gates
+      `ADD_SETLIST` behind a "New setlist" name dialog with Cancel/Create — tapping "+" /
+      "Build a set" no longer writes to the store until the user confirms a name, matching
+      Add/Edit Song's wait-for-Save pattern.
+- [x] Stale comment in `types.ts`: fixed — the "in-memory only, like everything else in this
+      mockup" note on `dataUrl` is removed now that SQLite persistence has landed.
+- [x] CLAUDE.md itself is stale on "Single global reducer, no persistence" and the mockup framing
+      generally — fixed: rewritten (What this is / Tech stack / Architecture / Screen map /
+      Gotchas) to describe the real Capacitor + SQLite app, added a "Ground rules" section, and
+      pointed to this checklist as the actively-maintained status source.
+- [x] `chordpro.ts`'s `normalizeRoot` only maps 5 flats; fixed — added the two missing enharmonic
+      flats (`Cb`→B, `Fb`→E) so every root the chord regex accepts now resolves instead of
+      silently no-opping on an uncommon one.
+- [x] `setlistCalc.ts` treats a missing AM/PM suffix as AM with no validation. Fixed: added
+      format validation (`TIME_PATTERN` in `SetDetailsSheet.tsx`) at the one place `Setlist.time`
+      is actually edited — Save is disabled with a field error until the time is blank or a
+      well-formed "H:MM AM/PM", so `startClockLabel`'s AM default can no longer fire on a real
+      ambiguous value.
+- [ ] Heavy use of ad-hoc inline `style={{...}}` objects instead of shared CSS classes. Deferred:
+      373 occurrences across 28 files — real visual-regression risk across the whole app, so this
+      needs its own dedicated spec/plan per the Feature workflow rather than a sweep bundled with
+      the smaller fixes above.
 
 ## To-do — UI/UX polish (from the design review, not yet actioned)
 
-- [ ] No iOS-style Large Title on root screens (Library/Setlists/Settings all use the same
-      small inline header)
+- [x] No iOS-style Large Title on root screens: fixed — `Header` (`src/components/Header.tsx`)
+      takes a `large` prop that renders the small bar with only the back/action controls, plus
+      a big bold title line beneath it (`.hdr-large-wrap`/`.hdr-large-title` in `theme.css`).
+      Wired on Library, Setlists, and Settings. Library's select-mode header (`"N selected"` /
+      Cancel) intentionally keeps the old compact single-line style, matching iOS's own
+      collapse-to-compact behaviour while an in-page action bar is active.
 - [ ] List rows use a "boxed card per row" Material-ish style rather than iOS's fused
       grouped-table look (valid alternative, just noting the departure)
 - [ ] FABs remain a Material Design pattern, not native to iOS — noted as out of scope for now
       (bigger layout change than warranted)
-- [ ] Chord/lyric chart text runs a little small relative to iOS defaults — legibility concern
-      for a "read it from a music stand" use case
+- [x] Chord/lyric chart text runs a little small relative to iOS defaults: fixed — bumped
+      `ChordChart`'s base sizes (`src/components/ChordChart.tsx`, mirrored in the `.chord-line`/
+      `.lyric-line` fallbacks in `theme.css`) from 12/14.5px to 14/17px (lyric line now matches
+      iOS's 17px body default), and the section-label size from 11 to 12px. All three surfaces
+      that render `ChordChart` (Live Stage, Add/Edit Song preview, the Appearance specimen)
+      pick this up automatically; the existing zoom/text-scale sliders still scale from these
+      new bases.
