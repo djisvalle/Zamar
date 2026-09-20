@@ -78,6 +78,7 @@ export type Action =
   | { type: "DUPLICATE_SONG"; songId: string }
   | { type: "DELETE_SONGS"; ids: string[] }
   | { type: "ADD_SETLIST"; setlist: Setlist }
+  | { type: "DELETE_SETLIST"; setlistId: string }
   | { type: "UPDATE_SETLIST_META"; setlistId: string; patch: Partial<Setlist> }
   | { type: "ADD_SECTION"; setlistId: string; label: string }
   | { type: "UPDATE_SECTION"; setlistId: string; sectionId: string; label: string }
@@ -142,6 +143,14 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, songs: state.songs.filter((s) => !action.ids.includes(s.id)) };
     case "ADD_SETLIST":
       return { ...state, setlists: [...state.setlists, action.setlist] };
+    case "DELETE_SETLIST":
+      return {
+        ...state,
+        setlists: state.setlists.filter((sl) => sl.id !== action.setlistId),
+        // A deleted setlist can't stay "live" — fall back to the resting stage state
+        // rather than leaving stage.setlistId pointing at a setlist that no longer exists.
+        stage: state.stage.setlistId === action.setlistId ? emptyStage : state.stage,
+      };
     case "UPDATE_SETLIST_META":
       return {
         ...state,

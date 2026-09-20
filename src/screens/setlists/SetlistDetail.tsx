@@ -24,6 +24,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const [renameSectionFor, setRenameSectionFor] = useState<SetlistSection | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<SetlistSection | null>(null);
+  const [confirmDeleteSetlist, setConfirmDeleteSetlist] = useState(false);
   const [dragItem, setDragItem] = useState<{ sectionId: string; index: number } | null>(null);
   const [dragOver, setDragOver] = useState<{ sectionId: string; index: number } | null>(null);
 
@@ -232,6 +233,16 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
           >
             Export set
           </button>
+          <button
+            className="sheet-row"
+            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            onClick={() => {
+              setMenuOpen(false);
+              setConfirmDeleteSetlist(true);
+            }}
+          >
+            Delete setlist
+          </button>
         </Sheet>
       )}
       {addOpen && <AddToSetDrawer setlist={setlist} onClose={() => setAddOpen(false)} />}
@@ -316,6 +327,32 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
               onClick={() => {
                 dispatch({ type: "REMOVE_SECTION", setlistId: setlist.id, sectionId: confirmDeleteSection.id });
                 setConfirmDeleteSection(null);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </Dialog>
+      )}
+
+      {confirmDeleteSetlist && (
+        <Dialog>
+          <div className="dialog-title">Delete "{setlist.name}"?</div>
+          <div className="dialog-body">
+            {songEntries.length > 0
+              ? `This removes the whole set, including ${songEntries.length} song${songEntries.length > 1 ? "s" : ""}. This can't be undone.`
+              : "This can't be undone."}
+          </div>
+          <div className="btn-row" style={{ marginTop: 2 }}>
+            <button className="btn" onClick={() => setConfirmDeleteSetlist(false)}>
+              Keep
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={() => {
+                dispatch({ type: "DELETE_SETLIST", setlistId: setlist.id });
+                setConfirmDeleteSetlist(false);
+                nav.pop();
               }}
             >
               Delete
