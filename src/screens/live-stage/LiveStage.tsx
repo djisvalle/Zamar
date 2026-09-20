@@ -69,7 +69,7 @@ export function LiveStage() {
   const resetIdle = () => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
     if (stage.chromeHidden) dispatch({ type: "STAGE_SET_CHROME_HIDDEN", hidden: false });
-    if (song && !stage.ended && !stage.annotate) {
+    if (song && !stage.ended && stage.drawer !== "annotate") {
       idleTimer.current = setTimeout(() => dispatch({ type: "STAGE_SET_CHROME_HIDDEN", hidden: true }), IDLE_MS);
     }
   };
@@ -80,10 +80,10 @@ export function LiveStage() {
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage.songId, stage.ended, stage.annotate]);
+  }, [stage.songId, stage.ended, stage.drawer]);
 
-  if (stage.annotate && song) {
-    return <AnnotateMode song={song} onDone={() => dispatch({ type: "STAGE_TOGGLE_ANNOTATE" })} />;
+  if (stage.drawer === "annotate" && song) {
+    return <AnnotateMode song={song} onDone={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />;
   }
 
   if (stage.ended && setlist) {
@@ -407,7 +407,7 @@ export function LiveStage() {
           instruments={scoreInstruments}
           hiddenParts={hiddenParts}
           onToggleInstrument={toggleInstrument}
-          onAnnotate={() => dispatch({ type: "STAGE_TOGGLE_ANNOTATE" })}
+          onAnnotate={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "annotate" })}
         />
       )}
 

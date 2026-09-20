@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -40,7 +40,9 @@ const CREATE_SONGS = `CREATE TABLE IF NOT EXISTS songs (
   source TEXT NOT NULL,
   chordpro TEXT NOT NULL,
   chartFormat TEXT NOT NULL,
-  attachments_json TEXT NOT NULL DEFAULT '{}'
+  attachments_json TEXT NOT NULL DEFAULT '{}',
+  notes TEXT NOT NULL DEFAULT '',
+  annotations_json TEXT NOT NULL DEFAULT '{}'
 );`;
 
 const CREATE_SETLISTS = `CREATE TABLE IF NOT EXISTS setlists (
@@ -108,6 +110,16 @@ async function openDb(): Promise<SQLiteDBConnection> {
       // comment above CREATE_SONGS.
       toVersion: 2,
       statements: ["DROP TABLE IF EXISTS songs;", CREATE_SONGS, "DELETE FROM setlist_items;"],
+    },
+    {
+      // Additive columns on an existing table — unlike the v1->v2 change,
+      // there's real local data worth preserving by this point, so this
+      // uses ALTER TABLE instead of dropping and recreating the table.
+      toVersion: 3,
+      statements: [
+        "ALTER TABLE songs ADD COLUMN notes TEXT NOT NULL DEFAULT '';",
+        "ALTER TABLE songs ADD COLUMN annotations_json TEXT NOT NULL DEFAULT '{}';",
+      ],
     },
   ]);
 

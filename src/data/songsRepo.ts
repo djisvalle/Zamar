@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import type { Attachments, Song } from "../state/types";
+import type { Attachments, Song, AnnotationView } from "../state/types";
 
 interface SongRow {
   id: string;
@@ -14,6 +14,8 @@ interface SongRow {
   chordpro: string;
   chartFormat: string;
   attachments_json: string;
+  notes: string;
+  annotations_json: string;
 }
 
 function rowToSong(row: SongRow): Song {
@@ -30,6 +32,8 @@ function rowToSong(row: SongRow): Song {
     chordpro: row.chordpro,
     chartFormat: row.chartFormat as Song["chartFormat"],
     attachments: JSON.parse(row.attachments_json || "{}") as Attachments,
+    notes: row.notes,
+    annotations: JSON.parse(row.annotations_json || "{}") as Partial<Record<AnnotationView, any[]>>,
   };
 }
 
@@ -40,12 +44,12 @@ export function buildDeleteStatement(): { statement: string; values: unknown[] }
 export function buildInsertStatements(songs: Song[]): { statement: string; values: unknown[] }[] {
   return songs.map((s) => ({
     statement: `INSERT INTO songs
-      (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachments_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachments_json, notes, annotations_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     values: [
       s.id, s.title, s.artist, s.defaultKey, s.tempo, s.timeSig, s.durationSec,
       s.favourite ? 1 : 0, s.source, s.chordpro, s.chartFormat,
-      JSON.stringify(s.attachments),
+      JSON.stringify(s.attachments), s.notes, JSON.stringify(s.annotations),
     ],
   }));
 }

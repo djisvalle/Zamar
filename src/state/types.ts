@@ -23,6 +23,18 @@ export interface AttachmentBucket {
 
 export type Attachments = Partial<Record<AttachmentKind, AttachmentBucket>>;
 
+export type AnnotationView = "chords" | "image" | "pdf" | "musicxml";
+
+export interface Stroke {
+  id: string;
+  tool: "pen" | "square";
+  /** "pen": every point on the drawn polyline, in order. "square": exactly
+   * two points — the drag's start and end corners. Coordinates are in CSS
+   * pixels relative to the top-left of the view's content area, at that
+   * content's natural (unzoomed) size. */
+  points: { x: number; y: number }[];
+}
+
 export interface Song {
   id: string;
   title: string;
@@ -40,6 +52,12 @@ export interface Song {
    * or more versions (e.g. a Violin PDF and a Viola PDF for the same song).
    * A song can have chords, attachments, both, or neither. */
   attachments: Attachments;
+  /** Freeform text notes for this song — reminders, cues, anything worth
+   * having on hand regardless of chart type. "" when empty. */
+  notes: string;
+  /** Hand-drawn markup, one stroke layer per view type this song can show.
+   * {} when nothing has been drawn yet. */
+  annotations: Partial<Record<AnnotationView, Stroke[]>>;
 }
 
 export interface SetlistItem {
@@ -69,7 +87,7 @@ export interface Setlist {
 }
 
 export type ChartView = "chords" | "sheet";
-export type Drawer = "add-song" | "quick-edit" | "add-to-set" | null;
+export type Drawer = "add-song" | "quick-edit" | "add-to-set" | "annotate" | null;
 
 export interface StageState {
   songId: string | null;
@@ -80,7 +98,6 @@ export interface StageState {
   view: ChartView;
   toolbarExpanded: boolean;
   drawer: Drawer;
-  annotate: boolean;
   chromeHidden: boolean;
   ended: boolean;
   lyricsOnly: boolean;

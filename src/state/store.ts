@@ -37,7 +37,6 @@ export const emptyStage: StageState = {
   view: defaultView(defaultSong),
   toolbarExpanded: false,
   drawer: null,
-  annotate: false,
   chromeHidden: false,
   ended: false,
   lyricsOnly: false,
@@ -94,7 +93,6 @@ export type Action =
   | { type: "STAGE_SET_CAPO"; capo: number }
   | { type: "STAGE_TOGGLE_TOOLBAR" }
   | { type: "STAGE_OPEN_DRAWER"; drawer: StageState["drawer"] }
-  | { type: "STAGE_TOGGLE_ANNOTATE" }
   | { type: "STAGE_TOGGLE_LYRICS_ONLY" }
   | { type: "STAGE_SET_ZOOM"; zoom: number }
   | { type: "STAGE_SET_CHROME_HIDDEN"; hidden: boolean }
@@ -294,8 +292,6 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, stage: { ...state.stage, toolbarExpanded: !state.stage.toolbarExpanded } };
     case "STAGE_OPEN_DRAWER":
       return { ...state, stage: { ...state.stage, drawer: action.drawer } };
-    case "STAGE_TOGGLE_ANNOTATE":
-      return { ...state, stage: { ...state.stage, annotate: !state.stage.annotate } };
     case "STAGE_TOGGLE_LYRICS_ONLY":
       return { ...state, stage: { ...state.stage, lyricsOnly: !state.stage.lyricsOnly } };
     case "STAGE_SET_ZOOM":

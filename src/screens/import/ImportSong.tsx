@@ -146,6 +146,8 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       chordpro: willAttach ? "" : MOCK_CHORDPRO,
       chartFormat: "chordpro",
       attachments,
+      notes: "",
+      annotations: {},
     };
     dispatch({ type: "ADD_SONG", song });
     nav.pop();

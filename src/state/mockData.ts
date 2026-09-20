@@ -24,6 +24,8 @@ export const songs: Song[] = [
         selectedVersionId: "att-seed-1",
       },
     },
+    notes: "",
+    annotations: {},
   },
 ];
 
