@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
+import { Dialog } from "../../components/Overlays";
 import { Icon } from "../../components/Icon";
 import { setlistStatus } from "../../utils/setlistCalc";
 import type { Setlist } from "../../state/types";
@@ -12,14 +13,28 @@ export function Setlists() {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
   const [tab, setTab] = useState<Tab>("upcoming");
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
 
   const list = state.setlists.filter((sl) => setlistStatus(sl) === tab);
 
-  const createSetlist = () => {
+  const duplicateNewName = state.setlists.some((sl) => sl.name.trim() === newName.trim() && newName.trim() !== "");
+
+  const openCreateDialog = () => {
+    setNewName("New setlist");
+    setCreating(true);
+  };
+
+  // Nothing is written to the store until this confirms — unlike the old behaviour, which
+  // dispatched ADD_SETLIST on the "+" tap itself with no cancel/discard path. Mirrors
+  // Add/Edit Song, which also only commits on an explicit Save.
+  const confirmCreate = () => {
+    const name = newName.trim();
+    if (!name || duplicateNewName) return;
     const id = `set-${Date.now()}`;
     const setlist: Setlist = {
       id,
-      name: "New setlist",
+      name,
       date: "",
       time: "",
       description: "",
@@ -27,6 +42,7 @@ export function Setlists() {
       sections: [{ id: `${id}-sec`, label: "Set", items: [] }],
     };
     dispatch({ type: "ADD_SETLIST", setlist });
+    setCreating(false);
     nav.push("setlist-detail", { setlistId: id, openDetails: true });
   };
 
@@ -47,7 +63,7 @@ export function Setlists() {
           <div className="empty-body">
             Build one from your {state.songs.length} songs. Order, keys and timings can change any time.
           </div>
-          <button className="btn btn-primary btn-block" onClick={createSetlist}>
+          <button className="btn btn-primary btn-block" onClick={openCreateDialog}>
             Build a set
           </button>
         </div>
@@ -124,9 +140,32 @@ export function Setlists() {
         </div>
       )}
 
-      <button className="fab" style={{ position: "absolute", right: 14, bottom: 18 }} onClick={createSetlist} aria-label="New setlist">
+      <button className="fab" style={{ position: "absolute", right: 14, bottom: 18 }} onClick={openCreateDialog} aria-label="New setlist">
         <Icon name="plus" size={24} strokeWidth={2} />
       </button>
+
+      {creating && (
+        <Dialog>
+          <div className="dialog-title">New setlist</div>
+          <div className={"field" + (duplicateNewName ? " invalid" : "")}>
+            <label>Name</label>
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+          </div>
+          {duplicateNewName && <div className="field-error">A setlist with this name already exists.</div>}
+          <div className="btn-row" style={{ marginTop: 2 }}>
+            <button className="btn" onClick={() => setCreating(false)}>
+              Cancel
+            </button>
+            <button
+              className={"btn btn-primary" + (!newName.trim() || duplicateNewName ? " is-disabled" : "")}
+              disabled={!newName.trim() || duplicateNewName}
+              onClick={confirmCreate}
+            >
+              Create
+            </button>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }
