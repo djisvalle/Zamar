@@ -97,6 +97,19 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scale, disableZoom]);
 
+  // If a pinch/pan gesture is physically mid-flight when disableZoom flips
+  // to true, the pointer handlers below get dropped from the container's
+  // JSX on this same render — so the in-flight pointer's onPointerUp/
+  // onPointerCancel never fires and these refs would otherwise be left with
+  // stale entries until unmount. Clear them here instead of relying on
+  // handlers that are no longer attached.
+  useEffect(() => {
+    if (!disableZoom) return;
+    pointers.current.clear();
+    pinchStart.current = null;
+    panStart.current = null;
+  }, [disableZoom]);
+
   return { scale, translate, onPointerDown, onPointerMove, onPointerUp: endPointer, onPointerCancel: endPointer, onDoubleClick: reset, reset };
 }
 

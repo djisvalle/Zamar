@@ -121,6 +121,20 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [el, disableZoom]);
 
+  // If a pinch/pan gesture is physically mid-flight when disableZoom flips
+  // to true, the pointer handlers below get dropped from the container's
+  // JSX on this same render — so the in-flight pointer's onPointerUp/
+  // onPointerCancel never fires and these refs would otherwise be left with
+  // stale entries until unmount. Clear them here instead of relying on
+  // handlers that are no longer attached.
+  useEffect(() => {
+    if (!disableZoom) return;
+    pointers.current.clear();
+    pinchStart.current = null;
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = null;
+  }, [disableZoom]);
+
   return { previewScale, el, containerRef: setEl, onPointerDown, onPointerMove, onPointerUp: endPointer, onPointerCancel: endPointer, onDoubleClick: reset, reset };
 }
 
