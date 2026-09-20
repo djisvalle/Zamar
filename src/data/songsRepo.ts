@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import type { Attachments, Song, AnnotationView } from "../state/types";
+import type { Attachments, Song } from "../state/types";
 
 interface SongRow {
   id: string;
@@ -33,7 +33,7 @@ function rowToSong(row: SongRow): Song {
     chartFormat: row.chartFormat as Song["chartFormat"],
     attachments: JSON.parse(row.attachments_json || "{}") as Attachments,
     notes: row.notes,
-    annotations: JSON.parse(row.annotations_json || "{}") as Partial<Record<AnnotationView, any[]>>,
+    annotations: JSON.parse(row.annotations_json || "{}") as Song["annotations"],
   };
 }
 
