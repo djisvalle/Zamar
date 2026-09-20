@@ -1,6 +1,6 @@
 # Zamar — Progress Checklist
 
-Snapshot date: 2026-09-19. Branch: `mockup-to-implementation`.
+Snapshot date: 2026-09-20. Branch: `mockup-to-implementation`.
 Cross-check source: [review-findings.md](review-findings.md) (2026-09-12 senior review) verified
 against the current working tree (uncommitted changes on top of commit `54be3a2`).
 
@@ -47,29 +47,20 @@ working tree on 2026-09-19.
       `var(--acc)`-fill bar sized to `(songIndex + 1) / setlistSongIds.length`, using the
       already-computed `songIndex`/`setlistSongIds`. No numeric "Song X of N" counter by
       design — just the next-song name and the bar.
-- [ ] **Annotate / custom notes on a song.** Should let the user write or mark up custom
-      notes on a song regardless of its chart type — chords+lyrics, PDF/image, or `.mxl`.
-      **Currently missing across the board:**
-      - Live Stage's "Annotate" mode (`stage.annotate` in `store.ts`/`types.ts`, rendered by
-        `AnnotateMode` in `LiveStage.tsx`) is a decorative shell: it shows a chord chart with
-        chords hidden plus a floating tool palette (pen/square/eraser/color-dot icons), but
-        none of those icons have click handlers, there's no `<canvas>` or stroke state, and
-        nothing is persisted — "Done"/"Undo" just toggle the mode off. No real drawing exists
-        yet on the chords+lyrics view either.
-      - The Annotate control is only ever rendered when `view === "chords"`
-        (`MusicToolbar.tsx`) — switching to the sheet/attachment view (PDF, image, or
-        MusicXML) removes the Annotate icon entirely, and a chord-less attachment-only song
-        may not even get a toolbar (`hasChords || hasScore` gate in `LiveStage.tsx`). So
-        there is no path to annotate a PDF/image or a rendered `.mxl` score at all.
-      - `Song` (`src/state/types.ts`) has no freeform `notes` field, and `add-edit-song/` has
-        no notes textarea — the only freeform text in the data model today is
-        `SetlistItem.note` (the run-sheet "note for the band," edited in
-        `SlotDetailSheet.tsx`), which is scoped to one song's slot in one setlist, not to the
-        song itself, and is unrelated to chart/attachment display.
-      **To do:** decide on a real annotation model (e.g. per-song freeform notes field, and/or
-      persisted markup strokes keyed by song + chart type), wire actual drawing/writing
-      interactions for chords+lyrics, and extend the same capability to the PDF/image and
-      MusicXML sheet views instead of gating Annotate to `view === "chords"` only.
+- [x] **Annotate / custom notes on a song.** Two real capabilities, not the old
+      decorative shell: freeform typed notes (`Song.notes`, editable from both
+      Add/Edit Song's Notes tab and Live Stage's Annotate screen) and real canvas-drawn
+      strokes (`Song.annotations`, pen/rectangle/eraser via `AnnotateCanvas.tsx`) over
+      whichever chart type is on screen — chords, image, PDF, or MusicXML — not just
+      the chords view the old shell was stuck on. Controls that would reflow a view's
+      content (transpose, capo, chord-chart zoom, lyrics-only, MusicXML instrument
+      visibility, MusicXML's own pinch-zoom) disable once that view has strokes, so
+      marks never silently drift out of alignment. See
+      `docs/superpowers/specs/2026-09-20-song-notes-and-annotations-design.md` for the
+      full design, including its "Future work / TODO" section (color picker,
+      pixel-precision eraser, per-attachment-version stroke layers, per-view transpose
+      lock, and a known dev-only viewport-toggle drift edge case — all deliberately
+      deferred, not gaps in this pass).
 
 ## Nice-to-have — R&D / spike candidates
 
