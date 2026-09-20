@@ -15,6 +15,7 @@ import { AddSongDrawer } from "./AddSongDrawer";
 import { QuickEditSheet } from "./QuickEditSheet";
 import { InstrumentFilterModal } from "./InstrumentFilterModal";
 import { MusicToolbar } from "./MusicToolbar";
+import { AnnotateScreen } from "./AnnotateScreen";
 
 const IDLE_MS = 6000;
 const SWIPE_THRESHOLD = 50;
@@ -81,10 +82,6 @@ export function LiveStage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage.songId, stage.ended, stage.drawer]);
-
-  if (stage.drawer === "annotate" && song) {
-    return <AnnotateMode song={song} onDone={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />;
-  }
 
   if (stage.ended && setlist) {
     const path = setlistSongIds.map((id) => state.songs.find((s) => s.id === id)?.defaultKey).join(" → ");
@@ -175,6 +172,25 @@ export function LiveStage() {
   const availableKinds = CATEGORY_PRIORITY.filter((k) => song.attachments[k]);
   const activeBucket = activeKind ? song.attachments[activeKind] : undefined;
   const activeVersion = activeBucket ? activeBucket.versions.find((v) => v.id === activeVersionId) ?? selectedVersion(activeBucket) : undefined;
+
+  const chordsAnnotated = Boolean(song.annotations.chords?.length);
+  const musicxmlAnnotated = Boolean(song.annotations.musicxml?.length);
+  const transposeLocked = chordsAnnotated || musicxmlAnnotated;
+
+  if (stage.drawer === "annotate") {
+    return (
+      <AnnotateScreen
+        song={song}
+        view={stage.view}
+        activeKind={activeKind}
+        activeVersion={activeVersion}
+        semitones={semitones}
+        hiddenParts={hiddenParts}
+        fontScale={stage.zoom / 100}
+        onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })}
+      />
+    );
+  }
 
   const goToSongOffset = (delta: 1 | -1) => {
     if (!setlist) return;
@@ -359,7 +375,13 @@ export function LiveStage() {
                 style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
               />
             ) : activeKind === "musicxml" ? (
-              <MxlScore src={activeVersion.dataUrl} transpose={semitones} hiddenParts={hiddenParts} onInstrumentsChange={setScoreInstruments} />
+              <MxlScore
+                src={activeVersion.dataUrl}
+                transpose={semitones}
+                hiddenParts={hiddenParts}
+                onInstrumentsChange={setScoreInstruments}
+                disableZoom={musicxmlAnnotated}
+              />
             ) : (
               <PdfPages src={activeVersion.dataUrl} />
             )}
@@ -397,6 +419,9 @@ export function LiveStage() {
           <button className="fab-mini" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "quick-edit" }); }} aria-label="Quick edit">
             <Icon name="edit" size={17} strokeWidth={1.9} />
           </button>
+          <button className="fab-mini" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "annotate" }); }} aria-label="Annotate">
+            <Icon name="annotate" size={17} strokeWidth={1.9} />
+          </button>
         </div>
       )}
 
@@ -407,7 +432,9 @@ export function LiveStage() {
           instruments={scoreInstruments}
           hiddenParts={hiddenParts}
           onToggleInstrument={toggleInstrument}
-          onAnnotate={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "annotate" })}
+          transposeLocked={transposeLocked}
+          chordsLocked={chordsAnnotated}
+          instrumentsLocked={musicxmlAnnotated}
         />
       )}
 
@@ -445,50 +472,3 @@ export function LiveStage() {
   );
 }
 
-function AnnotateMode({ song, onDone }: { song: { chordpro: string }; onDone: () => void }) {
-  return (
-    <div className="screen">
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: "var(--tint)", borderBottom: "1px solid var(--acc)" }}>
-        <button className="hdr-action" onClick={onDone}>
-          Undo
-        </button>
-        <span className="flex-1 text-center muted" style={{ fontSize: 12 }}>
-          Annotating
-        </span>
-        <button className="hdr-action" onClick={onDone}>
-          Done
-        </button>
-      </div>
-      <div className="flex-1" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 11, fontSize: 13, lineHeight: 1.35 }}>
-        <ChordChart chordpro={song.chordpro} hideChords />
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          top: 64,
-          right: 10,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          padding: "8px 6px",
-          borderRadius: 14,
-          background: "var(--surface)",
-          border: "1px solid var(--line)",
-          alignItems: "center",
-        }}
-      >
-        <span style={{ width: 18, height: 18, borderRadius: 99, background: "var(--acc)", border: "2px solid var(--surface)" }} />
-        <span style={{ width: 20, height: 1, background: "var(--line)" }} />
-        <span style={{ color: "var(--acc)", display: "flex" }}>
-          <Icon name="edit" size={15} strokeWidth={1.9} />
-        </span>
-        <span className="muted" style={{ display: "flex" }}>
-          <Icon name="square" size={15} strokeWidth={1.9} />
-        </span>
-        <span className="muted" style={{ display: "flex" }}>
-          <Icon name="eraser" size={15} strokeWidth={1.9} />
-        </span>
-      </div>
-    </div>
-  );
-}
