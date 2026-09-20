@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "../../state/store";
 import { ChordChart } from "../../components/ChordChart";
 import { MxlScore } from "../../components/MxlScore";
@@ -30,11 +30,19 @@ export function AnnotateScreen({
 }) {
   const { dispatch } = useStore();
   const annotationView: AnnotationView = view === "chords" ? "chords" : activeKind ?? "chords";
+  // Matches the exact condition that produces the "Nothing to annotate yet"
+  // fallback in `content` below — there's no real chart to attribute strokes
+  // to, so `done()` must not write to `annotations` at all in this case.
+  const noAnnotationTarget = view === "sheet" && activeKind === undefined;
 
   const [mode, setMode] = useState<"draw" | "notes">("draw");
   const [tool, setTool] = useState<AnnotateTool>("pen");
   const [scrollMode, setScrollMode] = useState(false);
-  const [strokes, setStrokes] = useState<Stroke[]>(song.annotations[annotationView] ?? []);
+  const [strokes, setStrokes] = useState<Stroke[]>(() => song.annotations[annotationView] ?? []);
+  // Captures the exact array reference `strokes` started from, so `done()`
+  // can tell "never drew/erased this session" (still the same reference)
+  // from "drew, then cleared back to []" (a new, different empty array).
+  const initialStrokesRef = useRef(strokes);
   const [history, setHistory] = useState<Stroke[][]>([]);
   const [notesText, setNotesText] = useState(song.notes);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -53,9 +61,19 @@ export function AnnotateScreen({
   };
 
   const done = () => {
+    const notesChanged = notesText !== song.notes;
+    const strokesChanged = strokes !== initialStrokesRef.current;
+    if (!notesChanged && !strokesChanged) {
+      onClose();
+      return;
+    }
     dispatch({
       type: "UPDATE_SONG",
-      song: { ...song, notes: notesText, annotations: { ...song.annotations, [annotationView]: strokes } },
+      song: {
+        ...song,
+        notes: notesText,
+        annotations: noAnnotationTarget ? song.annotations : { ...song.annotations, [annotationView]: strokes },
+      },
     });
     onClose();
   };

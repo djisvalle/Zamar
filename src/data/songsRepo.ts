@@ -32,7 +32,7 @@ function rowToSong(row: SongRow): Song {
     chordpro: row.chordpro,
     chartFormat: row.chartFormat as Song["chartFormat"],
     attachments: JSON.parse(row.attachments_json || "{}") as Attachments,
-    notes: row.notes,
+    notes: row.notes ?? "",
     annotations: JSON.parse(row.annotations_json || "{}") as Song["annotations"],
   };
 }

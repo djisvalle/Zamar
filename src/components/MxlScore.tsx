@@ -170,7 +170,10 @@ export function MxlScore({
    * toolbar can offer per-instrument show/hide without re-parsing anything. */
   onInstrumentsChange?: (instruments: ScoreInstrument[]) => void;
   /** Disables the internal pinch/wheel engraving-zoom gesture entirely —
-   * see Task 3 of the annotations plan for why. */
+   * disabled while this view carries drawn annotation strokes, since OSMD's
+   * zoom is a real re-engrave (`osmd.Zoom` + `updateGraphic()`), not a
+   * camera transform that could be applied after the fact on top of marks
+   * drawn at a fixed scale. */
   disableZoom?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);

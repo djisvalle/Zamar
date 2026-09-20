@@ -1,8 +1,11 @@
 # Zamar — Progress Checklist
 
 Snapshot date: 2026-09-20. Branch: `mockup-to-implementation`.
-Cross-check source: [review-findings.md](review-findings.md) (2026-09-12 senior review) verified
-against the current working tree (uncommitted changes on top of commit `54be3a2`).
+Cross-check source: [review-findings.md](review-findings.md) (2026-09-12 senior review).
+Note: this was originally verified against the working tree as of commit `54be3a2`, but
+substantial work (including the whole song-notes-and-annotations feature) has landed since
+then — treat that verification as stale and re-check against current `main` before relying
+on it.
 
 This app has moved past the original CLAUDE.md description of an in-memory mockup into a
 real Capacitor + SQLite app, with a few pieces still deliberately simulated. See notes on
@@ -50,9 +53,11 @@ working tree on 2026-09-19.
 - [x] **Annotate / custom notes on a song.** Two real capabilities, not the old
       decorative shell: freeform typed notes (`Song.notes`, editable from both
       Add/Edit Song's Notes tab and Live Stage's Annotate screen) and real canvas-drawn
-      strokes (`Song.annotations`, pen/rectangle/eraser via `AnnotateCanvas.tsx`) over
-      whichever chart type is on screen — chords, image, PDF, or MusicXML — not just
-      the chords view the old shell was stuck on. Controls that would reflow a view's
+      strokes (`Song.annotations`, pen/rectangle/eraser via `AnnotateCanvas.tsx`), drawn and
+      reviewed inside the dedicated Annotate screen over whichever chart type was open when
+      it was entered — chords, image, PDF, or MusicXML — not just the chords view the old
+      shell was stuck on, and not a persistent overlay on the normal Live Stage view itself.
+      Controls that would reflow a view's
       content (transpose, capo, chord-chart zoom, lyrics-only, MusicXML instrument
       visibility, MusicXML's own pinch-zoom) disable once that view has strokes, so
       marks never silently drift out of alignment. See
