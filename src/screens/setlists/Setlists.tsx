@@ -51,7 +51,7 @@ export function Setlists() {
           </button>
         </div>
       ) : (
-        <div className="flex-1 hidden-scroll" style={{ padding: "4px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="flex-1 hidden-scroll" style={{ padding: "4px 14px", paddingBottom: 90, display: "flex", flexDirection: "column", gap: 10 }}>
           {list.map((sl, i) => {
             const isActive = state.stage.setlistId === sl.id;
             return (

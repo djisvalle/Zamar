@@ -197,7 +197,7 @@ export function Library() {
           </div>
           <div
             className="flex-1 hidden-scroll"
-            style={{ padding: "0 14px", display: "flex", flexDirection: "column", gap: 6 }}
+            style={{ padding: "0 14px", paddingBottom: selectMode ? 0 : 150, display: "flex", flexDirection: "column", gap: 6 }}
             onClick={() => orderMenuOpen && setOrderMenuOpen(false)}
           >
           {groups.map(([letter, list]) => (
