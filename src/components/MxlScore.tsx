@@ -23,7 +23,7 @@ const COMMIT_DEBOUNCE_MS = 110;
  * useRef + useEffect(..., [ref]) would fire once against a null node and
  * never re-attach once the real element showed up (a ref object's identity
  * never changes, so it can't be an effect dependency that triggers a rerun). */
-function useEngravingZoom(onCommit: (zoom: number) => void) {
+function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean) {
   const [previewScale, setPreviewScale] = useState(1);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   const committedZoom = useRef(1);
@@ -107,7 +107,7 @@ function useEngravingZoom(onCommit: (zoom: number) => void) {
   // `el` (state, set by the callback ref below) rather than a plain ref, so
   // this actually re-runs once the container mounts after the score loads.
   useEffect(() => {
-    if (!el) return;
+    if (!el || disableZoom) return;
     const handler = (e: WheelEvent) => {
       if (!e.ctrlKey && Math.abs(e.deltaY) < 1) return;
       e.preventDefault();
@@ -119,7 +119,7 @@ function useEngravingZoom(onCommit: (zoom: number) => void) {
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [el]);
+  }, [el, disableZoom]);
 
   return { previewScale, el, containerRef: setEl, onPointerDown, onPointerMove, onPointerUp: endPointer, onPointerCancel: endPointer, onDoubleClick: reset, reset };
 }
@@ -141,6 +141,7 @@ export function MxlScore({
   transpose = 0,
   hiddenParts,
   onInstrumentsChange,
+  disableZoom = false,
 }: {
   src: string;
   /** Semitones to transpose the actual notated pitches by — the same
@@ -154,12 +155,15 @@ export function MxlScore({
   /** Called once the score's real instrument list is known, so a parent
    * toolbar can offer per-instrument show/hide without re-parsing anything. */
   onInstrumentsChange?: (instruments: ScoreInstrument[]) => void;
+  /** Disables the internal pinch/wheel engraving-zoom gesture entirely —
+   * see Task 3 of the annotations plan for why. */
+  disableZoom?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [engravingZoom, setEngravingZoom] = useState(1);
-  const ez = useEngravingZoom(setEngravingZoom);
+  const ez = useEngravingZoom(setEngravingZoom, disableZoom);
 
   useEffect(() => {
     let cancelled = false;
@@ -299,11 +303,15 @@ export function MxlScore({
           // in Stage Dark, rather than trying to re-theme the engraving.
           background: "#fff",
         }}
-        onPointerDown={ez.onPointerDown}
-        onPointerMove={ez.onPointerMove}
-        onPointerUp={ez.onPointerUp}
-        onPointerCancel={ez.onPointerCancel}
-        onDoubleClick={ez.onDoubleClick}
+        {...(disableZoom
+          ? {}
+          : {
+              onPointerDown: ez.onPointerDown,
+              onPointerMove: ez.onPointerMove,
+              onPointerUp: ez.onPointerUp,
+              onPointerCancel: ez.onPointerCancel,
+              onDoubleClick: ez.onDoubleClick,
+            })}
       >
         {/* The preview scale is a stand-in for the next real layout, not a
             substitute for it — it stretches the CURRENT (soon-to-be-stale)

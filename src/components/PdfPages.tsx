@@ -10,7 +10,7 @@ const MAX_ZOOM = 4;
  * possible), so magnifying the picture *is* the correct zoom, not a
  * fallback. Plain (non-ctrl) wheel is left alone so it keeps scrolling
  * through pages instead of being hijacked into zooming. */
-function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>) {
+function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom: boolean) {
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -84,7 +84,7 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>) {
   // so preventDefault() inside it throws instead of stopping page scroll.
   useEffect(() => {
     const el = hostRef.current;
-    if (!el) return;
+    if (!el || disableZoom) return;
     const handler = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
@@ -95,7 +95,7 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>) {
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scale]);
+  }, [scale, disableZoom]);
 
   return { scale, translate, onPointerDown, onPointerMove, onPointerUp: endPointer, onPointerCancel: endPointer, onDoubleClick: reset, reset };
 }
@@ -108,10 +108,10 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>) {
  * Capacitor WebView on Android/iOS. This draws only the page content, so it
  * behaves the same in-app as it does in a desktop browser during `npm run
  * dev`. */
-export function PdfPages({ src }: { src: string }) {
+export function PdfPages({ src, disableZoom = false }: { src: string; disableZoom?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const pz = usePanZoom(containerRef);
+  const pz = usePanZoom(containerRef, disableZoom);
   const zoomed = Math.abs(pz.scale - 1) > 0.02;
 
   useEffect(() => {
@@ -217,11 +217,15 @@ export function PdfPages({ src }: { src: string }) {
           transform: `translate(${pz.translate.x}px, ${pz.translate.y}px) scale(${pz.scale})`,
           transformOrigin: "50% 0",
         }}
-        onPointerDown={pz.onPointerDown}
-        onPointerMove={pz.onPointerMove}
-        onPointerUp={pz.onPointerUp}
-        onPointerCancel={pz.onPointerCancel}
-        onDoubleClick={pz.onDoubleClick}
+        {...(disableZoom
+          ? {}
+          : {
+              onPointerDown: pz.onPointerDown,
+              onPointerMove: pz.onPointerMove,
+              onPointerUp: pz.onPointerUp,
+              onPointerCancel: pz.onPointerCancel,
+              onDoubleClick: pz.onDoubleClick,
+            })}
       />
       {status === "ready" && zoomed && (
         <button className="chip" onClick={pz.reset} style={{ display: "block", margin: "8px auto 0" }}>
