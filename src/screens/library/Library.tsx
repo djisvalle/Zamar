@@ -74,6 +74,7 @@ export function Library() {
     <div className="screen">
       <Header
         title={selectMode ? `${selected.size} selected` : "Library"}
+        large={!selectMode}
         onBack={nav.pop}
         right={
           selectMode ? (

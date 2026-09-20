@@ -31,7 +31,7 @@ export function Setlists() {
 
   return (
     <div className="screen">
-      <Header title="Setlists" onBack={nav.pop} right={<span className="hdr-action" style={{ display: "flex" }}><Icon name="more" size={16} /></span>} />
+      <Header title="Setlists" large onBack={nav.pop} right={<span className="hdr-action" style={{ display: "flex" }}><Icon name="more" size={16} /></span>} />
       <div style={{ padding: "2px 14px 8px", display: "flex", gap: 6 }}>
         {(["upcoming", "past", "template"] as Tab[]).map((t) => (
           <button key={t} className={"chip" + (tab === t ? " active" : "")} onClick={() => setTab(t)}>

@@ -13,7 +13,7 @@ export function Settings() {
 
   return (
     <div className="screen">
-      <Header title="Settings" onBack={nav.pop} />
+      <Header title="Settings" large onBack={nav.pop} />
       <div className="flex-1 hidden-scroll" style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
         <SectionLabel>Appearance</SectionLabel>
         <button className="list-row" onClick={() => nav.push("appearance")}>

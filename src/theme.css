@@ -241,6 +241,25 @@ button {
   opacity: 0.4;
 }
 
+/* ---- iOS-style large title (root screens) ---- */
+.hdr-large-wrap {
+  flex: none;
+  background: var(--bg);
+}
+.hdr-large-wrap.tinted {
+  background: var(--tint);
+}
+.hdr-large-wrap .hdr {
+  background: none;
+  padding-bottom: 0;
+}
+.hdr-large-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 30px;
+  padding: 2px 14px 10px;
+}
+
 .live-badge {
   position: absolute;
   top: 50%;
