@@ -119,8 +119,6 @@ Stated up front so nobody mistakes this for a functional build:
   `attachment` slot (not independent sheet-music-and-static-file views), distinguished
   only by its `role` label; that's a deliberate mockup-scale simplification, not a
   limitation of the source spec.
-- **No drag-and-drop reordering** in the setlist run sheet — the source's "lifted slot"
-  drag visual wasn't implemented; reordering isn't available.
 - **No persistence or sync** — by design; every reload reseeds from mock data.
 - **The Industry blueprint/spec-sheet chrome was not built** — this mockup is the app
   the spec sheet describes, not a copy of the spec-sheet document itself.
@@ -128,10 +126,16 @@ Stated up front so nobody mistakes this for a functional build:
   scoped ("dark chart on stage, light everywhere else"); this mockup's Appearance toggle
   is simpler — one theme for the whole device frame. Noted as a deliberate
   simplification, not an oversight.
-- **A handful of the source's ~60 documented micro-states weren't wired**: the
-  ChordPro-parse-error banner, the crash-restore onboarding variant, and the imported
-  chart merge-strategy screen (Replace/Append/Review). The states covering the doc's
-  stated priorities (Live Stage, transpose/capo, Setlist & Song CRUD) are all present.
+- **One of the source's ~60 documented micro-states still isn't wired**: the
+  crash-restore onboarding variant. Everything else the doc lists — including the
+  ChordPro-parse-error banner (a bracket/brace balance check surfaced live in
+  `add-edit-song/`'s editor, see `findChordProIssues` in `src/utils/chordpro.ts`), the
+  imported chart merge-strategy screen (Replace/Append/Review, in `import/`'s review
+  step whenever a chords-conversion target already has a non-empty chart), and setlist
+  run-sheet drag-and-drop reordering (native HTML5 drag events on the grip handle in
+  `setlists/SetlistDetail.tsx`, dispatching a `REORDER_ITEM` action) — is now wired. The
+  states covering the doc's stated priorities (Live Stage, transpose/capo, Setlist &
+  Song CRUD) are all present.
 
 ## Gotchas
 

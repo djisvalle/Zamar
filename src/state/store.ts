@@ -87,6 +87,7 @@ export type Action =
   | { type: "UPDATE_ITEM"; setlistId: string; itemId: string; patch: Partial<SetlistItem> }
   | { type: "DUPLICATE_ITEM"; setlistId: string; itemId: string }
   | { type: "MOVE_ITEM"; setlistId: string; itemId: string; toSectionId: string }
+  | { type: "REORDER_ITEM"; setlistId: string; sectionId: string; fromIndex: number; toIndex: number }
   | { type: "STAGE_LOAD"; songId: string; setlistId?: string | null; setlistIndex?: number }
   | { type: "STAGE_SET_VIEW"; view: StageState["view"] }
   | { type: "STAGE_SET_KEY"; key: string }
@@ -251,6 +252,26 @@ export function reducer(state: AppState, action: Action): AppState {
           return {
             ...sl,
             sections: withoutItem.map((sec) => (sec.id === action.toSectionId ? { ...sec, items: [...sec.items, moved!] } : sec)),
+          };
+        }),
+      };
+    }
+    case "REORDER_ITEM": {
+      return {
+        ...state,
+        setlists: state.setlists.map((sl) => {
+          if (sl.id !== action.setlistId) return sl;
+          return {
+            ...sl,
+            sections: sl.sections.map((sec) => {
+              if (sec.id !== action.sectionId || action.fromIndex === action.toIndex) return sec;
+              const items = [...sec.items];
+              const [moved] = items.splice(action.fromIndex, 1);
+              if (!moved) return sec;
+              const insertAt = Math.max(0, Math.min(action.toIndex, items.length));
+              items.splice(insertAt, 0, moved);
+              return { ...sec, items };
+            }),
           };
         }),
       };
