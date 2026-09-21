@@ -134,7 +134,7 @@ export function LiveStage() {
               : "Pick a song from your library to get started."}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 7, width: "100%", marginTop: 4 }}>
-            <button className="btn btn-primary" onClick={() => nav.switchTab("library")}>
+            <button className="btn btn-primary" onClick={() => nav.push("library")}>
               Browse library
             </button>
             {state.setlists.find((sl) => sl.id === "sunday") && (
