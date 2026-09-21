@@ -139,15 +139,10 @@ export function LiveStage() {
                 Start Sunday AM — Aug 23
               </button>
             )}
+            <button className="btn" onClick={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" })}>
+              Add a song to stage
+            </button>
           </div>
-        </div>
-        <div className="fab-stack">
-          <button className="fab" onClick={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" })} aria-label="Add song to stage">
-            <Icon name="plus" size={24} strokeWidth={2} />
-          </button>
-          <button className="fab-mini" style={{ opacity: 0.4 }} disabled aria-label="Quick edit">
-            <Icon name="edit" size={17} strokeWidth={1.9} />
-          </button>
         </div>
         {stage.drawer === "add-song" && (
           <AddSongDrawer onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
@@ -387,20 +382,6 @@ export function LiveStage() {
         )}
       </div>
 
-      {!stage.chromeHidden && !stage.toolbarExpanded && (
-        <div className="fab-stack">
-          <button className="fab" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" }); }} aria-label="Add song to stage">
-            <Icon name="plus" size={24} strokeWidth={2} />
-          </button>
-          <button className="fab-mini" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "quick-edit" }); }} aria-label="Quick edit">
-            <Icon name="edit" size={17} strokeWidth={1.9} />
-          </button>
-          <button className="fab-mini" onClick={(e) => { e.stopPropagation(); dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "annotate" }); }} aria-label="Annotate">
-            <Icon name="annotate" size={17} strokeWidth={1.9} />
-          </button>
-        </div>
-      )}
-
       {!stage.chromeHidden && (hasChords || hasScore) && (
         <MusicToolbar
           view={stage.view}
@@ -411,6 +392,9 @@ export function LiveStage() {
           transposeLocked={transposeLocked}
           chordsLocked={chordsAnnotated}
           instrumentsLocked={musicxmlAnnotated}
+          onAddSong={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" })}
+          onQuickEdit={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "quick-edit" })}
+          onAnnotate={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "annotate" })}
         />
       )}
 

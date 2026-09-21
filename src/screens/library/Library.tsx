@@ -22,6 +22,7 @@ export function Library() {
   const [sheetFor, setSheetFor] = useState<Song | null>(null);
   const [keySheetFor, setKeySheetFor] = useState<Song | null>(null);
   const [importSheetOpen, setImportSheetOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [existingPickerOpen, setExistingPickerOpen] = useState(false);
   const [existingQuery, setExistingQuery] = useState("");
   const [attachMethodFor, setAttachMethodFor] = useState<Song | null>(null);
@@ -81,9 +82,14 @@ export function Library() {
               Cancel
             </button>
           ) : (
-            <button className="hdr-action" onClick={() => setSelectMode(true)} disabled={state.songs.length === 0}>
-              Select
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button className="hdr-action" onClick={() => setSelectMode(true)} disabled={state.songs.length === 0}>
+                Select
+              </button>
+              <button className="hdr-btn" onClick={() => setAddMenuOpen(true)} aria-label="Add or import a song">
+                <Icon name="plus" size={20} strokeWidth={2.2} />
+              </button>
+            </div>
           )
         }
       />
@@ -272,17 +278,6 @@ export function Library() {
         </>
       )}
 
-      {!selectMode && (
-        <div className="fab-stack" style={{ bottom: 18 }}>
-          <button className="fab" onClick={() => nav.push("add-edit-song")} aria-label="Add a song">
-            <Icon name="plus" size={24} strokeWidth={2} />
-          </button>
-          <button className="fab-mini" onClick={() => setImportSheetOpen(true)} aria-label="Import a chart">
-            <Icon name="import" size={18} strokeWidth={1.9} />
-          </button>
-        </div>
-      )}
-
       {selectMode && (
         <div style={{ background: "var(--surface)", borderTop: "1px solid var(--line)", padding: "11px 14px", display: "flex", justifyContent: "space-between", fontSize: 12 }}>
           <button className="accent-deep" style={{ background: "none", border: "none", fontWeight: 600 }} disabled={selected.size === 0}>
@@ -364,6 +359,30 @@ export function Library() {
             }}
           >
             <span>Delete song</span>
+          </button>
+        </Sheet>
+      )}
+
+      {addMenuOpen && (
+        <Sheet onClose={() => setAddMenuOpen(false)}>
+          <div className="sheet-title">Add to Library</div>
+          <button
+            className="sheet-row"
+            onClick={() => {
+              setAddMenuOpen(false);
+              nav.push("add-edit-song");
+            }}
+          >
+            <span>New song</span>
+          </button>
+          <button
+            className="sheet-row"
+            onClick={() => {
+              setAddMenuOpen(false);
+              setImportSheetOpen(true);
+            }}
+          >
+            <span>Import a chart</span>
           </button>
         </Sheet>
       )}

@@ -13,6 +13,9 @@ export function MusicToolbar({
   transposeLocked,
   chordsLocked,
   instrumentsLocked,
+  onAddSong,
+  onQuickEdit,
+  onAnnotate,
 }: {
   view: ChartView;
   hasChords: boolean;
@@ -29,6 +32,9 @@ export function MusicToolbar({
   /** Disables the instrument show/hide chips — locked once the "musicxml"
    * annotation layer has strokes. */
   instrumentsLocked: boolean;
+  onAddSong: () => void;
+  onQuickEdit: () => void;
+  onAnnotate: () => void;
 }) {
   const { state, dispatch } = useStore();
   const { stage } = state;
@@ -54,6 +60,12 @@ export function MusicToolbar({
       }}
       onClick={(e) => e.stopPropagation()}
     >
+      <div style={{ display: "flex", borderBottom: "1px solid var(--line)" }}>
+        <ToolbarIcon icon="plus" label="Add song" onClick={onAddSong} />
+        <ToolbarIcon icon="edit" label="Quick edit" onClick={onQuickEdit} />
+        <ToolbarIcon icon="annotate" label="Annotate" onClick={onAnnotate} />
+      </div>
+
       {showSecondRow && (
         <button
           onClick={() => dispatch({ type: "STAGE_TOGGLE_TOOLBAR" })}

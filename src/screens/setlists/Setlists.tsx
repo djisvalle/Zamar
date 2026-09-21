@@ -48,7 +48,18 @@ export function Setlists() {
 
   return (
     <div className="screen">
-      <Header title="Setlists" large right={<span className="hdr-action" style={{ display: "flex" }}><Icon name="more" size={16} /></span>} />
+      <Header
+        title="Setlists"
+        large
+        right={
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button className="hdr-btn" onClick={openCreateDialog} aria-label="New setlist">
+              <Icon name="plus" size={20} strokeWidth={2.2} />
+            </button>
+            <span className="hdr-action" style={{ display: "flex" }}><Icon name="more" size={16} /></span>
+          </div>
+        }
+      />
       <div style={{ padding: "2px 14px 8px", display: "flex", gap: 6 }}>
         {(["upcoming", "past", "template"] as Tab[]).map((t) => (
           <button key={t} className={"chip" + (tab === t ? " active" : "")} onClick={() => setTab(t)}>
@@ -139,10 +150,6 @@ export function Setlists() {
           })}
         </div>
       )}
-
-      <button className="fab" style={{ position: "absolute", right: 14, bottom: 18 }} onClick={openCreateDialog} aria-label="New setlist">
-        <Icon name="plus" size={24} strokeWidth={2} />
-      </button>
 
       {creating && (
         <Dialog>
