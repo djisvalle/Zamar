@@ -126,7 +126,7 @@ export function Setlists() {
                       const ids = sl.sections.flatMap((sec) => sec.items.filter((it) => it.kind === "song").map((it) => it.songId!));
                       if (ids.length) {
                         dispatch({ type: "STAGE_LOAD", songId: ids[0], setlistId: sl.id, setlistIndex: 0 });
-                        nav.reset("live-stage");
+                        nav.resetTab("live-stage");
                       }
                     }}
                   >

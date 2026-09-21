@@ -23,8 +23,6 @@ const VIEWPORT_VARS = {
 function ScreenHost() {
   const nav = useNavigator();
   switch (nav.top.screen) {
-    case "splash":
-      return <Splash />;
     case "live-stage":
       return <LiveStage />;
     case "library":
@@ -60,6 +58,7 @@ function ScreenHost() {
 
 export default function App() {
   const { state, dispatch } = useStore();
+  const nav = useNavigator();
   const vp = VIEWPORT_VARS[state.viewport];
 
   if (Capacitor.isNativePlatform()) {
@@ -70,7 +69,7 @@ export default function App() {
         style={{ "--status-h": vp.statusH } as React.CSSProperties}
       >
         <StatusBar />
-        <ScreenHost />
+        {nav.booted ? <ScreenHost /> : <Splash />}
       </div>
     );
   }
@@ -129,7 +128,7 @@ export default function App() {
           }
         >
           <StatusBar />
-          <ScreenHost />
+          {nav.booted ? <ScreenHost /> : <Splash />}
           <DeviceNotch viewport={state.viewport} />
         </div>
       </div>

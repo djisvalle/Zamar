@@ -62,7 +62,7 @@ export function Library() {
 
   const openSong = (id: string) => {
     dispatch({ type: "STAGE_LOAD", songId: id });
-    nav.reset("live-stage");
+    nav.resetTab("live-stage");
   };
 
   const exitSelectMode = () => {

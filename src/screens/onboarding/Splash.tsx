@@ -6,7 +6,7 @@ export function Splash() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      nav.replace("live-stage");
+      nav.finishBoot();
     }, 650);
     return () => clearTimeout(t);
   }, []);

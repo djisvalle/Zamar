@@ -42,7 +42,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const startSong = () => {
     if (songEntries.length === 0) return;
     dispatch({ type: "STAGE_LOAD", songId: songEntries[0].song!.id, setlistId: setlist.id, setlistIndex: 0 });
-    nav.reset("live-stage");
+    nav.resetTab("live-stage");
   };
 
   let songSlotIndex = -1;
