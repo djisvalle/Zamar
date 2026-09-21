@@ -17,6 +17,7 @@ export type IconName =
   | "settings"
   | "note"
   | "grip"
+  | "home"
   | "play"
   | "stop"
   | "eraser"
@@ -157,6 +158,12 @@ const ICON_PATHS: Record<IconName, JSX.Element> = {
       <circle cx="9" cy="19" r="1.5" />
       <circle cx="15" cy="19" r="1.5" />
     </g>
+  ),
+  home: (
+    <>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />
+    </>
   ),
   play: <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />,

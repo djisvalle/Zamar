@@ -9,7 +9,6 @@ import { Sheet } from "../../components/Overlays";
 import { keySemitoneShift } from "../../utils/chordpro";
 import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
 import type { AttachmentKind } from "../../state/types";
-import { MenuDrawer } from "./MenuDrawer";
 import { AddSongDrawer } from "./AddSongDrawer";
 import { QuickEditSheet } from "./QuickEditSheet";
 import { InstrumentFilterModal } from "./InstrumentFilterModal";
@@ -23,7 +22,6 @@ export function LiveStage() {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
   const { stage } = state;
-  const [menuOpen, setMenuOpen] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
   const [versionPickerOpen, setVersionPickerOpen] = useState(false);
   const [scoreInstruments, setScoreInstruments] = useState<ScoreInstrument[]>([]);
@@ -87,9 +85,6 @@ export function LiveStage() {
     return (
       <div className="screen" onClick={resetIdle}>
         <div className="hdr tinted">
-          <button className="hdr-btn" onClick={() => setMenuOpen(true)}>
-            <Icon name="menu" size={20} strokeWidth={2} />
-          </button>
           <span className="live-badge active">
             <span className="dot" />
             LIVE
@@ -109,7 +104,6 @@ export function LiveStage() {
             </button>
           </div>
         </div>
-        {menuOpen && <MenuDrawer onClose={() => setMenuOpen(false)} />}
       </div>
     );
   }
@@ -118,9 +112,6 @@ export function LiveStage() {
     return (
       <div className="screen">
         <div className="hdr">
-          <button className="hdr-btn" onClick={() => setMenuOpen(true)}>
-            <Icon name="menu" size={20} strokeWidth={2} />
-          </button>
           <span className="live-badge">
             <span className="dot" />
             LIVE
@@ -134,7 +125,7 @@ export function LiveStage() {
               : "Pick a song from your library to get started."}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 7, width: "100%", marginTop: 4 }}>
-            <button className="btn btn-primary" onClick={() => nav.push("library")}>
+            <button className="btn btn-primary" onClick={() => nav.switchTab("library")}>
               Browse library
             </button>
             {state.setlists.find((sl) => sl.id === "sunday") && (
@@ -158,7 +149,6 @@ export function LiveStage() {
             <Icon name="edit" size={17} strokeWidth={1.9} />
           </button>
         </div>
-        {menuOpen && <MenuDrawer onClose={() => setMenuOpen(false)} />}
         {stage.drawer === "add-song" && (
           <AddSongDrawer onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
         )}
@@ -222,9 +212,6 @@ export function LiveStage() {
   return (
     <div className="screen" onClick={onScreenClick}>
       <div className={"hdr" + (setlist ? " tinted" : "")}>
-        <button className="hdr-btn" onClick={() => setMenuOpen(true)}>
-          <Icon name="menu" size={20} strokeWidth={2} />
-        </button>
         <span className={"live-badge" + (setlist ? " active" : "")} onClick={() => setlist && resetIdle()}>
           <span className="dot" />
           LIVE
@@ -427,7 +414,6 @@ export function LiveStage() {
         />
       )}
 
-      {menuOpen && <MenuDrawer onClose={() => setMenuOpen(false)} />}
       {stage.drawer === "add-song" && (
         <AddSongDrawer onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
       )}

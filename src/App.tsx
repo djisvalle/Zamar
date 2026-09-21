@@ -3,6 +3,7 @@ import { useStore } from "./state/store";
 import { useNavigator } from "./navigation/Navigator";
 import { StatusBar } from "./components/StatusBar";
 import { DeviceNotch } from "./components/DeviceNotch";
+import { TabBar } from "./components/TabBar";
 import { Splash } from "./screens/onboarding/Splash";
 import { LiveStage } from "./screens/live-stage/LiveStage";
 import { Library } from "./screens/library/Library";
@@ -70,6 +71,7 @@ export default function App() {
       >
         <StatusBar />
         {nav.booted ? <ScreenHost /> : <Splash />}
+        <TabBar />
       </div>
     );
   }
@@ -129,6 +131,7 @@ export default function App() {
         >
           <StatusBar />
           {nav.booted ? <ScreenHost /> : <Splash />}
+          <TabBar />
           <DeviceNotch viewport={state.viewport} />
         </div>
       </div>

@@ -75,7 +75,6 @@ export function Library() {
       <Header
         title={selectMode ? `${selected.size} selected` : "Library"}
         large={!selectMode}
-        onBack={nav.pop}
         right={
           selectMode ? (
             <button className="hdr-action" onClick={exitSelectMode}>

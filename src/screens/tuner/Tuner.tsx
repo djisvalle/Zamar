@@ -98,7 +98,7 @@ export function Tuner() {
   if (!permissionResolved) {
     return (
       <div className="screen">
-        <Header title="Tuner" tinted right={<button className="hdr-action" onClick={nav.pop}>Close</button>} onBack={nav.pop} />
+        <Header title="Tuner" tinted />
         <div style={{ flex: 1 }} />
         <MicPermissionSheet onDone={() => setPermissionResolved(true)} />
       </div>
@@ -108,7 +108,7 @@ export function Tuner() {
   if (!micOn) {
     return (
       <div className="screen">
-        <Header title="Tuner" tinted right={<button className="hdr-action" onClick={nav.pop}>Close</button>} onBack={nav.pop} />
+        <Header title="Tuner" tinted />
         <div className="empty">
           <div className="empty-title">Microphone is off</div>
           <div className="empty-body">Zamar needs the mic to hear a note. Nothing is recorded or sent anywhere.</div>
@@ -144,7 +144,7 @@ export function Tuner() {
 
   return (
     <div className="screen">
-      <Header title="Tuner" tinted right={<button className="hdr-action" onClick={nav.pop}>Close</button>} onBack={nav.pop} />
+      <Header title="Tuner" tinted />
 
       <div style={{ padding: "10px 14px 0", display: "flex", flexWrap: "wrap", gap: 6 }}>
         {INSTRUMENTS.map((i) => (

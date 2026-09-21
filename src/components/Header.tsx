@@ -18,13 +18,22 @@ export function Header({
   large?: boolean;
 }) {
   const nav = useNavigator();
+  const showBack = Boolean(onBack) || nav.canPop;
+  const backButton = showBack ? (
+    <button className="hdr-btn" onClick={onBack ?? nav.pop} aria-label="Back">
+      <Icon name="chevron-left" size={20} strokeWidth={2} />
+    </button>
+  ) : (
+    // Reserves the same box the back button would occupy, so tab-root
+    // screens (no back target) don't shift title/action alignment.
+    <div className="hdr-btn" aria-hidden="true" />
+  );
+
   if (large) {
     return (
       <div className={"hdr-large-wrap" + (tinted ? " tinted" : "")}>
         <div className="hdr">
-          <button className="hdr-btn" onClick={onBack ?? nav.pop} aria-label="Back">
-            <Icon name="chevron-left" size={20} strokeWidth={2} />
-          </button>
+          {backButton}
           <div className="flex-1" />
           {right}
         </div>
@@ -34,9 +43,7 @@ export function Header({
   }
   return (
     <div className={"hdr" + (tinted ? " tinted" : "")}>
-      <button className="hdr-btn" onClick={onBack ?? nav.pop} aria-label="Back">
-        <Icon name="chevron-left" size={20} strokeWidth={2} />
-      </button>
+      {backButton}
       <div className="hdr-title">{title}</div>
       {right}
     </div>
