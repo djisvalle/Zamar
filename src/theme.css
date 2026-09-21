@@ -264,36 +264,6 @@ button {
   padding: 2px 14px 10px;
 }
 
-.live-badge {
-  position: absolute;
-  top: 50%;
-  right: 9px;
-  transform: translateY(-50%);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  padding: 5px 9px 5px 7px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--line);
-  color: var(--mut);
-  opacity: 0.65;
-  border: none;
-}
-.live-badge .dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 99px;
-  background: currentColor;
-}
-.live-badge.active {
-  background: var(--live);
-  color: #fff;
-  opacity: 1;
-}
-
 /* ---- buttons ---- */
 .btn {
   display: flex;

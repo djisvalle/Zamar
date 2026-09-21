@@ -111,12 +111,7 @@ export function LiveStage() {
   if (!song) {
     return (
       <div className="screen">
-        <div className="hdr">
-          <span className="live-badge">
-            <span className="dot" />
-            LIVE
-          </span>
-        </div>
+        <div className="hdr" />
         <div className="empty">
           <div className="empty-title">No song on stage</div>
           <div className="empty-body">
@@ -206,12 +201,7 @@ export function LiveStage() {
 
   return (
     <div className="screen" onClick={onScreenClick}>
-      <div className={"hdr" + (setlist ? " tinted" : "")}>
-        <span className={"live-badge" + (setlist ? " active" : "")} onClick={() => setlist && resetIdle()}>
-          <span className="dot" />
-          LIVE
-        </span>
-      </div>
+      <div className={"hdr" + (setlist ? " tinted" : "")} />
 
       {setlist && (
         <div style={{ padding: "8px 14px 0" }}>
