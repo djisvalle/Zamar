@@ -29,15 +29,26 @@ Decisions made during brainstorming (see chat history for the full discussion):
 
 - All six are bundled into one spec and one implementation pass, matching the
   precedent set by the tab-navigation spec.
-- Toolbar declutter: **slim bottom bar + header icons**, not "move the whole toolbar
-  to the top." The key-transpose row (most-used control) stays pinned above the tab
-  bar for one-handed reach while performing; Add-song/Quick-edit/Annotate move into
-  the header as icon buttons; Capo/Lyrics-only/Zoom/instrument-visibility move behind
-  a single "More controls" `Sheet` instead of an inline expand/collapse row.
+- Toolbar declutter: **slim bottom bar + a single consolidated tools sheet**, not
+  "move the whole toolbar to the top." The bottom bar collapses to one row — key-
+  transpose chips (the most latency-sensitive control, kept in the thumb zone for
+  one-handed reach while performing — a worship leader can call an audible key change
+  mid-song) plus one trailing trigger button. That trigger opens a single "More
+  controls" `Sheet` holding everything else Live Stage's toolbar used to spread across
+  a header row and an expandable second row: Add-song/Quick-edit/Annotate as an icon
+  row at the top of the sheet, then Capo/Lyrics-only/Zoom (chord view) or instrument
+  show/hide chips (sheet view) below. None of Add-song/Quick-edit/Annotate are
+  latency-critical — each already opens a drawer/sheet/mode today — so one consistent
+  entry point for all of Live Stage's contextual tools beats splitting them between
+  the header and a separate sheet. The header itself gets no icon buttons; it stays
+  exactly what it already is elsewhere in the app — a strip that tints when a setlist
+  is active — with the `LIVE` badge simply gone (goal 1).
 - Explicitly **not** moving the tab bar to the top — bottom tab bars are the fixed
   iOS (`UITabBar`) convention, and this app's primary target users are iOS/OnSong
   switchers (per `CLAUDE.md`'s "Target platform & users"). The toolbar rework above
-  already resolves the stacking complaint without touching the tab bar.
+  already resolves the stacking complaint (down to one bottom row) without touching
+  the tab bar, and with only one row left, moving it to the top would trade away
+  thumb-reach for a crowding problem that no longer exists.
 - Theme scope narrows to: header + toolbar + tab bar (full Light/Stage-Dark), and the
   chords/lyrics view (full Light/Stage-Dark, since dimming the screen while reading
   lyrics on a dark stage is the actual point of "Stage Dark"). The Sheet Music/PDF/
@@ -62,10 +73,10 @@ Decisions made during brainstorming (see chat history for the full discussion):
 - No `LIVE` badge anywhere in Live Stage's header states.
 - Reaching the end of a setlist by swiping/advancing past the last song is a no-op:
   the last song stays on screen, no separate screen or dialog appears.
-- Live Stage's bottom chrome is a single one-row control surface (key chips) directly
-  above the tab bar, with Add-song/Quick-edit/Annotate reachable from the header and
-  secondary controls (capo/lyrics-only/zoom, instrument visibility) reachable from a
-  "More controls" sheet.
+- Live Stage's bottom chrome is a single one-row control surface (key chips + one
+  tools trigger) directly above the tab bar. Add-song/Quick-edit/Annotate and the
+  secondary controls (capo/lyrics-only/zoom, instrument visibility) are all reachable
+  from that one "More controls" sheet — nothing toolbar-related lives in the header.
 - Live Stage's base background is `#ffffff` in light mode (matching `--surface`), and
   the Sheet Music/PDF/Photo view no longer changes appearance between Light and Stage
   Dark.
@@ -105,29 +116,36 @@ Decisions made during brainstorming (see chat history for the full discussion):
 - Remove `stage.ended` (`types.ts:102`), the `STAGE_REPLAY` action and its reducer
   case, and the `if (stage.ended && setlist)` render branch (`LiveStage.tsx:83-109`)
   entirely.
-- The top `.hdr` band (previously just tint + badge) now also hosts the relocated
-  Add-song/Quick-edit/Annotate icon buttons (see next section) — it stops being
-  almost-empty.
+- The top `.hdr` band keeps exactly the role it already has elsewhere in the app — a
+  strip that tints when a setlist is active — with nothing rendered inside it beyond
+  that (the `LIVE` badge was the only content it ever held, and that's gone per above).
+  It gains no icon buttons; all of Live Stage's contextual actions live in the bottom
+  tools sheet instead (see next section).
 
 ## Toolbar declutter (`MusicToolbar.tsx`, `LiveStage.tsx`)
 
-- **Header icons**: Add-song, Quick-edit, Annotate render as icon buttons in Live
-  Stage's top `.hdr` band, right-aligned, reusing the existing `Icon` glyphs already
-  used inside `MusicToolbar`'s current icon row (`plus`, `edit`, `annotate`). Each
-  keeps its existing handler (`STAGE_OPEN_DRAWER` with `"add-song"`/`"quick-edit"`/
-  `"annotate"`).
 - **Bottom bar** (`MusicToolbar.tsx`) becomes one row: the existing `KeyChips`
-  transpose control, plus a single small trailing control (e.g. a "…"/sliders icon
-  button) that's only rendered when `showSecondRow` is true (same condition as today:
-  `view === "chords" ? hasChords : instruments.length > 1`) — a song with nothing to
-  configure beyond transpose shows no trailing control at all.
-- **"More controls" sheet**: tapping that trailing control opens a `Sheet` (new local
+  transpose control, plus a single trailing trigger button (e.g. a "…"/sliders icon)
+  that opens the tools sheet described below. Unlike today's expand/collapse row, this
+  trigger is **always rendered** whenever the toolbar itself renders (i.e. whenever
+  `hasChords || hasScore`, `LiveStage.tsx:385`) — Add-song/Quick-edit/Annotate need a
+  way in even for a song with nothing else to configure, which `showSecondRow`'s old
+  chords/instruments-only condition didn't account for.
+- **"More controls" sheet**: tapping that trigger opens a `Sheet` (new local
   `moreControlsOpen` state in `LiveStage.tsx`, alongside `partsOpen`/
-  `versionPickerOpen`) containing exactly what today's expanded second row held:
-  - Chord view: `ToolbarStepper` (Capo), Lyrics-only toggle, Zoom −/+ — same
-    `chordsLocked` disabling/messaging as today.
-  - Sheet view: the instrument show/hide chips — same `instrumentsLocked`
-    disabling/messaging as today.
+  `versionPickerOpen`) with two parts:
+  - An icon row at the top — Add-song, Quick-edit, Annotate — reusing the existing
+    `Icon` glyphs from `MusicToolbar`'s current icon row (`plus`, `edit`, `annotate`)
+    and their existing handlers (`STAGE_OPEN_DRAWER` with `"add-song"`/`"quick-edit"`/
+    `"annotate"`), each closing the sheet on tap before the target drawer/mode opens.
+  - Below that, whatever today's expanded second row held, gated by the same
+    `showSecondRow` condition as today (`view === "chords" ? hasChords : instruments.length
+    > 1`) so it's omitted when there's nothing to configure — only the icon row above
+    it is unconditional:
+    - Chord view: `ToolbarStepper` (Capo), Lyrics-only toggle, Zoom −/+ — same
+      `chordsLocked` disabling/messaging as today.
+    - Sheet view: the instrument show/hide chips — same `instrumentsLocked`
+      disabling/messaging as today.
 - `stage.toolbarExpanded` (`types.ts:99`) and the `STAGE_TOGGLE_TOOLBAR` action
   (`store.ts:103,298-299`) are removed; `MusicToolbar.tsx`'s chevron button and
   `LiveStage.tsx`'s `onScreenClick` auto-collapse-on-tap logic (`LiveStage.tsx:202-205`)
@@ -135,10 +153,9 @@ Decisions made during brainstorming (see chat history for the full discussion):
   this app closes (backdrop tap), no bespoke collapse behavior needed.
 - `MusicToolbar` keeps receiving the same props it needs (`view`, `hasChords`,
   `instruments`, `hiddenParts`, `onToggleInstrument`, `transposeLocked`,
-  `chordsLocked`, `instrumentsLocked`) but no longer needs `onAddSong`/`onQuickEdit`/
-  `onAnnotate` (moved to the header) — those three props are dropped from its
-  interface, and the drawer-open dispatches move to wherever the header icons are
-  rendered in `LiveStage.tsx`.
+  `chordsLocked`, `instrumentsLocked`, `onAddSong`, `onQuickEdit`, `onAnnotate`) — the
+  three drawer-open handlers stay as props into `MusicToolbar` (same as today), just
+  wired to the new sheet's icon row instead of a header-level row.
 
 ## Theme scope (`theme.css`, `LiveStage.tsx`)
 
@@ -204,19 +221,20 @@ click-through:
 1. `npm run build` is clean (verifies the `Viewport` type/union changes propagate
    everywhere they're referenced, and that removing `stage.ended`/
    `stage.toolbarExpanded` doesn't leave a dangling reference).
-2. Load a song with no setlist: confirm no `LIVE` badge, header shows Add-
-   song/Quick-edit/Annotate icons, and the bottom bar's trailing "more controls"
-   button only appears when `showSecondRow` would have been true today (chord view
-   with chords present, or sheet view with more than one instrument part).
+2. Load a song with no setlist: confirm no `LIVE` badge, no icons in the header (just
+   the tint when a setlist is active), and the bottom bar's trailing tools trigger is
+   always present whenever the toolbar renders at all.
 3. Start a setlist, advance to the last song, try to advance again (swipe/whatever
    today's forward-advance affordance is): confirm the last song stays on screen with
    no dead-end screen.
-4. Tap the "more controls" trailing icon in chord view: confirm the sheet shows
-   Capo/Lyrics-only/Zoom and matches today's `chordsLocked` disabled/message state
-   when annotations exist.
-5. Switch to Sheet view on a song with an attached score: confirm the same "more
-   controls" sheet shows instrument chips instead, matching `instrumentsLocked`
-   behavior.
+4. Tap the tools trigger: confirm the sheet's top row has working Add-song/Quick-
+   edit/Annotate icons (each closes the sheet and opens its target), and in chord
+   view, below that row, Capo/Lyrics-only/Zoom appear and match today's
+   `chordsLocked` disabled/message state when annotations exist.
+5. Switch to Sheet view on a song with an attached score: confirm the same sheet's
+   icon row is unchanged and the row below it now shows instrument chips instead,
+   matching `instrumentsLocked` behavior. On a song with only one instrument part,
+   confirm the icon row still appears but the instrument-chip row doesn't.
 6. Compare Live Stage's background in Light mode against a sheet-music/PDF preview —
    confirm they're now the same white, and confirm Stage Dark no longer changes the
    Sheet Music/PDF/Photo view's background (only the header/toolbar/tab bar and any
