@@ -23,6 +23,22 @@ navigable app you can actually click through — splash → Live Stage → Libra
 Setlists → Tuner → Settings → Export — using the app's own (friendlier, rounded) visual
 language, not the wireframe annotation system.
 
+## Target platform & users
+
+The app is architected to be **OS-agnostic** — Capacitor + web tech (no
+platform-exclusive UI framework), targeting iOS, Android, and browser-dev as equal
+citizens, with no iOS-only APIs baked into required code paths.
+
+That said, the **initial target users are iOS users currently on OnSong**, looking to
+replace it with the same core job (lyrics, chords, setlists, PDF sheet music) plus
+functionality OnSong lacks or gates behind a paid subscription. Because of that,
+**UI/UX design decisions should default to iOS-centric conventions** (Apple Human
+Interface Guidelines — navigation chrome, gesture handling, sheet/action-sheet
+presentation, typography and touch-target sizing, etc.) as the primary design target,
+while keeping the underlying implementation portable rather than iOS-exclusive. When an
+iOS convention and a cross-platform default genuinely conflict, favor the iOS
+convention for now, but flag the tension rather than silently picking one.
+
 ## Ground rules
 
 - **Do not make assumptions.** Ask when something is uncertain or underspecified rather
