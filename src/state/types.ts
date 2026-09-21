@@ -52,6 +52,12 @@ export interface Song {
    * or more versions (e.g. a Violin PDF and a Viola PDF for the same song).
    * A song can have chords, attachments, both, or neither. */
   attachments: Attachments;
+  /** Which view Live Stage should open this song to — a specific attachment
+   * kind, or `"chords"` for the chords/lyrics view. `undefined` means no
+   * preference has been saved: Live Stage falls back to its automatic guess
+   * (chords if the song has any, else its first available attachment). Set
+   * from Add/Edit Song's "Default on Live Stage" picker. */
+  defaultView?: "chords" | AttachmentKind;
   /** Freeform text notes for this song — reminders, cues, anything worth
    * having on hand regardless of chart type. "" when empty. */
   notes: string;

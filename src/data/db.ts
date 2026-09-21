@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -144,6 +144,15 @@ async function openDb(): Promise<SQLiteDBConnection> {
       // call as the v1->v2 songs change above).
       toVersion: 4,
       statements: ["DROP TABLE IF EXISTS settings;", CREATE_SETTINGS_V4],
+    },
+    {
+      // Additive column — a song can now remember which view (chords, or a
+      // specific attachment kind) Live Stage should open it to by default,
+      // set from Add/Edit Song. NULL means "no preference saved," which is
+      // every song that existed before this column, so no backfill of
+      // existing rows is needed.
+      toVersion: 5,
+      statements: ["ALTER TABLE songs ADD COLUMN defaultView TEXT;"],
     },
   ]);
 
