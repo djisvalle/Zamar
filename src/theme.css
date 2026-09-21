@@ -142,6 +142,10 @@ button {
   border: none;
   border-radius: 0;
 }
+.device--native .hdr,
+.device--native .hdr-large-wrap {
+  padding-top: env(safe-area-inset-top, 0px);
+}
 
 .status-bar {
   flex: none;

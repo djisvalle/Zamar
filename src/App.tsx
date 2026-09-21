@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
+import { StatusBar as CapacitorStatusBar, Style } from "@capacitor/status-bar";
 import { useStore } from "./state/store";
 import { useNavigator } from "./navigation/Navigator";
 import { StatusBar } from "./components/StatusBar";
@@ -62,6 +64,11 @@ export default function App() {
   const nav = useNavigator();
   const vp = VIEWPORT_VARS[state.viewport];
 
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    CapacitorStatusBar.setStyle({ style: state.settings.theme === "dark" ? Style.Light : Style.Dark }).catch(() => {});
+  }, [state.settings.theme]);
+
   if (Capacitor.isNativePlatform()) {
     return (
       <div
@@ -69,7 +76,6 @@ export default function App() {
         data-theme={state.settings.theme}
         style={{ "--status-h": vp.statusH } as React.CSSProperties}
       >
-        <StatusBar />
         {nav.booted ? <ScreenHost /> : <Splash />}
         <TabBar />
       </div>
