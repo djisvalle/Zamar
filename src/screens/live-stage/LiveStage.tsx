@@ -67,7 +67,7 @@ export function LiveStage() {
   const resetIdle = () => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
     if (stage.chromeHidden) dispatch({ type: "STAGE_SET_CHROME_HIDDEN", hidden: false });
-    if (song && !stage.ended && stage.drawer !== "annotate") {
+    if (song && stage.drawer !== "annotate") {
       idleTimer.current = setTimeout(() => dispatch({ type: "STAGE_SET_CHROME_HIDDEN", hidden: true }), IDLE_MS);
     }
   };
@@ -78,35 +78,7 @@ export function LiveStage() {
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage.songId, stage.ended, stage.drawer]);
-
-  if (stage.ended && setlist) {
-    const path = setlistSongIds.map((id) => state.songs.find((s) => s.id === id)?.defaultKey).join(" → ");
-    return (
-      <div className="screen" onClick={resetIdle}>
-        <div className="hdr tinted">
-          <span className="live-badge active">
-            <span className="dot" />
-            LIVE
-          </span>
-        </div>
-        <div className="empty">
-          <div className="empty-title">Set complete</div>
-          <div className="empty-body">
-            {path} · {setlistSongIds.length} songs
-          </div>
-          <div className="btn-row" style={{ flexDirection: "column" }}>
-            <button className="btn btn-primary" onClick={() => nav.push("setlist-detail", { setlistId: setlist.id })}>
-              Back to setlist
-            </button>
-            <button className="btn" onClick={() => dispatch({ type: "STAGE_REPLAY" })}>
-              Replay from song 1
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  }, [stage.songId, stage.drawer]);
 
   if (!song) {
     return (

@@ -47,7 +47,6 @@ export function makeEmptyStage(textScale: number): StageState {
     toolbarExpanded: false,
     drawer: null,
     chromeHidden: false,
-    ended: false,
     lyricsOnly: false,
     zoom: textScale,
   };
@@ -106,7 +105,6 @@ export type Action =
   | { type: "STAGE_SET_ZOOM"; zoom: number }
   | { type: "STAGE_SET_CHROME_HIDDEN"; hidden: boolean }
   | { type: "STAGE_ADVANCE" }
-  | { type: "STAGE_REPLAY" }
   | { type: "STAGE_EXIT" };
 
 function flattenSongIds(setlist: Setlist): string[] {
@@ -310,9 +308,7 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!setlist) return state;
       const ids = flattenSongIds(setlist);
       const nextIndex = state.stage.setlistIndex + 1;
-      if (nextIndex >= ids.length) {
-        return { ...state, stage: { ...state.stage, ended: true, chromeHidden: false } };
-      }
+      if (nextIndex >= ids.length) return state;
       const nextId = ids[nextIndex];
       const song = state.songs.find((s) => s.id === nextId);
       let dispKey = song?.defaultKey ?? null;
@@ -322,17 +318,7 @@ export function reducer(state: AppState, action: Action): AppState {
       }
       return {
         ...state,
-        stage: { ...state.stage, songId: nextId, setlistIndex: nextIndex, dispKey, ended: false, view: defaultView(song) },
-      };
-    }
-    case "STAGE_REPLAY": {
-      const setlist = state.setlists.find((sl) => sl.id === state.stage.setlistId);
-      if (!setlist) return state;
-      const ids = flattenSongIds(setlist);
-      const song = state.songs.find((s) => s.id === ids[0]);
-      return {
-        ...state,
-        stage: { ...state.stage, songId: ids[0], setlistIndex: 0, dispKey: song?.defaultKey ?? null, ended: false, view: defaultView(song) },
+        stage: { ...state.stage, songId: nextId, setlistIndex: nextIndex, dispKey, view: defaultView(song) },
       };
     }
     case "STAGE_EXIT":

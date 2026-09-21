@@ -105,7 +105,6 @@ export interface StageState {
   toolbarExpanded: boolean;
   drawer: Drawer;
   chromeHidden: boolean;
-  ended: boolean;
   lyricsOnly: boolean;
   zoom: number;
 }
