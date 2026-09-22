@@ -71,12 +71,12 @@ export function initialState(): AppState {
       staveSpacing: "default",
     },
     stage: makeEmptyStage(DEFAULT_TEXT_SCALE),
-    viewport: "phone",
+    viewport: "ipadAir13",
   };
 }
 
 export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
-  return { songs, setlists, settings, stage: makeEmptyStage(settings.textScale, songs), viewport: "phone" };
+  return { songs, setlists, settings, stage: makeEmptyStage(settings.textScale, songs), viewport: "ipadAir13" };
 }
 
 export type Action =
