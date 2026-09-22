@@ -463,9 +463,10 @@ button {
   color: var(--fg);
   border: 1px solid var(--line);
 }
-/* Tablet has room for all 12 without scrolling — fill the row exactly
-   instead of the phone's fixed-width scrolling buttons. */
-[data-viewport="tablet"] .key-row-btn {
+/* Both iPad Air sizes have room for all 12 without scrolling — fill the
+   row exactly instead of the phone's fixed-width scrolling buttons. */
+[data-viewport="ipadAir11"] .key-row-btn,
+[data-viewport="ipadAir13"] .key-row-btn {
   flex: 1;
   width: auto;
   min-width: 0;

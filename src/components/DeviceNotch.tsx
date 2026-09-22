@@ -5,7 +5,7 @@ import type { Viewport } from "../state/types";
  * in the status bar; the tablet frame ("iPad A16") gets the plain circular
  * front-camera cutout iPads use instead — never a notch or island. */
 export function DeviceNotch({ viewport }: { viewport: Viewport }) {
-  if (viewport === "tablet") {
+  if (viewport === "ipadAir11" || viewport === "ipadAir13") {
     return <span className="camera-dot" aria-hidden="true" />;
   }
   return <span className="dynamic-island" aria-hidden="true" />;

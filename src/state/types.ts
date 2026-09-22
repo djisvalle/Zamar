@@ -109,7 +109,7 @@ export interface StageState {
 }
 
 export type ThemeMode = "light" | "dark";
-export type Viewport = "phone" | "tablet";
+export type Viewport = "phone" | "ipadAir11" | "ipadAir13";
 
 export interface Settings {
   theme: ThemeMode;

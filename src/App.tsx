@@ -20,7 +20,8 @@ import { Export } from "./screens/export/Export";
 
 const VIEWPORT_VARS = {
   phone: { fw: "402px", fh: "874px", statusH: "48px" },
-  tablet: { fw: "512.5px", fh: "737.5px", statusH: "24px" },
+  ipadAir11: { fw: "820px", fh: "1180px", statusH: "24px" },
+  ipadAir13: { fw: "1024px", fh: "1366px", statusH: "24px" },
 };
 
 function ScreenHost() {
@@ -113,10 +114,16 @@ export default function App() {
               Phone
             </button>
             <button
-              className={"seg-btn" + (state.viewport === "tablet" ? " active" : "")}
-              onClick={() => dispatch({ type: "SET_VIEWPORT", viewport: "tablet" })}
+              className={"seg-btn" + (state.viewport === "ipadAir11" ? " active" : "")}
+              onClick={() => dispatch({ type: "SET_VIEWPORT", viewport: "ipadAir11" })}
             >
-              Tablet
+              iPad Air 11″
+            </button>
+            <button
+              className={"seg-btn" + (state.viewport === "ipadAir13" ? " active" : "")}
+              onClick={() => dispatch({ type: "SET_VIEWPORT", viewport: "ipadAir13" })}
+            >
+              iPad Air 13″
             </button>
           </div>
         </div>
