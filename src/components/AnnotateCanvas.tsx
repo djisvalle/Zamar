@@ -582,7 +582,7 @@ export function ShapeGlyph({ shapeId, color, size, width }: { shapeId: ShapeId; 
   const w = width ?? size * SHAPE_ASPECT;
   const common = { stroke: color, strokeWidth: 2.5, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   return (
-    <svg width={w} height={size} viewBox="0 0 60 22" style={{ display: "block" }}>
+    <svg width={w} height={size} viewBox="0 0 60 22" preserveAspectRatio="none" style={{ display: "block" }}>
       {shapeId === "slur" && <path d="M2 18 Q30 2 58 18" {...common} />}
       {shapeId === "hairpin-cresc" && <path d="M58 2 L2 11 L58 20" {...common} />}
       {shapeId === "hairpin-dim" && <path d="M2 2 L58 11 L2 20" {...common} />}
