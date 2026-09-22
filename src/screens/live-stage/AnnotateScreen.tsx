@@ -164,6 +164,15 @@ export function AnnotateScreen({
   // also opening its edit sheet — see onEditRequest/onSelectRequest below.
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Selection (and its resize/rotate handles) only makes sense while the
+  // Select tool is active — switching to any other tool drops it, so a
+  // shape doesn't stay visibly "selected" under Pen/Eraser/etc. with no way
+  // to reach it.
+  const handleSelectTool = (t: AnnotateTool) => {
+    setTool(t);
+    if (t !== "select") setSelectedId(null);
+  };
+
   const commit = (next: AnnotationObject[]) => {
     setHistory((h) => ({ past: [...h.past, annotations], future: [] }));
     setAnnotations(next);
@@ -343,7 +352,7 @@ export function AnnotateScreen({
       {mode === "draw" && (
         <AnnotateDock
           tool={tool}
-          onSelectTool={setTool}
+          onSelectTool={handleSelectTool}
           scrollMode={scrollMode}
           onToggleScroll={() => setScrollMode((s) => !s)}
           penStyle={penStyle}

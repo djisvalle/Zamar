@@ -142,8 +142,10 @@ export function AnnotateCanvas({
    * Distinct from `onEditRequest`: tapping an already-selected shape (or any
    * non-shape mark) still goes straight through `onEditRequest` as before.
    * The caller is expected to keep its own selected-id state in sync with
-   * both this and `onEditRequest` (see AnnotateScreen). */
-  onSelectRequest?: (id: string) => void;
+   * both this and `onEditRequest` (see AnnotateScreen). Also fires with
+   * `null` when the `select` tool taps empty canvas — the caller should
+   * clear its selected-id state in that case. */
+  onSelectRequest?: (id: string | null) => void;
   /** Id of the currently selected stroke or mark (mirrors the caller's
    * open-edit-sheet state) — when set, that object is drawn/rendered with
    * a highlight so the Select tool's target is visible on the canvas, not
@@ -316,7 +318,15 @@ export function AnnotateCanvas({
     }
     if (tool === "select") {
       const hitId = topStrokeHit(p, annotations, SELECT_HIT_RADIUS);
-      if (!hitId) return;
+      if (!hitId) {
+        // Still track this pointer even though it missed every stroke, so
+        // its matching pointerUp passes the activePointer check below and
+        // reaches the tool === "select" branch there — otherwise a tap on
+        // empty canvas (meant to clear a stuck selection) is silently
+        // swallowed by that guard instead of ever calling onSelectRequest.
+        activePointer.current = e.pointerId;
+        return;
+      }
       capture(e);
       activePointer.current = e.pointerId;
       selectDrag.current = { id: hitId, startX: p.x, startY: p.y, dx: 0, dy: 0 };
@@ -399,7 +409,13 @@ export function AnnotateCanvas({
       const drag = selectDrag.current;
       selectDrag.current = null;
       setDragPreview(null);
-      if (!drag) return;
+      if (!drag) {
+        // Tapped empty canvas — nothing to drag or edit, so clear any
+        // existing selection instead of leaving it stuck with no way to
+        // dismiss it (see onSelectRequest doc above).
+        onSelectRequest?.(null);
+        return;
+      }
       if (Math.hypot(drag.dx, drag.dy) > TAP_THRESHOLD) {
         // A manual reposition wins over reprojection going forward — keeping
         // a stale anchor would silently snap the stroke back to its old spot
@@ -541,7 +557,7 @@ export function AnnotateCanvas({
               <MarkBadge
                 mark={displayMark}
                 tool={tool}
-                selected={mark.id === selectedId}
+                selected={tool === "select" && mark.id === selectedId}
                 onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
                 onEdit={() => onEditRequest?.(mark.id)}
                 onSelect={() => onSelectRequest?.(mark.id)}
