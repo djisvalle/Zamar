@@ -45,24 +45,10 @@ export function SlotDetailSheet({
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.1em", color: "var(--mut)", marginBottom: 5 }}>CAPO</div>
-          <div style={{ height: 34, border: "1px solid var(--line)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 6px", fontSize: 12 }}>
-            <button onClick={() => patch({ capo: Math.max(0, (item.capo ?? 0) - 1) })} style={{ border: "none", background: "none", fontSize: 14, color: "var(--acc)" }}>
-              −
-            </button>
-            {item.capo ?? 0}
-            <button onClick={() => patch({ capo: (item.capo ?? 0) + 1 })} style={{ border: "none", background: "none", fontSize: 14, color: "var(--acc)" }}>
-              +
-            </button>
-          </div>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.1em", color: "var(--mut)", marginBottom: 5 }}>DURATION</div>
-          <div style={{ height: 34, border: "1px solid var(--line)", borderRadius: 6, display: "flex", alignItems: "center", padding: "0 10px", fontSize: 12 }}>
-            {formatDuration(song.durationSec)}
-          </div>
+      <div>
+        <div style={{ fontSize: 10, letterSpacing: "0.1em", color: "var(--mut)", marginBottom: 5 }}>DURATION</div>
+        <div style={{ height: 34, border: "1px solid var(--line)", borderRadius: 6, display: "flex", alignItems: "center", padding: "0 10px", fontSize: 12 }}>
+          {formatDuration(song.durationSec)}
         </div>
       </div>
 

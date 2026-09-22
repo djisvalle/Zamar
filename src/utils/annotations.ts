@@ -1,7 +1,20 @@
-import type { Stroke } from "../state/types";
+import type { AnnotationObject, Pin, Stroke } from "../state/types";
 
 export const STROKE_WIDTH = 3;
 export const ERASE_RADIUS = 14;
+/** Pin badges are bigger than a stroke's hit radius (see `AnnotateCanvas.tsx`'s
+ * `.pin-badge`-equivalent sizing), so the eraser needs a matching bigger
+ * radius to feel consistent — tapping near a pin should erase it as readily
+ * as tapping near a line of ink does. */
+export const PIN_ERASE_RADIUS = 18;
+
+/** `Stroke` kept its own `tool` discriminant rather than gaining a `kind`
+ * field when `Pin` was added, so persisted `Stroke[]` JSON from before pins
+ * existed parses as valid `AnnotationObject[]` with no migration — this is
+ * the one place that distinguishes them. */
+export function isPin(obj: AnnotationObject): obj is Pin {
+  return "kind" in obj && obj.kind === "pin";
+}
 
 interface Point {
   x: number;
@@ -46,6 +59,17 @@ function strokeSegments(stroke: Stroke): [Point, Point][] {
  * partial pixel regions — see the spec's "object eraser" decision. */
 export function hitTestStroke(stroke: Stroke, point: Point, radius: number = ERASE_RADIUS): boolean {
   return strokeSegments(stroke).some(([a, b]) => distanceToSegment(point, a, b) <= radius);
+}
+
+/** True if `point` lands within `radius` of `pin`'s position. */
+export function hitTestPin(pin: Pin, point: Point, radius: number = PIN_ERASE_RADIUS): boolean {
+  return Math.hypot(point.x - pin.position.x, point.y - pin.position.y) <= radius;
+}
+
+/** Eraser-tool hit test across a mixed `AnnotationObject[]` array, regardless
+ * of kind — the one tool that removes anything. */
+export function hitTestAnnotation(obj: AnnotationObject, point: Point): boolean {
+  return isPin(obj) ? hitTestPin(obj, point) : hitTestStroke(obj, point);
 }
 
 /** Resolves the app's single fixed annotation color from the live theme's

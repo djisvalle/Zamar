@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useReducer, useRef, type Dispatch, type ReactNode, createElement } from "react";
-import type { Setlist, SetlistItem, Settings, Song, StageState, ThemeMode, Viewport } from "./types";
+import type { Setlist, SetlistItem, Settings, Song, StageState, StaveSpacing, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
 import * as songsRepo from "../data/songsRepo";
 import * as setlistsRepo from "../data/setlistsRepo";
@@ -49,7 +49,6 @@ export function makeEmptyStage(textScale: number, songs: Song[] = seedSongs): St
     setlistId: null,
     setlistIndex: 0,
     dispKey: song?.defaultKey ?? null,
-    capo: 0,
     view: resolveDefaultView(song),
     drawer: null,
     chromeHidden: false,
@@ -69,6 +68,7 @@ export function initialState(): AppState {
       textScale: DEFAULT_TEXT_SCALE,
       hasSeeded: false,
       micPermissionAsked: false,
+      staveSpacing: "default",
     },
     stage: makeEmptyStage(DEFAULT_TEXT_SCALE),
     viewport: "phone",
@@ -85,6 +85,7 @@ export type Action =
   | { type: "SET_VIEWPORT"; viewport: Viewport }
   | { type: "SET_TEXT_SCALE"; value: number }
   | { type: "SET_MIC_ASKED" }
+  | { type: "SET_STAVE_SPACING"; spacing: StaveSpacing }
   | { type: "TOGGLE_FAVOURITE"; songId: string }
   | { type: "ADD_SONG"; song: Song }
   | { type: "UPDATE_SONG"; song: Song }
@@ -104,7 +105,6 @@ export type Action =
   | { type: "STAGE_LOAD"; songId: string; setlistId?: string | null; setlistIndex?: number }
   | { type: "STAGE_SET_VIEW"; view: StageState["view"] }
   | { type: "STAGE_SET_KEY"; key: string }
-  | { type: "STAGE_SET_CAPO"; capo: number }
   | { type: "STAGE_OPEN_DRAWER"; drawer: StageState["drawer"] }
   | { type: "STAGE_TOGGLE_LYRICS_ONLY" }
   | { type: "STAGE_SET_ZOOM"; zoom: number }
@@ -128,6 +128,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, settings: { ...state.settings, textScale: action.value } };
     case "SET_MIC_ASKED":
       return { ...state, settings: { ...state.settings, micPermissionAsked: true } };
+    case "SET_STAVE_SPACING":
+      return { ...state, settings: { ...state.settings, staveSpacing: action.spacing } };
     case "TOGGLE_FAVOURITE":
       return {
         ...state,
@@ -296,8 +298,6 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, stage: { ...state.stage, view: action.view } };
     case "STAGE_SET_KEY":
       return { ...state, stage: { ...state.stage, dispKey: action.key } };
-    case "STAGE_SET_CAPO":
-      return { ...state, stage: { ...state.stage, capo: Math.max(0, action.capo) } };
     case "STAGE_OPEN_DRAWER":
       return { ...state, stage: { ...state.stage, drawer: action.drawer } };
     case "STAGE_TOGGLE_LYRICS_ONLY":

@@ -36,7 +36,7 @@ export function StageToolsSheet({
   instruments: ScoreInstrument[];
   hiddenParts: ReadonlySet<string>;
   onToggleInstrument: (id: string) => void;
-  /** Disables capo/lyrics-only/zoom — locked once the "chords" annotation
+  /** Disables lyrics-only/zoom — locked once the "chords" annotation
    * layer has strokes. */
   chordsLocked: boolean;
   /** Disables the instrument show/hide chips — locked once the "musicxml"
@@ -146,13 +146,6 @@ export function StageToolsSheet({
       {showSecondRow && view === "chords" && (
         <div style={{ opacity: chordsLocked ? 0.4 : 1 }}>
           <div style={{ padding: "9px 2px 4px", display: "flex", alignItems: "center", gap: 2 }}>
-            <ToolbarStepper
-              label="Capo"
-              value={stage.capo}
-              disabled={chordsLocked}
-              onDec={() => dispatch({ type: "STAGE_SET_CAPO", capo: stage.capo - 1 })}
-              onInc={() => dispatch({ type: "STAGE_SET_CAPO", capo: stage.capo + 1 })}
-            />
             <ToolIcon
               glyph="Aa"
               label="Lyrics"
@@ -204,61 +197,6 @@ export function StageToolsSheet({
         </div>
       )}
     </Sheet>
-  );
-}
-
-function ToolbarStepper({
-  label,
-  value,
-  onDec,
-  onInc,
-  disabled = false,
-}: {
-  label: string;
-  value: number;
-  onDec: () => void;
-  onInc: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flex: 1 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <button
-          onClick={onDec}
-          disabled={disabled}
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 8,
-            border: "1.5px solid var(--acc)",
-            color: "var(--acc)",
-            background: "none",
-            fontSize: 15,
-            fontWeight: 600,
-          }}
-        >
-          −
-        </button>
-        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--acc)", minWidth: 16, textAlign: "center" }}>{value}</span>
-        <button
-          onClick={onInc}
-          disabled={disabled}
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 8,
-            border: "1.5px solid var(--acc)",
-            color: "var(--acc)",
-            background: "none",
-            fontSize: 15,
-            fontWeight: 600,
-          }}
-        >
-          +
-        </button>
-      </div>
-      <span style={{ fontSize: 10, fontWeight: 600, color: "var(--mut)" }}>{label}</span>
-    </div>
   );
 }
 

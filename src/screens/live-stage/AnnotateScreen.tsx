@@ -1,13 +1,13 @@
 import { useRef, useState } from "react";
 import { useStore } from "../../state/store";
 import { ChordChart } from "../../components/ChordChart";
-import { MxlScore } from "../../components/MxlScore";
+import { MxlScore, type MxlScoreHandle } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
 import { Icon, type IconName } from "../../components/Icon";
 import { Dialog } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { AnnotateCanvas, type AnnotateTool } from "../../components/AnnotateCanvas";
-import type { AnnotationView, AttachmentKind, AttachmentVersion, ChartView, Song, Stroke } from "../../state/types";
+import type { AnnotationObject, AnnotationView, AttachmentKind, AttachmentVersion, ChartView, Song } from "../../state/types";
 
 export function AnnotateScreen({
   song,
@@ -28,42 +28,49 @@ export function AnnotateScreen({
   fontScale: number;
   onClose: () => void;
 }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const annotationView: AnnotationView = view === "chords" ? "chords" : activeKind ?? "chords";
   // Matches the exact condition that produces the "Nothing to annotate yet"
-  // fallback in `content` below — there's no real chart to attribute strokes
+  // fallback in `content` below — there's no real chart to attribute marks
   // to, so `done()` must not write to `annotations` at all in this case.
   const noAnnotationTarget = view === "sheet" && activeKind === undefined;
 
-  const [mode, setMode] = useState<"draw" | "notes">("draw");
+  const [mode, setMode] = useState<"draw" | "cues">("draw");
   const [tool, setTool] = useState<AnnotateTool>("pen");
   const [scrollMode, setScrollMode] = useState(false);
-  const [strokes, setStrokes] = useState<Stroke[]>(() => song.annotations[annotationView] ?? []);
-  // Captures the exact array reference `strokes` started from, so `done()`
-  // can tell "never drew/erased this session" (still the same reference)
-  // from "drew, then cleared back to []" (a new, different empty array).
-  const initialStrokesRef = useRef(strokes);
-  const [history, setHistory] = useState<Stroke[][]>([]);
-  const [notesText, setNotesText] = useState(song.notes);
+  const [annotations, setAnnotations] = useState<AnnotationObject[]>(() => song.annotations[annotationView] ?? []);
+  // Captures the exact array reference `annotations` started from, so
+  // `done()` can tell "never drew/erased/pinned this session" (still the
+  // same reference) from "drew, then cleared back to []" (a new, different
+  // empty array).
+  const initialAnnotationsRef = useRef(annotations);
+  const [history, setHistory] = useState<AnnotationObject[][]>([]);
+  const [cuesText, setCuesText] = useState(song.notes);
   const [confirmClear, setConfirmClear] = useState(false);
+  const mxlScoreRef = useRef<MxlScoreHandle>(null);
+  const [reprojectTick, setReprojectTick] = useState(0);
 
-  const commit = (next: Stroke[]) => {
-    setHistory((h) => [...h, strokes]);
-    setStrokes(next);
+  const commit = (next: AnnotationObject[]) => {
+    setHistory((h) => [...h, annotations]);
+    setAnnotations(next);
   };
+
+  // Silently syncs positions after a transpose re-render — not a user edit,
+  // so it bypasses history (see AnnotateCanvas's onReproject doc).
+  const reproject = (next: AnnotationObject[]) => setAnnotations(next);
 
   const undo = () => {
     setHistory((h) => {
       if (h.length === 0) return h;
-      setStrokes(h[h.length - 1]);
+      setAnnotations(h[h.length - 1]);
       return h.slice(0, -1);
     });
   };
 
   const done = () => {
-    const notesChanged = notesText !== song.notes;
-    const strokesChanged = strokes !== initialStrokesRef.current;
-    if (!notesChanged && !strokesChanged) {
+    const cuesChanged = cuesText !== song.notes;
+    const annotationsChanged = annotations !== initialAnnotationsRef.current;
+    if (!cuesChanged && !annotationsChanged) {
       onClose();
       return;
     }
@@ -71,8 +78,8 @@ export function AnnotateScreen({
       type: "UPDATE_SONG",
       song: {
         ...song,
-        notes: notesText,
-        annotations: noAnnotationTarget ? song.annotations : { ...song.annotations, [annotationView]: strokes },
+        notes: cuesText,
+        annotations: noAnnotationTarget ? song.annotations : { ...song.annotations, [annotationView]: annotations },
       },
     });
     onClose();
@@ -87,7 +94,15 @@ export function AnnotateScreen({
       <img src={activeVersion.dataUrl} alt={activeVersion.name} style={{ width: "100%", display: "block" }} />
     ) : activeKind === "musicxml" && activeVersion ? (
       <div style={{ padding: 8 }}>
-        <MxlScore src={activeVersion.dataUrl} transpose={semitones} hiddenParts={hiddenParts} disableZoom />
+        <MxlScore
+          ref={mxlScoreRef}
+          src={activeVersion.dataUrl}
+          transpose={semitones}
+          hiddenParts={hiddenParts}
+          disableZoom
+          staveSpacing={state.settings.staveSpacing}
+          onRerendered={() => setReprojectTick((t) => t + 1)}
+        />
       </div>
     ) : activeKind === "pdf" && activeVersion ? (
       <PdfPages src={activeVersion.dataUrl} disableZoom />
@@ -116,7 +131,7 @@ export function AnnotateScreen({
           <Segmented
             options={[
               { value: "draw", label: "Draw" },
-              { value: "notes", label: "Notes" },
+              { value: "cues", label: "Cues" },
             ]}
             value={mode}
             onChange={setMode}
@@ -129,14 +144,22 @@ export function AnnotateScreen({
 
       <div className="flex-1 hidden-scroll" style={{ position: "relative" }}>
         {mode === "draw" ? (
-          <AnnotateCanvas strokes={strokes} tool={tool} onCommit={commit} scrollMode={scrollMode}>
+          <AnnotateCanvas
+            annotations={annotations}
+            tool={tool}
+            onCommit={commit}
+            onReproject={reproject}
+            scrollMode={scrollMode}
+            scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
+            reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
+          >
             {content}
           </AnnotateCanvas>
         ) : (
           <textarea
-            value={notesText}
-            onChange={(e) => setNotesText(e.target.value)}
-            placeholder="Notes for this song — reminders, cues, anything you want on hand while you're on stage."
+            value={cuesText}
+            onChange={(e) => setCuesText(e.target.value)}
+            placeholder="Cues for this song — reminders, anything you want on hand while you're on stage."
             style={{
               width: "100%",
               height: "100%",
@@ -173,19 +196,20 @@ export function AnnotateScreen({
           <span style={{ width: 20, height: 1, background: "var(--line)" }} />
           <ToolButton icon="edit" active={tool === "pen"} onClick={() => { setTool("pen"); setScrollMode(false); }} label="Pen" />
           <ToolButton icon="square" active={tool === "square"} onClick={() => { setTool("square"); setScrollMode(false); }} label="Rectangle" />
+          <ToolButton icon="note" active={tool === "pin"} onClick={() => { setTool("pin"); setScrollMode(false); }} label="Pin" />
           <ToolButton icon="eraser" active={tool === "eraser"} onClick={() => { setTool("eraser"); setScrollMode(false); }} label="Eraser" />
           <span style={{ width: 20, height: 1, background: "var(--line)" }} />
           <ToolButton icon="grip" active={scrollMode} onClick={() => setScrollMode((s) => !s)} label="Scroll" />
           <button
             onClick={() => setConfirmClear(true)}
-            disabled={strokes.length === 0}
+            disabled={annotations.length === 0}
             style={{
               background: "none",
               border: "none",
               color: "#8c3b3b",
               fontSize: 10,
               fontWeight: 600,
-              opacity: strokes.length === 0 ? 0.35 : 1,
+              opacity: annotations.length === 0 ? 0.35 : 1,
             }}
           >
             Clear

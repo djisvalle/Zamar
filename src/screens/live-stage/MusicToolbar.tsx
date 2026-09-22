@@ -2,16 +2,7 @@ import { KeyChips } from "../../components/KeyChips";
 import { Icon } from "../../components/Icon";
 import { useStore } from "../../state/store";
 
-export function MusicToolbar({
-  transposeLocked,
-  onOpenTools,
-}: {
-  /** Disables the key-transpose row — locked once either the "chords" or
-   * "musicxml" annotation layer has strokes, since both views share the
-   * same `stage.dispKey`. */
-  transposeLocked: boolean;
-  onOpenTools: () => void;
-}) {
+export function MusicToolbar({ onOpenTools }: { onOpenTools: () => void }) {
   const { state, dispatch } = useStore();
   const { stage } = state;
   const key = stage.dispKey ?? "C";
@@ -32,7 +23,7 @@ export function MusicToolbar({
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <KeyChips active={key} onSelect={(k) => dispatch({ type: "STAGE_SET_KEY", key: k })} disabled={transposeLocked} />
+          <KeyChips active={key} onSelect={(k) => dispatch({ type: "STAGE_SET_KEY", key: k })} />
         </div>
         <button
           onClick={onOpenTools}
@@ -53,9 +44,6 @@ export function MusicToolbar({
           <Icon name="more" size={18} strokeWidth={1.8} />
         </button>
       </div>
-      {transposeLocked && (
-        <div style={{ fontSize: 11, color: "var(--mut)", marginTop: 4 }}>Clear marks in Annotate to change key.</div>
-      )}
     </div>
   );
 }

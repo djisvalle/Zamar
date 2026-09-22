@@ -6,6 +6,7 @@ interface SettingsRow {
   textScale: number;
   hasSeeded: number;
   micPermissionAsked: number;
+  staveSpacing: string;
 }
 
 export async function loadAll(): Promise<Settings | null> {
@@ -18,19 +19,21 @@ export async function loadAll(): Promise<Settings | null> {
     textScale: row.textScale,
     hasSeeded: row.hasSeeded === 1,
     micPermissionAsked: row.micPermissionAsked === 1,
+    staveSpacing: row.staveSpacing as Settings["staveSpacing"],
   };
 }
 
 export function buildUpsertStatement(settings: Settings): { statement: string; values: unknown[] } {
   return {
-    statement: `INSERT INTO settings (id, theme, textScale, hasSeeded, micPermissionAsked)
-     VALUES (1, ?, ?, ?, ?)
+    statement: `INSERT INTO settings (id, theme, textScale, hasSeeded, micPermissionAsked, staveSpacing)
+     VALUES (1, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        theme = excluded.theme,
        textScale = excluded.textScale,
        hasSeeded = excluded.hasSeeded,
-       micPermissionAsked = excluded.micPermissionAsked`,
-    values: [settings.theme, settings.textScale, settings.hasSeeded ? 1 : 0, settings.micPermissionAsked ? 1 : 0],
+       micPermissionAsked = excluded.micPermissionAsked,
+       staveSpacing = excluded.staveSpacing`,
+    values: [settings.theme, settings.textScale, settings.hasSeeded ? 1 : 0, settings.micPermissionAsked ? 1 : 0, settings.staveSpacing],
   };
 }
 

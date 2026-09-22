@@ -125,7 +125,6 @@ export function LiveStage() {
 
   const chordsAnnotated = Boolean(song.annotations.chords?.length);
   const musicxmlAnnotated = Boolean(song.annotations.musicxml?.length);
-  const transposeLocked = chordsAnnotated || musicxmlAnnotated;
 
   if (stage.drawer === "annotate") {
     return (
@@ -246,6 +245,7 @@ export function LiveStage() {
                 hiddenParts={hiddenParts}
                 onInstrumentsChange={setScoreInstruments}
                 disableZoom={musicxmlAnnotated}
+                staveSpacing={state.settings.staveSpacing}
               />
             ) : (
               <PdfPages src={activeVersion.dataUrl} />
@@ -265,7 +265,7 @@ export function LiveStage() {
       </div>
 
       {!stage.chromeHidden && (hasChords || hasAttachment) && (
-        <MusicToolbar transposeLocked={transposeLocked} onOpenTools={() => setStageToolsOpen(true)} />
+        <MusicToolbar onOpenTools={() => setStageToolsOpen(true)} />
       )}
 
       {stage.drawer === "add-song" && (

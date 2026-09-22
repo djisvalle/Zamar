@@ -22,7 +22,6 @@ interface ItemRow {
   song_id: string | null;
   label: string | null;
   keyOverride: string | null;
-  capo: number | null;
   note: string | null;
   position: number;
 }
@@ -49,7 +48,6 @@ export async function loadAll(): Promise<Setlist[]> {
             if (it.song_id != null) item.songId = it.song_id;
             if (it.label != null) item.label = it.label;
             if (it.keyOverride != null) item.keyOverride = it.keyOverride;
-            if (it.capo != null) item.capo = it.capo;
             if (it.note != null) item.note = it.note;
             return item;
           });
@@ -90,8 +88,8 @@ export function buildInsertStatements(setlists: Setlist[]): { statement: string;
       sec.items.forEach((item, itemIdx) => {
         statements.push({
           statement: `INSERT INTO setlist_items
-            (id, section_id, kind, song_id, label, keyOverride, capo, note, position)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, section_id, kind, song_id, label, keyOverride, note, position)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           values: [
             item.id,
             sec.id,
@@ -99,7 +97,6 @@ export function buildInsertStatements(setlists: Setlist[]): { statement: string;
             item.songId ?? null,
             item.label ?? null,
             item.keyOverride ?? null,
-            item.capo ?? null,
             item.note ?? null,
             itemIdx,
           ],

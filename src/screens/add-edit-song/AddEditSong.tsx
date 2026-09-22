@@ -157,7 +157,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
           Preview
         </button>
         <button className={"chip" + (tab === "notes" ? " active" : "")} onClick={() => setTab("notes")}>
-          Notes
+          Cues
         </button>
         {CATEGORY_PRIORITY.filter((kind) => attachments[kind]).map((kind) => (
           <button key={kind} className={"chip" + (tab === kind ? " active" : "")} onClick={() => setTab(kind)}>
@@ -354,7 +354,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
             <img src={activeVersion.dataUrl} alt={activeVersion.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
           ) : activeKind === "musicxml" ? (
             <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden", padding: 8 }}>
-              <MxlScore src={activeVersion.dataUrl} />
+              <MxlScore src={activeVersion.dataUrl} staveSpacing={state.settings.staveSpacing} />
             </div>
           ) : (
             <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden" }}>

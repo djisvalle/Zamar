@@ -1,9 +1,91 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
+import type { MusicalAnchor, StaveSpacing } from "../state/types";
 
 const MIN_ENGRAVING_ZOOM = 0.5;
 const MAX_ENGRAVING_ZOOM = 2.5;
 const COMMIT_DEBOUNCE_MS = 110;
+
+/** `osmd.EngravingRules` values for each spacing preset — `StaffDistance` is
+ * the vertical gap between staves within one system (e.g. a piano grand
+ * staff); `MinimumDistanceBetweenSystems` is the gap between systems (rows
+ * of music) — the one that actually creates room to write between lines on
+ * a typical single-staff lead sheet. OSMD's own defaults are ~7 for both
+ * (checked against the installed 2.1.2 bundle), used here as "default".
+ * Applied once at construction (see the load effect below), not reactively:
+ * a spacing change in Settings should only affect a score the next time
+ * it's freshly loaded, never reflow an already-rendered (possibly
+ * annotated) one, so it never interacts with the Annotate freeze rule. */
+const STAVE_SPACING_RULES: Record<StaveSpacing, { staffDistance: number; systemDistance: number }> = {
+  compact: { staffDistance: 5, systemDistance: 5 },
+  default: { staffDistance: 7, systemDistance: 7 },
+  roomy: { staffDistance: 10, systemDistance: 13 },
+};
+
+/** Finds the measure whose bounding box contains (or is nearest to) a point
+ * already converted into OSMD's internal units, and expresses that point as
+ * a 0..1 fraction of that measure's own box — see `MusicalAnchor` in
+ * state/types.ts for why a fraction survives the measure resizing and an
+ * absolute unit offset wouldn't. `osmd`/its graphical objects are typed as
+ * `any` here deliberately: `GraphicalMeasure`/`BoundingBox` aren't part of
+ * the package's stable/documented surface the way `OpenSheetMusicDisplay`
+ * itself is, so this narrows to exactly the handful of fields
+ * (`GraphicSheet.MeasureList`, `PositionAndShape.AbsolutePosition`/`.Size`)
+ * actually used rather than pulling in their full internal type. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findNearestMeasureAnchor(osmd: any, pointInUnits: { x: number; y: number }): MusicalAnchor | null {
+  const measureList: any[][] = osmd.GraphicSheet.MeasureList; // eslint-disable-line @typescript-eslint/no-explicit-any
+  let best: { mi: number; si: number; measure: any } | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+  let bestDist = Infinity;
+  let bestInside = false;
+  for (let mi = 0; mi < measureList.length; mi++) {
+    const row = measureList[mi];
+    for (let si = 0; si < row.length; si++) {
+      const measure = row[si];
+      if (!measure) continue;
+      const box = measure.PositionAndShape;
+      const pos = box.AbsolutePosition;
+      const size = box.Size;
+      const inside =
+        pointInUnits.x >= pos.x && pointInUnits.x <= pos.x + size.width && pointInUnits.y >= pos.y && pointInUnits.y <= pos.y + size.height;
+      const cx = pos.x + size.width / 2;
+      const cy = pos.y + size.height / 2;
+      const dx = pointInUnits.x - cx;
+      const dy = pointInUnits.y - cy;
+      const dist = dx * dx + dy * dy;
+      if (inside && !bestInside) {
+        best = { mi, si, measure };
+        bestDist = dist;
+        bestInside = true;
+      } else if (inside === bestInside && dist < bestDist) {
+        best = { mi, si, measure };
+        bestDist = dist;
+      }
+    }
+  }
+  if (!best) return null;
+  const box = best.measure.PositionAndShape;
+  const pos = box.AbsolutePosition;
+  const size = box.Size;
+  return {
+    measureIndex: best.mi,
+    staffIndex: best.si,
+    fx: size.width ? (pointInUnits.x - pos.x) / size.width : 0,
+    fy: size.height ? (pointInUnits.y - pos.y) / size.height : 0,
+  };
+}
+
+export interface MxlScoreHandle {
+  /** Anchors a viewport-relative point (a PointerEvent's clientX/clientY) to
+   * its nearest rendered measure — null if the score isn't ready yet. */
+  anchorAtClientPoint(clientX: number, clientY: number): MusicalAnchor | null;
+  /** Re-derives a stored anchor's current viewport-relative position after a
+   * re-render (see `onRerendered`) — null if the score isn't ready. Doesn't
+   * fail on the anchor's measure/staff having disappeared, since transpose
+   * never removes measures or staves; a stale index would only occur from
+   * corrupt data. */
+  clientPointForAnchor(anchor: MusicalAnchor): { clientX: number; clientY: number } | null;
+}
 
 /** Pinch/wheel-driven zoom that changes the score's actual engraving size
  * (OSMD's own Zoom factor) rather than magnifying a fixed picture. Zooming
@@ -150,37 +232,77 @@ export interface ScoreInstrument {
  * tried first and repeatedly fell short of looking like real typeset sheet
  * music — spacing, glyph shapes, and multi-staff layout are exactly the
  * hard parts a dedicated engine already solves. */
-export function MxlScore({
-  src,
-  transpose = 0,
-  hiddenParts,
-  onInstrumentsChange,
-  disableZoom = false,
-}: {
-  src: string;
-  /** Semitones to transpose the actual notated pitches by — the same
-   * transpose that shifts the chord chart, applied to real notation instead
-   * of chord letters. */
-  transpose?: number;
-  /** Instrument ids to hide (for multi-part scores — a piano-only file like
-   * the seeded default song has nothing to hide, but this is ready the
-   * moment a multi-instrument score is attached). */
-  hiddenParts?: ReadonlySet<string>;
-  /** Called once the score's real instrument list is known, so a parent
-   * toolbar can offer per-instrument show/hide without re-parsing anything. */
-  onInstrumentsChange?: (instruments: ScoreInstrument[]) => void;
-  /** Disables the internal pinch/wheel engraving-zoom gesture entirely —
-   * disabled while this view carries drawn annotation strokes, since OSMD's
-   * zoom is a real re-engrave (`osmd.Zoom` + `updateGraphic()`), not a
-   * camera transform that could be applied after the fact on top of marks
-   * drawn at a fixed scale. */
-  disableZoom?: boolean;
-}) {
+export const MxlScore = forwardRef<
+  MxlScoreHandle,
+  {
+    src: string;
+    /** Semitones to transpose the actual notated pitches by — the same
+     * transpose that shifts the chord chart, applied to real notation instead
+     * of chord letters. */
+    transpose?: number;
+    /** Instrument ids to hide (for multi-part scores — a piano-only file like
+     * the seeded default song has nothing to hide, but this is ready the
+     * moment a multi-instrument score is attached). */
+    hiddenParts?: ReadonlySet<string>;
+    /** Called once the score's real instrument list is known, so a parent
+     * toolbar can offer per-instrument show/hide without re-parsing anything. */
+    onInstrumentsChange?: (instruments: ScoreInstrument[]) => void;
+    /** Disables the internal pinch/wheel engraving-zoom gesture entirely —
+     * disabled while this view carries drawn annotation strokes, since OSMD's
+     * zoom is a real re-engrave (`osmd.Zoom` + `updateGraphic()`), not a
+     * camera transform that could be applied after the fact on top of marks
+     * drawn at a fixed scale. */
+    disableZoom?: boolean;
+    /** Vertical stave/system spacing preset, applied once at load — see
+     * `STAVE_SPACING_RULES` above for why this isn't reactive. */
+    staveSpacing?: StaveSpacing;
+    /** Called after a transpose-triggered re-render finishes — the signal a
+     * parent uses to reproject anchored pins/ink via this component's
+     * `clientPointForAnchor`. Deliberately not called from the
+     * hiddenParts/zoom effects below: those controls stay locked by the
+     * Annotate freeze rule instead of being reprojected. */
+    onRerendered?: () => void;
+  }
+>(function MxlScore({ src, transpose = 0, hiddenParts, onInstrumentsChange, disableZoom = false, staveSpacing = "default", onRerendered }, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
+  const unitInPixelsRef = useRef(10);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [engravingZoom, setEngravingZoom] = useState(1);
   const ez = useEngravingZoom(setEngravingZoom, disableZoom);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      anchorAtClientPoint(clientX, clientY) {
+        const osmd = osmdRef.current;
+        const el = ez.el;
+        if (!osmd || !el || status !== "ready") return null;
+        const rect = el.getBoundingClientRect();
+        const f = unitInPixelsRef.current * osmd.Zoom;
+        return findNearestMeasureAnchor(osmd, { x: (clientX - rect.left) / f, y: (clientY - rect.top) / f });
+      },
+      clientPointForAnchor(anchor) {
+        const osmd = osmdRef.current;
+        const el = ez.el;
+        if (!osmd || !el || status !== "ready") return null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const measureList: any[][] = (osmd as any).GraphicSheet.MeasureList;
+        const measure = measureList[anchor.measureIndex]?.[anchor.staffIndex];
+        if (!measure) return null;
+        const box = measure.PositionAndShape;
+        const pos = box.AbsolutePosition;
+        const size = box.Size;
+        const rect = el.getBoundingClientRect();
+        const f = unitInPixelsRef.current * osmd.Zoom;
+        return {
+          clientX: (pos.x + anchor.fx * size.width) * f + rect.left,
+          clientY: (pos.y + anchor.fy * size.height) * f + rect.top,
+        };
+      },
+    }),
+    [status, ez.el]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -188,8 +310,9 @@ export function MxlScore({
 
     (async () => {
       if (!hostRef.current) return;
-      const { OpenSheetMusicDisplay: OSMD, TransposeCalculator } = await import("opensheetmusicdisplay");
+      const { OpenSheetMusicDisplay: OSMD, TransposeCalculator, unitInPixels } = await import("opensheetmusicdisplay");
       if (cancelled || !hostRef.current) return;
+      unitInPixelsRef.current = unitInPixels;
       hostRef.current.innerHTML = "";
       const osmd = new OSMD(hostRef.current, {
         backend: "svg",
@@ -202,6 +325,9 @@ export function MxlScore({
         disableCursor: true,
       });
       osmd.TransposeCalculator = new TransposeCalculator();
+      const rules = STAVE_SPACING_RULES[staveSpacing];
+      osmd.EngravingRules.StaffDistance = rules.staffDistance;
+      osmd.EngravingRules.MinimumDistanceBetweenSystems = rules.systemDistance;
       osmdRef.current = osmd;
       try {
         // osmd.load(string) only recognizes raw XML text, raw zip bytes, or
@@ -241,6 +367,10 @@ export function MxlScore({
     osmd.Sheet.Transpose = transpose;
     osmd.updateGraphic();
     osmd.render();
+    // The one re-render `onRerendered` fires from — a transpose is the only
+    // control here a parent is expected to reproject rather than lock, per
+    // the Annotate freeze rule (see the `onRerendered` prop doc above).
+    onRerendered?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transpose, status]);
 
@@ -354,4 +484,4 @@ export function MxlScore({
       )}
     </div>
   );
-}
+});

@@ -3,7 +3,9 @@ import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Dialog } from "../../components/Overlays";
+import { Segmented } from "../../components/Toggle";
 import { Icon } from "../../components/Icon";
+import type { StaveSpacing } from "../../state/types";
 
 export function Settings() {
   const { state, dispatch } = useStore();
@@ -28,6 +30,25 @@ export function Settings() {
             <Icon name="chevron-right" size={14} strokeWidth={2} />
           </span>
         </button>
+
+        <SectionLabel>Notation</SectionLabel>
+        <div className="list-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>Stave spacing</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
+              Room between staves in rendered sheet music — extra space for writing bowings, chord names, or cues by hand.
+            </div>
+          </div>
+          <Segmented<StaveSpacing>
+            options={[
+              { value: "compact", label: "Compact" },
+              { value: "default", label: "Default" },
+              { value: "roomy", label: "Roomy" },
+            ]}
+            value={state.settings.staveSpacing}
+            onChange={(spacing) => dispatch({ type: "SET_STAVE_SPACING", spacing })}
+          />
+        </div>
 
         <SectionLabel>Data</SectionLabel>
         <div className="list-row">

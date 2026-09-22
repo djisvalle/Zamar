@@ -311,7 +311,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
               <img src={file!.dataUrl} alt={file!.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
             ) : attachmentKind === "musicxml" ? (
               <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden", padding: 8 }}>
-                <MxlScore src={file!.dataUrl} />
+                <MxlScore src={file!.dataUrl} staveSpacing={state.settings.staveSpacing} />
               </div>
             ) : (
               <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden" }}>

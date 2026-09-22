@@ -25,15 +25,57 @@ export type Attachments = Partial<Record<AttachmentKind, AttachmentBucket>>;
 
 export type AnnotationView = "chords" | "image" | "pdf" | "musicxml";
 
+/** Anchors a point to a spot on a rendered MusicXML score that survives a
+ * transpose-triggered re-render, in place of a raw pixel coordinate.
+ * `measureIndex`/`staffIndex` index directly into
+ * `osmd.GraphicSheet.MeasureList[measureIndex][staffIndex]`, which keeps the
+ * same shape across a re-render (transpose never adds/removes measures or
+ * staves). `fx`/`fy` are the point's position as a 0..1 fraction of that
+ * measure's own bounding-box width/height at anchor time, not an absolute
+ * offset — a fraction survives the measure changing width (more accidentals
+ * needing more room) the way an absolute unit offset wouldn't. Only ever set
+ * for points/pins placed on the `musicxml` view — see `MxlScore.tsx`'s
+ * `anchorAtClientPoint`/`clientPointForAnchor`. */
+export interface MusicalAnchor {
+  measureIndex: number;
+  staffIndex: number;
+  fx: number;
+  fy: number;
+}
+
 export interface Stroke {
   id: string;
   tool: "pen" | "square";
   /** "pen": every point on the drawn polyline, in order. "square": exactly
    * two points — the drag's start and end corners. Coordinates are in CSS
    * pixels relative to the top-left of the view's content area, at that
-   * content's natural (unzoomed) size. */
+   * content's natural (unzoomed) size. Current on-screen position — for a
+   * musicxml-view stroke with `anchors` set, this is kept in sync by
+   * reprojection after every re-render; it's the only representation for
+   * chords/image/pdf, which have no measures to anchor to. */
   points: { x: number; y: number }[];
+  /** One anchor per point, parallel to `points`, present only for strokes
+   * drawn on the `musicxml` view. Absent — including for strokes persisted
+   * before this feature — means "not reprojectable"; `points` is then used
+   * as-is with no repositioning. */
+  anchors?: MusicalAnchor[];
 }
+
+export interface Pin {
+  id: string;
+  kind: "pin";
+  /** Same role as Stroke.points — kept in sync by reprojection. */
+  position: { x: number; y: number };
+  text: string;
+  /** Present only when placed on the `musicxml` view. */
+  anchor?: MusicalAnchor;
+}
+
+/** `Stroke` keeps its own `tool` discriminant rather than gaining a `kind`
+ * field, so persisted `Stroke[]` JSON from before pins existed parses as
+ * valid `AnnotationObject[]` with no migration — see `utils/annotations.ts`'s
+ * `isPin`. */
+export type AnnotationObject = Stroke | Pin;
 
 export interface Song {
   id: string;
@@ -59,11 +101,13 @@ export interface Song {
    * from Add/Edit Song's "Default on Live Stage" picker. */
   defaultView?: "chords" | AttachmentKind;
   /** Freeform text notes for this song — reminders, cues, anything worth
-   * having on hand regardless of chart type. "" when empty. */
+   * having on hand regardless of chart type. "" when empty. UI label is
+   * "Cues" (see AnnotateScreen.tsx/AddEditSong.tsx); field name is unchanged
+   * to avoid an unnecessary SQLite column rename. */
   notes: string;
-  /** Hand-drawn markup, one stroke layer per view type this song can show.
-   * {} when nothing has been drawn yet. */
-  annotations: Partial<Record<AnnotationView, Stroke[]>>;
+  /** Hand-drawn ink and pins, one layer per view type this song can show.
+   * {} when nothing's been placed yet. */
+  annotations: Partial<Record<AnnotationView, AnnotationObject[]>>;
 }
 
 export interface SetlistItem {
@@ -72,7 +116,6 @@ export interface SetlistItem {
   songId?: string; // present when kind === "song"
   label?: string; // present when kind === "note" (e.g. "Welcome & announcements")
   keyOverride?: string;
-  capo?: number;
   note?: string;
 }
 
@@ -100,7 +143,6 @@ export interface StageState {
   setlistId: string | null;
   setlistIndex: number; // index of the current song within the flattened song list of the active setlist
   dispKey: string | null;
-  capo: number;
   view: ChartView;
   drawer: Drawer;
   chromeHidden: boolean;
@@ -110,10 +152,15 @@ export interface StageState {
 
 export type ThemeMode = "light" | "dark";
 export type Viewport = "phone" | "ipadAir11" | "ipadAir13";
+export type StaveSpacing = "compact" | "default" | "roomy";
 
 export interface Settings {
   theme: ThemeMode;
   textScale: number; // percent, 100 = default
   hasSeeded: boolean;
   micPermissionAsked: boolean;
+  /** Vertical spacing between staves/systems in rendered MusicXML scores —
+   * global and static (never per-song, never adjustable mid-session on a
+   * given chart), so it never interacts with the Annotate freeze rule. */
+  staveSpacing: StaveSpacing;
 }

@@ -51,22 +51,46 @@ working tree on 2026-09-19.
       `var(--acc)`-fill bar sized to `(songIndex + 1) / setlistSongIds.length`, using the
       already-computed `songIndex`/`setlistSongIds`. No numeric "Song X of N" counter by
       design — just the next-song name and the bar.
-- [x] **Annotate / custom notes on a song.** Two real capabilities, not the old
-      decorative shell: freeform typed notes (`Song.notes`, editable from both
-      Add/Edit Song's Notes tab and Live Stage's Annotate screen) and real canvas-drawn
-      strokes (`Song.annotations`, pen/rectangle/eraser via `AnnotateCanvas.tsx`), drawn and
-      reviewed inside the dedicated Annotate screen over whichever chart type was open when
-      it was entered — chords, image, PDF, or MusicXML — not just the chords view the old
-      shell was stuck on, and not a persistent overlay on the normal Live Stage view itself.
-      Controls that would reflow a view's
-      content (transpose, chord-chart zoom, lyrics-only, MusicXML instrument
-      visibility, MusicXML's own pinch-zoom) disable once that view has strokes, so
-      marks never silently drift out of alignment. See
+- [x] **Annotate / custom notes on a song.** Three real capabilities, not the old
+      decorative shell: freeform typed cues (`Song.notes`, UI-labeled "Cues" — editable
+      from both Add/Edit Song's Cues tab and Live Stage's Annotate screen), real
+      canvas-drawn ink (pen/rectangle via `AnnotateCanvas.tsx`), and pins — short typed
+      notes dropped at a point, rendered as their own DOM layer (not canvas pixels) so
+      they stay individually tappable/draggable after placement. Ink and pins share one
+      `Song.annotations` array per view (`AnnotationObject = Stroke | Pin`), drawn and
+      reviewed inside the dedicated Annotate screen over whichever chart type was open
+      when it was entered — chords, image, PDF, or MusicXML — not just the chords view
+      the old shell was stuck on, and not a persistent overlay on the normal Live Stage
+      view itself. Eraser removes either kind; Undo/Clear operate on the whole mixed
+      array uniformly.
+      Controls that would reflow a view's content (chord-chart zoom, lyrics-only,
+      MusicXML instrument visibility, MusicXML's own pinch-zoom) disable once that view
+      has any annotation, so marks never silently drift out of alignment — **except
+      transpose**, which is deliberately exempted: on `chords` it's always been a chord-
+      chip label swap (never reflows the lyric line, so there was never a hazard), and on
+      `musicxml` a real key change re-engraves the score but existing ink/pins are
+      reprojected to their nearest measure afterward (`MusicalAnchor` in
+      `state/types.ts`, anchored/reprojected via `MxlScore.tsx`'s
+      `anchorAtClientPoint`/`clientPointForAnchor` against
+      `osmd.GraphicSheet.MeasureList`) rather than left at stale pixel coordinates or
+      blocking the Key control — verified in a real browser against the actual
+      `As_The_Deer.mxl` render across multiple consecutive transposes, including one that
+      changed a system's line-wrapping. Engraving zoom stays frozen rather than also
+      being reprojected (matches Newzik's own behavior, checked as a reference rather
+      than assumed). See
       `docs/superpowers/specs/2026-09-20-song-notes-and-annotations-design.md` for the
-      full design, including its "Future work / TODO" section (color picker,
-      pixel-precision eraser, per-attachment-version stroke layers, per-view transpose
-      lock, and a known dev-only viewport-toggle drift edge case — all deliberately
-      deferred, not gaps in this pass).
+      original ink/notes pass and
+      `docs/superpowers/specs/2026-09-22-annotation-pins-and-stave-spacing-design.md` for
+      pins, reprojection, and stave spacing — including its "Future work / TODO" section
+      (stickers, a color picker, per-song stave spacing, and reprojecting across an
+      engraving-zoom change, all deliberately deferred, not gaps in this pass).
+- [x] **Stave spacing (Settings > Notation).** A global Compact/Default/Roomy preset
+      (`Settings.staveSpacing`) maps to `osmd.EngravingRules.StaffDistance`/
+      `MinimumDistanceBetweenSystems`, applied once when a score loads (not reactively —
+      a spacing change only affects the next fresh load, never reflows an
+      already-rendered, possibly-annotated one). Applies everywhere `MxlScore.tsx` is
+      used: Live Stage, Add/Edit Song's Sheet Music tab, Import's preview, and the
+      Annotate screen.
 
 ## Nice-to-have — R&D / spike candidates
 

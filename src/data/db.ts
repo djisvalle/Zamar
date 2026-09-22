@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -153,6 +153,14 @@ async function openDb(): Promise<SQLiteDBConnection> {
       // existing rows is needed.
       toVersion: 5,
       statements: ["ALTER TABLE songs ADD COLUMN defaultView TEXT;"],
+    },
+    {
+      // Additive column — the Settings > Notation stave-spacing preset.
+      // 'default' matches OSMD's own built-in spacing, so an existing
+      // install's already-rendered scores look the same as before this
+      // column existed until someone explicitly changes it.
+      toVersion: 6,
+      statements: ["ALTER TABLE settings ADD COLUMN staveSpacing TEXT NOT NULL DEFAULT 'default';"],
     },
   ]);
 
