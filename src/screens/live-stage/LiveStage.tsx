@@ -300,6 +300,8 @@ export function LiveStage() {
           flexDirection: "column",
           gap: 8,
           touchAction: "pan-y",
+          background: stage.view === "sheet" ? "var(--sheet-bg)" : undefined,
+          color: stage.view === "sheet" ? "var(--sheet-fg)" : undefined,
         }}
         onPointerDown={onChartPointerDown}
         onPointerUp={onChartPointerUp}
@@ -330,7 +332,7 @@ export function LiveStage() {
             ) : (
               <PdfPages src={activeVersion.dataUrl} />
             )}
-            <span className="muted" style={{ fontSize: 11 }}>
+            <span style={{ fontSize: 11, color: "var(--sheet-mut)" }}>
               {activeKind === "musicxml"
                 ? `${activeVersion.name} · engraved from the score, no chords detected`
                 : `${activeVersion.name} · saved as-is, no chords detected`}
@@ -338,8 +340,8 @@ export function LiveStage() {
           </div>
         ) : (
           <div className="empty">
-            <div className="empty-title">No sheet music attached</div>
-            <div className="empty-body">Attach a PDF, photo, or MusicXML score from Add/Edit Song to see it here.</div>
+            <div className="empty-title" style={{ color: "var(--sheet-fg)" }}>No sheet music attached</div>
+            <div className="empty-body" style={{ color: "var(--sheet-mut)" }}>Attach a PDF, photo, or MusicXML score from Add/Edit Song to see it here.</div>
           </div>
         )}
       </div>
