@@ -123,6 +123,17 @@ export interface ShapeMark {
   shapeId: ShapeId;
   color: string;
   size: number;
+  /** Length/horizontal extent in px, at rotation 0. Undefined means "never
+   * resized" — falls back to `size * SHAPE_ASPECT`, i.e. the original
+   * fixed-aspect behavior. Old persisted marks parse with this undefined
+   * and render identically to before. */
+  width?: number;
+  /** Degrees clockwise from the shape's default horizontal orientation.
+   * Undefined means 0 — old persisted marks render unrotated, same as
+   * today. Ignored for rect-outline/rect-fill/ellipse-outline/
+   * ellipse-fill — only line-type shapes rotate (see `isLineShape` in
+   * `utils/annotations.ts`). */
+  rotation?: number;
   anchor?: MusicalAnchor;
 }
 
