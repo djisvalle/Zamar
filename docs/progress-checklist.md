@@ -44,7 +44,8 @@ working tree on 2026-09-19.
       used for song batch delete and section delete.
 - [x] **Live Stage.** Single-song stage view is fully done. Whole-setlist playback also
       works — swipe gestures advance through `setlistSongIds` (`STAGE_ADVANCE` in
-      `store.ts`), and an end-of-setlist "Set complete" screen exists. A next-song preview
+      `store.ts`); advancing past the last song is a no-op (the last song just stays on
+      screen, no end-of-setlist screen). A next-song preview
       and progress bar are now rendered in `LiveStage.tsx`'s setlist-mode header (above the
       title/artist row): `Next: {title}` (or "Last song" on the final slot) plus a thin
       `var(--acc)`-fill bar sized to `(songIndex + 1) / setlistSongIds.length`, using the
@@ -94,8 +95,11 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ### Live Stage
 - [x] Chord chart rendering with real transpose/capo math (not hand-placed spacing)
-- [x] Expandable transpose/capo toolbar, Add-Song drawer, quick-edit sheet, annotate mode
-- [x] Idle auto-hide chrome (6s), end-of-setlist state
+- [x] One consolidated Stage Tools sheet (Add-Song, Quick-edit, annotate mode, view picker,
+      capo/lyrics/zoom-or-instrument controls) opened from a slim one-row bottom bar
+- [x] Idle auto-hide chrome (6s); advancing past a setlist's last song is a no-op
+- [x] A song can persist a default Live Stage view (chords, or a specific attachment kind),
+      set from Add/Edit Song
 - [x] Chord/Sheet toggle renders the real attached file — MusicXML via OpenSheetMusicDisplay,
       or photo/PDF via `<img>`/`<embed>` — with real pinch-to-zoom and drag-to-pan
 - [x] Setlist-mode next-song preview and progress bar in the stage header

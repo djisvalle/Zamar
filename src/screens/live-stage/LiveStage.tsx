@@ -30,7 +30,7 @@ export function LiveStage() {
 
   const song = stage.songId ? state.songs.find((s) => s.id === stage.songId) : null;
   const hasChords = Boolean(song && song.chordpro.trim());
-  const hasScore = Boolean(song?.attachments.musicxml);
+  const hasAttachment = Boolean(song && Object.keys(song.attachments).length > 0);
   const setlist = stage.setlistId ? state.setlists.find((sl) => sl.id === stage.setlistId) : null;
   const setlistSongIds = activeSetlistSongIds(setlist);
 
@@ -264,7 +264,7 @@ export function LiveStage() {
         )}
       </div>
 
-      {!stage.chromeHidden && (hasChords || hasScore) && (
+      {!stage.chromeHidden && (hasChords || hasAttachment) && (
         <MusicToolbar transposeLocked={transposeLocked} onOpenTools={() => setStageToolsOpen(true)} />
       )}
 

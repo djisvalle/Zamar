@@ -42,14 +42,15 @@ const defaultSong = seedSongs.find((s) => s.id === DEFAULT_SONG_ID);
  * actually determines the size a chart opens at; the toolbar's live +/-
  * buttons then adjust `stage.zoom` for the rest of that session only,
  * same as the rest of `stage` (see "Single global reducer" in CLAUDE.md). */
-export function makeEmptyStage(textScale: number): StageState {
+export function makeEmptyStage(textScale: number, songs: Song[] = seedSongs): StageState {
+  const song = songs.find((s) => s.id === DEFAULT_SONG_ID) ?? defaultSong;
   return {
-    songId: defaultSong ? DEFAULT_SONG_ID : null,
+    songId: song ? DEFAULT_SONG_ID : null,
     setlistId: null,
     setlistIndex: 0,
-    dispKey: defaultSong?.defaultKey ?? null,
+    dispKey: song?.defaultKey ?? null,
     capo: 0,
-    view: resolveDefaultView(defaultSong),
+    view: resolveDefaultView(song),
     drawer: null,
     chromeHidden: false,
     lyricsOnly: false,
@@ -75,7 +76,7 @@ export function initialState(): AppState {
 }
 
 export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
-  return { songs, setlists, settings, stage: makeEmptyStage(settings.textScale), viewport: "phone" };
+  return { songs, setlists, settings, stage: makeEmptyStage(settings.textScale, songs), viewport: "phone" };
 }
 
 export type Action =
@@ -158,7 +159,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         setlists: state.setlists.filter((sl) => sl.id !== action.setlistId),
-        stage: state.stage.setlistId === action.setlistId ? makeEmptyStage(state.settings.textScale) : state.stage,
+        stage: state.stage.setlistId === action.setlistId ? makeEmptyStage(state.settings.textScale, state.songs) : state.stage,
       };
     case "ADD_SECTION":
       return {
@@ -324,7 +325,7 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
     case "STAGE_EXIT":
-      return { ...state, stage: makeEmptyStage(state.settings.textScale) };
+      return { ...state, stage: makeEmptyStage(state.settings.textScale, state.songs) };
     default:
       return state;
   }

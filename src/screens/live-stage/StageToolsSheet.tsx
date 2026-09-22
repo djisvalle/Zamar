@@ -53,7 +53,11 @@ export function StageToolsSheet({
 
   // Nothing to switch between — a song with chords and no attachments (or
   // vice versa) doesn't need a picker at all.
-  const showViewPicker = (hasChords ? 1 : 0) + availableKinds.length > 1;
+  // Also show when the current sheet view has become unsatisfiable (its only
+  // attachment was removed while this song stayed loaded on stage) — the
+  // picker is the only way back to Chords/Lyrics in that case.
+  const stranded = view === "sheet" && availableKinds.length === 0 && hasChords;
+  const showViewPicker = (hasChords ? 1 : 0) + availableKinds.length > 1 || stranded;
   // Same condition MusicToolbar's old expanded second row used: chord view
   // always has something to configure once there are chords; sheet view
   // only does once there's more than one instrument part.

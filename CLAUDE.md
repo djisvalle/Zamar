@@ -85,11 +85,12 @@ convention for now, but flag the tension rather than silently picking one.
 ### Device-frame shell, not a website
 
 The whole app renders inside a phone/tablet frame (`.device` in `App.tsx`), centered on
-the page, with global **Appearance** (Light / Stage Dark) and **Viewport** (Phone /
-Tablet) controls above it. This is a simplified carry-over of the original gallery's own
-toggle bar — now driving one live app instead of an atlas of frozen boards. Frame
-dimensions (`402×874` phone, `512.5×737.5` tablet) come straight from the source's
-`main_logic.txt`.
+the page, with global **Appearance** (Light / Stage Dark) and **Viewport** (Phone / iPad
+Air 11″ / iPad Air 13″) controls above it. This is a simplified carry-over of the original gallery's own
+toggle bar — now driving one live app instead of an atlas of frozen boards. Frame dimensions (`402×874` phone) come straight from the source's `main_logic.txt`; the
+two iPad Air sizes (`820×1180` 11″, `1024×1366` 13″) are real device logical-point
+resolutions instead, since the source's own tablet frame was a generic, non-device-specific
+size.
 
 This frame is browser-dev-only. `App.tsx` gates it behind `Capacitor.isNativePlatform()`:
 a real native build (Android today) renders `ScreenHost` full-screen with no frame and no
@@ -177,7 +178,7 @@ Priority mirrors the source doc's own stated order: (1) Live Stage + in-stage ad
 | Area | Entry point | Notable pieces |
 |---|---|---|
 | `onboarding/` | app boot | Splash only — auto-advances (~650ms) straight into Live Stage on a standing default song. The old First-run "seed samples / start empty" choice screen was removed; "start empty" now lives in Settings' type-`ERASE`-to-confirm reset instead |
-| `live-stage/` | app hub | empty/loaded chord+sheet views, expandable transpose/capo toolbar, Add-Song drawer, Quick-edit sheet, annotate mode, idle auto-hide chrome (6s), end-of-setlist, category/version chip rows for songs with multiple attachment buckets, real MusicXML (OpenSheetMusicDisplay) and PDF (pdf.js) rendering with pinch-zoom/pan |
+| `live-stage/` | app hub | empty/loaded chord+sheet views, a slim bottom bar (key-transpose chips + a Stage Tools trigger) opening one consolidated sheet for Add-Song/Quick-edit/Annotate, the Chords/Lyrics-vs-attachment-kind/version picker, and capo/lyrics/zoom-or-instrument controls, idle auto-hide chrome (6s), swiping past a setlist's last song is a no-op, real MusicXML (OpenSheetMusicDisplay) and PDF (pdf.js) rendering with pinch-zoom/pan, a per-song default view settable from Add/Edit Song |
 | `library/` | hamburger menu | A–Z grouped list, live search, filter chips, multi-select + batch delete, row context sheet, empty/no-results states |
 | `setlists/` | hamburger menu | Upcoming/Past/Templates tabs, **run-sheet detail** (sections, derived per-slot start times, per-slot key/capo/note override sheet), Add-to-set drawer, Set-details sheet with duplicate-name validation |
 | `add-edit-song/` | menu / Library FAB / row sheet | one screen for both New and Edit — title/artist/key/tempo/time-signature fields are always editable (editing a song's metadata isn't a separate flow), packed into two compact rows (Title+Key, then Artist+Tempo+Time Sig.) so the metadata block stays out of the chord/lyrics editor's way — the ChordPro-vs-Chords-over-Lyrics textarea is kept to at least ~50% of the device height by design, live `{key: ...}` directive detection, format-aware quick-insert chips (chords used so far + ChordPro directives), a compact "Import" button that hands the in-progress draft to `import/` and gets it back via `nav.replace` (see Gotchas), tabs for **Chords/Lyrics** (source) + **Preview** always, plus one tab per attachment category the song actually has (Sheet Music / PDF / Photo — only the ones present), each showing the selected version's preview, a version list (rename/select/delete) once the bucket holds more than one version, and an "Add another version…" action |
