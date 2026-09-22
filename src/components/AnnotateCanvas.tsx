@@ -107,6 +107,7 @@ export function AnnotateCanvas({
   onCommit,
   onReproject,
   onEditRequest,
+  onSelectRequest,
   selectedId,
   scrollMode,
   scoreRef,
@@ -135,6 +136,14 @@ export function AnnotateCanvas({
    * tapped while `select` is active — the caller (AnnotateScreen) owns the
    * style/edit-sheet UI, this component only knows a gesture happened. */
   onEditRequest?: (id: string) => void;
+  /** Fires when the `select` tool's first tap lands on a `ShapeMark` that
+   * isn't selected yet — selects it (so `ShapeHandles` renders and its
+   * resize/rotate handles become reachable) WITHOUT opening its edit sheet.
+   * Distinct from `onEditRequest`: tapping an already-selected shape (or any
+   * non-shape mark) still goes straight through `onEditRequest` as before.
+   * The caller is expected to keep its own selected-id state in sync with
+   * both this and `onEditRequest` (see AnnotateScreen). */
+  onSelectRequest?: (id: string) => void;
   /** Id of the currently selected stroke or mark (mirrors the caller's
    * open-edit-sheet state) — when set, that object is drawn/rendered with
    * a highlight so the Select tool's target is visible on the canvas, not
@@ -535,6 +544,7 @@ export function AnnotateCanvas({
                 selected={mark.id === selectedId}
                 onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
                 onEdit={() => onEditRequest?.(mark.id)}
+                onSelect={() => onSelectRequest?.(mark.id)}
                 onDrag={(x, y, clientX, clientY) => {
                   const anchor = scoreRef?.current?.anchorAtClientPoint(clientX, clientY) ?? undefined;
                   onCommit(annotations.map((a) => (a.id === mark.id ? { ...a, position: { x, y }, anchor } : a)));
@@ -599,6 +609,7 @@ function MarkBadge({
   selected,
   onErase,
   onEdit,
+  onSelect,
   onDrag,
 }: {
   mark: TextMark | ShapeMark;
@@ -606,6 +617,9 @@ function MarkBadge({
   selected: boolean;
   onErase: () => void;
   onEdit: () => void;
+  /** Tap-without-drag on an unselected ShapeMark calls this instead of
+   * `onEdit` — see `onSelectRequest` on AnnotateCanvas for why. */
+  onSelect: () => void;
   onDrag: (x: number, y: number, clientX: number, clientY: number) => void;
 }) {
   const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
@@ -658,6 +672,11 @@ function MarkBadge({
         if (!d) return;
         if (d.moved) {
           onDrag(d.origX + (e.clientX - d.startX), d.origY + (e.clientY - d.startY), e.clientX, e.clientY);
+        } else if (mark.kind === "shape" && !selected) {
+          // First tap on an unselected shape only selects it (revealing its
+          // resize/rotate handles) — a second tap, once already selected,
+          // opens the edit sheet like every other mark kind does on tap 1.
+          onSelect();
         } else {
           onEdit();
         }

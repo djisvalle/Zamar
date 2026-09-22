@@ -159,6 +159,10 @@ export function AnnotateScreen({
   const [armedSymbol, setArmedSymbol] = useState<NotationSymbol>(NOTATION_SYMBOLS[0]);
   const [armedShape, setArmedShape] = useState<ShapeId>("hairpin-cresc");
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Decoupled from editingId so the Select tool's first tap on a ShapeMark
+  // can select it (showing AnnotateCanvas's resize/rotate handles) without
+  // also opening its edit sheet — see onEditRequest/onSelectRequest below.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const commit = (next: AnnotationObject[]) => {
     setHistory((h) => ({ past: [...h.past, annotations], future: [] }));
@@ -213,12 +217,14 @@ export function AnnotateScreen({
   const duplicateStroke = (item: Stroke) => {
     const copy: Stroke = { ...item, id: `stroke-${Date.now()}`, points: item.points.map((p) => ({ x: p.x + 14, y: p.y + 14 })), anchors: undefined };
     commit([...annotations, copy]);
+    setSelectedId(copy.id);
     setEditingId(copy.id);
   };
 
   const duplicateMark = (item: TextMark | ShapeMark) => {
     const copy = { ...item, id: `mark-${Date.now()}`, position: { x: item.position.x + 16, y: item.position.y + 16 }, anchor: undefined };
     commit([...annotations, copy]);
+    setSelectedId(copy.id);
     setEditingId(copy.id);
   };
 
@@ -294,8 +300,12 @@ export function AnnotateScreen({
             tool={tool}
             onCommit={commit}
             onReproject={reproject}
-            onEditRequest={setEditingId}
-            selectedId={editingId}
+            onEditRequest={(id) => {
+              setSelectedId(id);
+              setEditingId(id);
+            }}
+            onSelectRequest={setSelectedId}
+            selectedId={selectedId}
             scrollMode={scrollMode}
             scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
             reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
@@ -363,8 +373,12 @@ export function AnnotateScreen({
           onDelete={() => {
             commit(annotations.filter((a) => a.id !== editingStroke.id));
             setEditingId(null);
+            setSelectedId(null);
           }}
-          onClose={() => setEditingId(null)}
+          onClose={() => {
+            setEditingId(null);
+            setSelectedId(null);
+          }}
         />
       )}
 
@@ -382,8 +396,12 @@ export function AnnotateScreen({
           onDelete={() => {
             commit(annotations.filter((a) => a.id !== editingMark.id));
             setEditingId(null);
+            setSelectedId(null);
           }}
-          onClose={() => setEditingId(null)}
+          onClose={() => {
+            setEditingId(null);
+            setSelectedId(null);
+          }}
         />
       )}
 
