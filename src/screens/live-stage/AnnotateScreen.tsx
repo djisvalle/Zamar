@@ -567,7 +567,7 @@ function AnnotateDock({
       )}
       {tool === "select" && (
         <div className="muted" style={{ padding: "10px 14px 2px", fontSize: 11 }}>
-          Tap a stroke or mark to edit it, drag to move it.
+          Tap a stroke or mark to edit it, drag to move it. Tap a shape to show its resize/rotate handles; tap again to edit it.
         </div>
       )}
       {tool === "pin" && (
