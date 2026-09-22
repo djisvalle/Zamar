@@ -20,7 +20,12 @@ each item for what "done" actually means.
 
 ### Live Stage
 - [x] Chord chart rendering with real transpose/capo math (not hand-placed spacing)
-- [x] Expandable transpose/capo toolbar, Add-Song drawer, quick-edit sheet, annotate mode
+- [x] Expandable transpose/capo toolbar, Add-Song drawer, quick-edit sheet
+- [x] Annotate mode: freehand pen + highlighter (each with its own color/size/opacity),
+      a movable/editable text tool, a 16-symbol music-notation stamp palette (dynamics,
+      articulation, accidentals, bowing), an eraser, per-song undo/redo, and clear-this-page
+      vs. clear-all — session-only state (`state.annotations`/`state.annotationHistory` in
+      `src/state/store.ts`), not persisted to SQLite
 - [x] Idle auto-hide chrome (6s), end-of-setlist state
 - [x] Chord/Sheet toggle renders the real attached file — MusicXML via OpenSheetMusicDisplay,
       or photo/PDF via `<img>`/`<embed>` — with real pinch-to-zoom and drag-to-pan

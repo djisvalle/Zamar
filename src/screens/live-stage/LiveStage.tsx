@@ -11,6 +11,7 @@ import { AddSongDrawer } from "./AddSongDrawer";
 import { QuickEditSheet } from "./QuickEditSheet";
 import { InstrumentFilterModal } from "./InstrumentFilterModal";
 import { MusicToolbar } from "./MusicToolbar";
+import { AnnotateMode } from "./AnnotateMode";
 
 const IDLE_MS = 6000;
 const SWIPE_THRESHOLD = 50;
@@ -353,50 +354,3 @@ export function LiveStage() {
   );
 }
 
-function AnnotateMode({ song, onDone }: { song: { chordpro: string }; onDone: () => void }) {
-  return (
-    <div className="screen">
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", background: "var(--tint)", borderBottom: "1px solid var(--acc)" }}>
-        <button className="hdr-action" onClick={onDone}>
-          Undo
-        </button>
-        <span className="flex-1 text-center muted" style={{ fontSize: 12 }}>
-          Annotating
-        </span>
-        <button className="hdr-action" onClick={onDone}>
-          Done
-        </button>
-      </div>
-      <div className="flex-1" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 11, fontSize: 13, lineHeight: 1.35 }}>
-        <ChordChart chordpro={song.chordpro} hideChords />
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          top: 64,
-          right: 10,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          padding: "8px 6px",
-          borderRadius: 14,
-          background: "var(--surface)",
-          border: "1px solid var(--line)",
-          alignItems: "center",
-        }}
-      >
-        <span style={{ width: 18, height: 18, borderRadius: 99, background: "var(--acc)", border: "2px solid var(--surface)" }} />
-        <span style={{ width: 20, height: 1, background: "var(--line)" }} />
-        <span style={{ color: "var(--acc)", display: "flex" }}>
-          <Icon name="edit" size={15} strokeWidth={1.9} />
-        </span>
-        <span className="muted" style={{ display: "flex" }}>
-          <Icon name="square" size={15} strokeWidth={1.9} />
-        </span>
-        <span className="muted" style={{ display: "flex" }}>
-          <Icon name="eraser" size={15} strokeWidth={1.9} />
-        </span>
-      </div>
-    </div>
-  );
-}
