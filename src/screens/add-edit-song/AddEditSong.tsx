@@ -39,6 +39,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const [chordpro, setChordpro] = useState(prefillChordpro ?? existing?.chordpro ?? "");
   const [chartFormat, setChartFormat] = useState<ChartFormat>(prefillChartFormat ?? existing?.chartFormat ?? "chords-over-lyrics");
   const [attachments, setAttachments] = useState<Attachments>(hadPrefillAttachments ? prefillAttachments ?? {} : existing?.attachments ?? {});
+  const [defaultView, setDefaultView] = useState<Song["defaultView"]>(existing?.defaultView);
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [tab, setTab] = useState<"source" | "preview" | "notes" | AttachmentKind>("source");
   const [showErrors, setShowErrors] = useState(false);
@@ -83,6 +84,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
     chartFormat !== (existing?.chartFormat ?? "chords-over-lyrics") ||
     timeSig !== (existing?.timeSig ?? "4/4") ||
     notes !== (existing?.notes ?? "") ||
+    defaultView !== existing?.defaultView ||
     JSON.stringify(attachments) !== JSON.stringify(existing?.attachments ?? {});
 
   const activeKind: AttachmentKind | null = tab === "musicxml" || tab === "pdf" || tab === "image" ? tab : null;
@@ -112,6 +114,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
       chordpro,
       chartFormat,
       attachments,
+      defaultView,
       notes,
       annotations: existing?.annotations ?? {},
     };
@@ -205,6 +208,40 @@ export function AddEditSong({ songId }: { songId?: string }) {
               <input value={timeSig} onChange={(e) => setTimeSig(e.target.value)} placeholder="4/4" />
             </div>
           </div>
+
+          {(chordpro.trim() || CATEGORY_PRIORITY.some((k) => attachments[k])) && (
+            <div className="field">
+              <label>Default on Live Stage</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                <button
+                  type="button"
+                  className={"chip" + (!defaultView ? " active" : "")}
+                  onClick={() => setDefaultView(undefined)}
+                >
+                  Automatic
+                </button>
+                {chordpro.trim() && (
+                  <button
+                    type="button"
+                    className={"chip" + (defaultView === "chords" ? " active" : "")}
+                    onClick={() => setDefaultView("chords")}
+                  >
+                    Chords/Lyrics
+                  </button>
+                )}
+                {CATEGORY_PRIORITY.filter((k) => attachments[k]).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={"chip" + (defaultView === k ? " active" : "")}
+                    onClick={() => setDefaultView(k)}
+                  >
+                    {ATTACHMENT_LABEL[k]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
             <button className="btn" style={{ flex: 1, height: 34 }} onClick={() => setImportMethodOpen(true)}>
