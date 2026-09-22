@@ -1,4 +1,4 @@
-import type { AnnotationObject, Pin, ShapeMark, Stroke, TextMark } from "../state/types";
+import type { AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
 
 export const STROKE_WIDTH = 3;
 export const ERASE_RADIUS = 14;
@@ -12,6 +12,63 @@ export const PIN_ERASE_RADIUS = 18;
  * AnnotateScreen.tsx) — shared with hit-testing so a shape's erase/edit
  * target matches what's actually drawn on screen. */
 export const SHAPE_ASPECT = 60 / 22;
+
+/** Shapes whose glyph is inherently directional (drawn left-to-right) and
+ * therefore support the Select tool's rotate handle. Rect/ellipse shapes
+ * are symmetric boxes and only support resize — see the rotate/resize
+ * design spec. */
+const LINE_SHAPE_IDS: ReadonlySet<ShapeId> = new Set([
+  "slur",
+  "hairpin-cresc",
+  "hairpin-dim",
+  "arrow",
+  "line",
+  "bracket",
+]);
+
+export function isLineShape(shapeId: ShapeId): boolean {
+  return LINE_SHAPE_IDS.has(shapeId);
+}
+
+/** A shape mark's local (unrotated) bounding box half-extents, in px —
+ * `width ?? size * SHAPE_ASPECT` by `size`, i.e. today's fixed-aspect
+ * sizing when `width` was never set. */
+export function shapeHalfExtents(mark: ShapeMark): { halfW: number; halfH: number } {
+  const width = mark.width ?? mark.size * SHAPE_ASPECT;
+  return { halfW: width / 2, halfH: mark.size / 2 };
+}
+
+/** Rotates `point` around `center` by `degrees` clockwise (screen-space,
+ * y-down) — used both to place canvas handles and to hit-test a rotated
+ * shape by testing in its own local, unrotated frame. */
+export function rotateAround(
+  point: { x: number; y: number },
+  center: { x: number; y: number },
+  degrees: number
+): { x: number; y: number } {
+  const rad = (degrees * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  };
+}
+
+const ROTATION_SNAP_INCREMENT = 45;
+const ROTATION_SNAP_TOLERANCE = 5;
+
+/** Snaps `degrees` to the nearest 45° increment when within
+ * `ROTATION_SNAP_TOLERANCE` of it, otherwise returns it unchanged — lets
+ * the rotate handle land a clean horizontal/vertical shape with a
+ * fingertip while still allowing any angle. */
+export function snapRotation(degrees: number): number {
+  const normalized = ((degrees % 360) + 360) % 360;
+  const nearest = Math.round(normalized / ROTATION_SNAP_INCREMENT) * ROTATION_SNAP_INCREMENT;
+  return Math.abs(normalized - nearest) <= ROTATION_SNAP_TOLERANCE ? nearest % 360 : normalized;
+}
 
 /** `Stroke` kept its own `tool` discriminant rather than gaining a `kind`
  * field when `Pin` was added, so persisted `Stroke[]` JSON from before pins
@@ -98,8 +155,14 @@ export function hitTestPin(pin: Pin, point: Point, radius: number = PIN_ERASE_RA
  * metrics. */
 export function hitTestMark(mark: TextMark | ShapeMark, point: Point, radius: number = PIN_ERASE_RADIUS): boolean {
   const floor = Math.max(radius, PIN_ERASE_RADIUS);
-  const halfW = mark.kind === "shape" ? Math.max(floor, (mark.size * SHAPE_ASPECT) / 2) : Math.max(floor, (mark.text.length || 1) * mark.size * 0.32);
-  const halfH = Math.max(floor, mark.size * (mark.kind === "shape" ? 0.5 : 0.9));
+  if (mark.kind === "shape") {
+    const rotated = isLineShape(mark.shapeId) && mark.rotation;
+    const local = rotated ? rotateAround(point, mark.position, -mark.rotation!) : point;
+    const { halfW, halfH } = shapeHalfExtents(mark);
+    return Math.abs(local.x - mark.position.x) <= Math.max(floor, halfW) && Math.abs(local.y - mark.position.y) <= Math.max(floor, halfH);
+  }
+  const halfW = Math.max(floor, (mark.text.length || 1) * mark.size * 0.32);
+  const halfH = Math.max(floor, mark.size * 0.9);
   return Math.abs(point.x - mark.position.x) <= halfW && Math.abs(point.y - mark.position.y) <= halfH;
 }
 
