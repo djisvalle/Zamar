@@ -140,7 +140,7 @@ export function resolveAccentColor(el: Element): string {
  * other "this is the selected one" indicator in Annotate mode. */
 export function resolveSelectionColor(el: Element): string {
   const value = getComputedStyle(el).getPropertyValue("--acc-deep").trim();
-  return value || "#3a6a94";
+  return value || "#416180";
 }
 
 // Two swipeable 16-swatch pages, shared by every color-picking control.

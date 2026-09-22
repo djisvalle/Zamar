@@ -23,6 +23,7 @@
   --sheet-bg: #ffffff;
   --sheet-fg: #1d1f20;
   --sheet-mut: #7a7a7d;
+  --danger-fg: #8c3b3b;
 }
 .device[data-theme="dark"] {
   --bg: #1d2d3d;
@@ -39,6 +40,7 @@
   --sheet-bg: #ffffff;
   --sheet-fg: #1d1f20;
   --sheet-mut: #7a7a7d;
+  --danger-fg: #e8a9a9;
 }
 .device {
   --danger: #8c3b3b;

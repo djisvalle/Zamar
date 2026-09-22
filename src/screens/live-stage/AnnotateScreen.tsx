@@ -402,7 +402,7 @@ export function AnnotateScreen({
           <button
             className="sheet-row"
             style={{
-              color: "var(--danger)",
+              color: "var(--danger-fg)",
               fontWeight: 700,
               justifyContent: "flex-start",
               gap: 8,

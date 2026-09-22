@@ -67,6 +67,7 @@ function drawSelectionHalo(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTM
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.globalAlpha = 0.35;
+  ctx.globalCompositeOperation = "source-over";
   const pts = offset ? s.points.map((p) => ({ x: p.x + offset.x, y: p.y + offset.y })) : s.points;
   if (s.tool === "square" && pts.length === 2) {
     const [a, b] = pts;
