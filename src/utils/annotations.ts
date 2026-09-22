@@ -133,6 +133,16 @@ export function resolveAccentColor(el: Element): string {
   return value || "#5980a6";
 }
 
+/** Resolves the app's "selected/active" indicator color from the live
+ * theme's `--acc-deep` custom property — the same token `ColorGrid`'s
+ * selected-swatch ring and `ToolButton`'s active state already use — so
+ * the Select tool's canvas halo (see AnnotateCanvas.tsx) matches every
+ * other "this is the selected one" indicator in Annotate mode. */
+export function resolveSelectionColor(el: Element): string {
+  const value = getComputedStyle(el).getPropertyValue("--acc-deep").trim();
+  return value || "#3a6a94";
+}
+
 // Two swipeable 16-swatch pages, shared by every color-picking control.
 export const PALETTE_PAGES: string[][] = [
   ["#1a1a1a", "#e63946", "#ffd400", "#2a6fdb", "#3fb950", "#4b3fd6", "#e08e0b", "#9aa0a6", "#cfd4d9", "#a3242c", "#c9a227", "#7ec8ff", "#2a9d5c", "#7c3fd6", "#7a4b2a", "#33383d"],

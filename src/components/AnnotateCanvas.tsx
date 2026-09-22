@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
-import { hitTestAnnotation, isMark, isPin, isStroke, resolveAccentColor, SHAPE_ASPECT, STROKE_WIDTH, topStrokeHit } from "../utils/annotations";
+import { hitTestAnnotation, isMark, isPin, isStroke, resolveAccentColor, resolveSelectionColor, SHAPE_ASPECT, STROKE_WIDTH, topStrokeHit } from "../utils/annotations";
 import type { MxlScoreHandle } from "./MxlScore";
 import { Icon, type IconName } from "./Icon";
 
@@ -55,6 +55,31 @@ function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvas
   ctx.globalCompositeOperation = "source-over";
 }
 
+/** Draws a wide, translucent halo underneath a selected stroke so the
+ * Select tool's current target is visible on the canvas itself — see the
+ * annotate-mode roadmap's "Selection highlight on the canvas" item. Uses
+ * the same path-building logic as `drawStroke` (including the `square`
+ * tool's rect special-case) so the halo always matches the real shape. */
+function drawSelectionHalo(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvasElement, offset?: { x: number; y: number }) {
+  ctx.save();
+  ctx.strokeStyle = resolveSelectionColor(canvas);
+  ctx.lineWidth = (s.size ?? STROKE_WIDTH) + 10;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = 0.35;
+  const pts = offset ? s.points.map((p) => ({ x: p.x + offset.x, y: p.y + offset.y })) : s.points;
+  if (s.tool === "square" && pts.length === 2) {
+    const [a, b] = pts;
+    ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+  } else if (pts.length > 0) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** Wraps `children` (the real chart/attachment content) in a canvas overlay
  * that turns pointer drags into `Stroke`s, plus a sibling DOM layer of pin
  * badges and text/shape marks — the canvas is sized to the wrapped content's
@@ -67,6 +92,7 @@ export function AnnotateCanvas({
   onCommit,
   onReproject,
   onEditRequest,
+  selectedId,
   scrollMode,
   scoreRef,
   reprojectSignal,
@@ -94,6 +120,11 @@ export function AnnotateCanvas({
    * tapped while `select` is active — the caller (AnnotateScreen) owns the
    * style/edit-sheet UI, this component only knows a gesture happened. */
   onEditRequest?: (id: string) => void;
+  /** Id of the currently selected stroke or mark (mirrors the caller's
+   * open-edit-sheet state) — when set, that object is drawn/rendered with
+   * a highlight so the Select tool's target is visible on the canvas, not
+   * just in the edit sheet. */
+  selectedId?: string | null;
   /** true pauses drawing so the wrapped content can be scrolled with a
    * normal single-finger drag instead — a single finger can't both draw
    * and scroll, so Annotate mode's tool row offers this as an explicit
@@ -158,6 +189,11 @@ export function AnnotateCanvas({
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const selectedStroke = selectedId ? strokesOf(annotations).find((s) => s.id === selectedId) : undefined;
+    if (selectedStroke) {
+      const haloOffset = dragPreview && dragPreview.id === selectedStroke.id ? { x: dragPreview.dx, y: dragPreview.dy } : undefined;
+      drawSelectionHalo(ctx, selectedStroke, canvas, haloOffset);
+    }
     for (const s of strokesOf(annotations)) {
       const offset = dragPreview && dragPreview.id === s.id ? { x: dragPreview.dx, y: dragPreview.dy } : undefined;
       drawStroke(ctx, s, canvas, offset);
@@ -165,11 +201,11 @@ export function AnnotateCanvas({
     if (draft.current) drawStroke(ctx, draft.current, canvas);
     // draft.current is a ref (mutated imperatively by the pointer handlers
     // below, not React state) so it isn't itself a dependency — this effect
-    // re-runs whenever `annotations`/`size`/`dragPreview` change, and the
-    // handlers call the canvas's 2D context directly for the in-progress
-    // preview in between.
+    // re-runs whenever `annotations`/`size`/`dragPreview`/`selectedId` change,
+    // and the handlers call the canvas's 2D context directly for the
+    // in-progress preview in between.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotations, size, dragPreview]);
+  }, [annotations, size, dragPreview, selectedId]);
 
   // Reprojection: silently re-derives every anchored pin/mark/stroke's
   // on-screen position from the score's current layout after a
@@ -464,6 +500,7 @@ export function AnnotateCanvas({
             key={mark.id}
             mark={mark}
             tool={tool}
+            selected={mark.id === selectedId}
             onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
             onEdit={() => onEditRequest?.(mark.id)}
             onDrag={(x, y, clientX, clientY) => {
@@ -516,12 +553,14 @@ function renderMarkGlyph(item: TextMark | ShapeMark) {
 function MarkBadge({
   mark,
   tool,
+  selected,
   onErase,
   onEdit,
   onDrag,
 }: {
   mark: TextMark | ShapeMark;
   tool: AnnotateTool;
+  selected: boolean;
   onErase: () => void;
   onEdit: () => void;
   onDrag: (x: number, y: number, clientX: number, clientY: number) => void;
@@ -548,6 +587,9 @@ function MarkBadge({
         userSelect: "none",
         touchAction: "none",
         whiteSpace: "nowrap",
+        outline: selected ? "2px solid var(--acc-deep)" : "none",
+        outlineOffset: selected ? 4 : 0,
+        borderRadius: selected ? 6 : 0,
       }}
       onPointerDown={(e) => {
         e.stopPropagation();

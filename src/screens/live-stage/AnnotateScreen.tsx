@@ -295,6 +295,7 @@ export function AnnotateScreen({
             onCommit={commit}
             onReproject={reproject}
             onEditRequest={setEditingId}
+            selectedId={editingId}
             scrollMode={scrollMode}
             scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
             reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
