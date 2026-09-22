@@ -457,8 +457,28 @@ function AnnotateDock({
   armedShape: ShapeId;
   onArmShape: (s: ShapeId) => void;
 }) {
+  const [expanded, setExpanded] = useState(true);
+
   return (
     <div style={{ borderTop: "1px solid var(--line)", background: "var(--surface)", maxHeight: "58%", overflowY: "auto" }}>
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        aria-label={expanded ? "Collapse tool panel" : "Expand tool panel"}
+        style={{
+          display: "block",
+          width: "100%",
+          background: "none",
+          border: "none",
+          padding: "4px 0 0",
+          fontSize: 16,
+          color: "var(--mut)",
+          textAlign: "center",
+        }}
+      >
+        {expanded ? "﹀" : "︿"}
+      </button>
+      {expanded && (
+      <>
       {(tool === "pen" || tool === "square") && (
         <InkControls value={penStyle} onChange={onPenStyleChange} sizeRange={[1, 14]} opacityRange={[0.3, 1]} />
       )}
@@ -517,6 +537,8 @@ function AnnotateDock({
         <div className="muted" style={{ padding: "10px 14px 2px", fontSize: 11 }}>
           Tap the chart to drop a pin.
         </div>
+      )}
+      </>
       )}
 
       <div style={{ padding: "8px 4px 10px", display: "flex", alignItems: "center", gap: 2 }}>
