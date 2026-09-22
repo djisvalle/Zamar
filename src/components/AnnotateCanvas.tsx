@@ -1,6 +1,20 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
-import { hitTestAnnotation, isMark, isPin, isStroke, resolveAccentColor, resolveSelectionColor, SHAPE_ASPECT, STROKE_WIDTH, topStrokeHit } from "../utils/annotations";
+import {
+  hitTestAnnotation,
+  isLineShape,
+  isMark,
+  isPin,
+  isStroke,
+  resolveAccentColor,
+  resolveSelectionColor,
+  rotateAround,
+  shapeHalfExtents,
+  SHAPE_ASPECT,
+  snapRotation,
+  STROKE_WIDTH,
+  topStrokeHit,
+} from "../utils/annotations";
 import type { MxlScoreHandle } from "./MxlScore";
 import { Icon, type IconName } from "./Icon";
 
@@ -165,6 +179,10 @@ export function AnnotateCanvas({
   const [editingPin, setEditingPin] = useState<{ id: string; x: number; y: number; text: string; anchor: Pin["anchor"]; isNew: boolean } | null>(
     null
   );
+  // Live values for the ShapeMark currently being resized/rotated via
+  // ShapeHandles — applied on top of the real mark for rendering only,
+  // committed to `annotations` via onCommit on pointer-up (see ShapeHandles).
+  const [shapePreview, setShapePreview] = useState<{ id: string; width?: number; size?: number; rotation?: number } | null>(null);
 
   // Re-measures the wrapped content's natural size, but only while nothing
   // has been placed yet on this view — once an annotation exists, the size
@@ -245,6 +263,14 @@ export function AnnotateCanvas({
   const toContentPoint = (e: React.PointerEvent): { x: number; y: number } => {
     const rect = canvasRef.current!.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  // Same conversion as toContentPoint, but from raw client coordinates
+  // rather than a PointerEvent — ShapeHandles' rotate handle needs this to
+  // compute an angle from the shape's center, not just a delta.
+  const toContent = (clientX: number, clientY: number): { x: number; y: number } => {
+    const rect = wrapperRef.current!.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
   };
 
   const eraseAt = (p: { x: number; y: number }) => {
@@ -496,20 +522,36 @@ export function AnnotateCanvas({
             }}
           />
         ))}
-        {marksOf(annotations).map((mark) => (
-          <MarkBadge
-            key={mark.id}
-            mark={mark}
-            tool={tool}
-            selected={mark.id === selectedId}
-            onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
-            onEdit={() => onEditRequest?.(mark.id)}
-            onDrag={(x, y, clientX, clientY) => {
-              const anchor = scoreRef?.current?.anchorAtClientPoint(clientX, clientY) ?? undefined;
-              onCommit(annotations.map((a) => (a.id === mark.id ? { ...a, position: { x, y }, anchor } : a)));
-            }}
-          />
-        ))}
+        {marksOf(annotations).map((mark) => {
+          const displayMark: TextMark | ShapeMark =
+            mark.kind === "shape" && shapePreview && shapePreview.id === mark.id
+              ? { ...mark, ...shapePreview }
+              : mark;
+          return (
+            <Fragment key={mark.id}>
+              <MarkBadge
+                mark={displayMark}
+                tool={tool}
+                selected={mark.id === selectedId}
+                onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
+                onEdit={() => onEditRequest?.(mark.id)}
+                onDrag={(x, y, clientX, clientY) => {
+                  const anchor = scoreRef?.current?.anchorAtClientPoint(clientX, clientY) ?? undefined;
+                  onCommit(annotations.map((a) => (a.id === mark.id ? { ...a, position: { x, y }, anchor } : a)));
+                }}
+              />
+              {tool === "select" && selectedId === mark.id && mark.kind === "shape" && (
+                <ShapeHandles
+                  mark={displayMark as ShapeMark}
+                  toContent={toContent}
+                  onPreview={(p) => setShapePreview(p ? { id: mark.id, ...p } : null)}
+                  onResize={(width, size) => onCommit(annotations.map((a) => (a.id === mark.id ? { ...a, width, size } : a)))}
+                  onRotate={(rotation) => onCommit(annotations.map((a) => (a.id === mark.id ? { ...a, rotation } : a)))}
+                />
+              )}
+            </Fragment>
+          );
+        })}
         {editingPin && (
           <PinEditor
             x={editingPin.x}
@@ -526,8 +568,8 @@ export function AnnotateCanvas({
   );
 }
 
-export function ShapeGlyph({ shapeId, color, size }: { shapeId: ShapeId; color: string; size: number }) {
-  const w = size * SHAPE_ASPECT;
+export function ShapeGlyph({ shapeId, color, size, width }: { shapeId: ShapeId; color: string; size: number; width?: number }) {
+  const w = width ?? size * SHAPE_ASPECT;
   const common = { stroke: color, strokeWidth: 2.5, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   return (
     <svg width={w} height={size} viewBox="0 0 60 22" style={{ display: "block" }}>
@@ -546,7 +588,7 @@ export function ShapeGlyph({ shapeId, color, size }: { shapeId: ShapeId; color: 
 }
 
 function renderMarkGlyph(item: TextMark | ShapeMark) {
-  if (item.kind === "shape") return <ShapeGlyph shapeId={item.shapeId} color={item.color} size={item.size} />;
+  if (item.kind === "shape") return <ShapeGlyph shapeId={item.shapeId} color={item.color} size={item.size} width={item.width} />;
   if (item.iconGlyph) return <Icon name={item.iconGlyph as IconName} size={item.size} strokeWidth={2} />;
   return item.text;
 }
@@ -575,7 +617,10 @@ function MarkBadge({
         position: "absolute",
         left: mark.position.x,
         top: mark.position.y,
-        transform: "translate(-50%, -50%)",
+        transform:
+          mark.kind === "shape" && isLineShape(mark.shapeId) && mark.rotation
+            ? `translate(-50%, -50%) rotate(${mark.rotation}deg)`
+            : "translate(-50%, -50%)",
         color: mark.color,
         fontSize: mark.kind === "text" ? mark.size : undefined,
         fontWeight: 700,
@@ -619,6 +664,174 @@ function MarkBadge({
       }}
     >
       {renderMarkGlyph(mark)}
+    </div>
+  );
+}
+
+/** Resize (length for line-type shapes, independent width+height for
+ * rect/ellipse) and, for line-type shapes only, rotate handles shown when
+ * the Select tool has a `ShapeMark` selected. Drag state lives in refs (the
+ * gesture itself doesn't need React state); `onPreview` reports live values
+ * up to the parent for on-canvas feedback while dragging, and
+ * `onResize`/`onRotate` commit the final value on pointer-up — the same
+ * commit-on-release shape every other drag gesture in this file uses. */
+function ShapeHandles({
+  mark,
+  toContent,
+  onPreview,
+  onResize,
+  onRotate,
+}: {
+  mark: ShapeMark;
+  toContent: (clientX: number, clientY: number) => { x: number; y: number };
+  onPreview: (preview: { width?: number; size?: number; rotation?: number } | null) => void;
+  onResize: (width: number, size: number) => void;
+  onRotate: (rotation: number) => void;
+}) {
+  const resizeDrag = useRef<{
+    startClientX: number;
+    startClientY: number;
+    startWidth: number;
+    startSize: number;
+    rotation: number;
+    isLine: boolean;
+    currentWidth: number;
+    currentSize: number;
+  } | null>(null);
+  const rotateDrag = useRef<{ startAngle: number; startRotation: number; current: number } | null>(null);
+
+  const { halfW, halfH } = shapeHalfExtents(mark);
+  const rotation = mark.rotation ?? 0;
+  const isLine = isLineShape(mark.shapeId);
+  const STEM = 28;
+  const resizeLocal = isLine ? { x: halfW, y: 0 } : { x: halfW, y: halfH };
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: mark.position.x,
+        top: mark.position.y,
+        transform: isLine && rotation ? `rotate(${rotation}deg)` : undefined,
+        transformOrigin: "0 0",
+        pointerEvents: "none",
+      }}
+    >
+      {isLine && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: -(halfH + STEM),
+            width: 1,
+            height: halfH + STEM,
+            background: "var(--acc-deep)",
+          }}
+        />
+      )}
+      {isLine && (
+        <div
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            const p = toContent(e.clientX, e.clientY);
+            rotateDrag.current = {
+              startAngle: (Math.atan2(p.y - mark.position.y, p.x - mark.position.x) * 180) / Math.PI,
+              startRotation: rotation,
+              current: rotation,
+            };
+            (e.target as Element).setPointerCapture?.(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            const d = rotateDrag.current;
+            if (!d) return;
+            const p = toContent(e.clientX, e.clientY);
+            const angle = (Math.atan2(p.y - mark.position.y, p.x - mark.position.x) * 180) / Math.PI;
+            const next = snapRotation(d.startRotation + (angle - d.startAngle));
+            d.current = next;
+            onPreview({ rotation: next });
+          }}
+          onPointerUp={() => {
+            const d = rotateDrag.current;
+            rotateDrag.current = null;
+            if (!d) return;
+            onPreview(null);
+            onRotate(d.current);
+          }}
+          onPointerCancel={() => {
+            rotateDrag.current = null;
+            onPreview(null);
+          }}
+          aria-label="Rotate shape"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: -(halfH + STEM),
+            transform: "translate(-50%, -50%)",
+            width: 20,
+            height: 20,
+            borderRadius: 99,
+            background: "var(--surface)",
+            border: "2px solid var(--acc-deep)",
+            pointerEvents: "auto",
+            touchAction: "none",
+            cursor: "grab",
+          }}
+        />
+      )}
+      <div
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          resizeDrag.current = {
+            startClientX: e.clientX,
+            startClientY: e.clientY,
+            startWidth: halfW * 2,
+            startSize: mark.size,
+            rotation,
+            isLine,
+            currentWidth: halfW * 2,
+            currentSize: mark.size,
+          };
+          (e.target as Element).setPointerCapture?.(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const d = resizeDrag.current;
+          if (!d) return;
+          const rawDx = e.clientX - d.startClientX;
+          const rawDy = e.clientY - d.startClientY;
+          const local = d.isLine ? rotateAround({ x: rawDx, y: rawDy }, { x: 0, y: 0 }, -d.rotation) : { x: rawDx, y: rawDy };
+          const nextWidth = Math.max(16, d.startWidth + local.x * 2);
+          const nextSize = d.isLine ? d.startSize : Math.max(16, d.startSize + local.y * 2);
+          d.currentWidth = nextWidth;
+          d.currentSize = nextSize;
+          onPreview({ width: nextWidth, size: nextSize });
+        }}
+        onPointerUp={() => {
+          const d = resizeDrag.current;
+          resizeDrag.current = null;
+          if (!d) return;
+          onPreview(null);
+          onResize(d.currentWidth, d.currentSize);
+        }}
+        onPointerCancel={() => {
+          resizeDrag.current = null;
+          onPreview(null);
+        }}
+        aria-label="Resize shape"
+        style={{
+          position: "absolute",
+          left: resizeLocal.x,
+          top: resizeLocal.y,
+          transform: "translate(-50%, -50%)",
+          width: 18,
+          height: 18,
+          borderRadius: isLine ? 99 : 4,
+          background: "var(--surface)",
+          border: "2px solid var(--acc-deep)",
+          pointerEvents: "auto",
+          touchAction: "none",
+          cursor: isLine ? "ew-resize" : "nwse-resize",
+        }}
+      />
     </div>
   );
 }
