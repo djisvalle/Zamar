@@ -1,34 +1,87 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import type { AnnotationObject, Pin, Stroke } from "../state/types";
-import { STROKE_WIDTH, hitTestAnnotation, isPin, resolveAccentColor } from "../utils/annotations";
+import type { AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
+import { hitTestAnnotation, isMark, isPin, isStroke, resolveAccentColor, SHAPE_ASPECT, STROKE_WIDTH, topStrokeHit } from "../utils/annotations";
 import type { MxlScoreHandle } from "./MxlScore";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
-export type AnnotateTool = "pen" | "square" | "pin" | "eraser";
+export type AnnotateTool = "select" | "pen" | "highlighter" | "square" | "pin" | "text" | "notation" | "shapes" | "eraser";
+
+interface InkStyle {
+  color: string;
+  size: number;
+  opacity: number;
+}
+
+interface MarkStyle {
+  color: string;
+  size: number;
+}
+
+export interface ArmedSymbol {
+  id: string;
+  glyph?: string;
+  icon?: IconName;
+}
+
+const TAP_THRESHOLD = 6;
+const SELECT_HIT_RADIUS = 10;
 
 function strokesOf(annotations: AnnotationObject[]): Stroke[] {
-  return annotations.filter((a): a is Stroke => !isPin(a));
+  return annotations.filter(isStroke);
+}
+
+function marksOf(annotations: AnnotationObject[]): (TextMark | ShapeMark)[] {
+  return annotations.filter(isMark);
+}
+
+function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvasElement, offset?: { x: number; y: number }) {
+  ctx.strokeStyle = s.color ?? resolveAccentColor(canvas);
+  ctx.lineWidth = s.size ?? STROKE_WIDTH;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = s.opacity ?? 1;
+  ctx.globalCompositeOperation = s.tool === "highlighter" ? "multiply" : "source-over";
+  const pts = offset ? s.points.map((p) => ({ x: p.x + offset.x, y: p.y + offset.y })) : s.points;
+  if (s.tool === "square" && pts.length === 2) {
+    const [a, b] = pts;
+    ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+  } else if (pts.length > 0) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
 }
 
 /** Wraps `children` (the real chart/attachment content) in a canvas overlay
  * that turns pointer drags into `Stroke`s, plus a sibling DOM layer of pin
- * badges — the canvas is sized to the wrapped content's natural height and
- * lives inside the same scrollable ancestor as that content, so native
- * scroll carries everything together with no extra wiring — see the spec's
- * "Canvas mechanics" section. */
+ * badges and text/shape marks — the canvas is sized to the wrapped content's
+ * natural height and lives inside the same scrollable ancestor as that
+ * content, so native scroll carries everything together with no extra
+ * wiring — see the spec's "Canvas mechanics" section. */
 export function AnnotateCanvas({
   annotations,
   tool,
   onCommit,
   onReproject,
+  onEditRequest,
   scrollMode,
   scoreRef,
   reprojectSignal,
+  penStyle,
+  highlighterStyle,
+  markStyle,
+  shapeStyle,
+  armedSymbol,
+  armedShape,
+  eraserSize,
   children,
 }: {
   annotations: AnnotationObject[];
   tool: AnnotateTool;
-  /** Called with the full next array whenever a draw/erase/pin gesture
+  /** Called with the full next array whenever a draw/erase/place/move gesture
    * changes it — the caller owns undo history; this component only reports
    * finished user mutations. */
   onCommit: (next: AnnotationObject[]) => void;
@@ -37,12 +90,16 @@ export function AnnotateCanvas({
    * the person — this is not a user edit, so it must not push an undo-history
    * entry the way `onCommit` does. */
   onReproject: (next: AnnotationObject[]) => void;
+  /** Fires when the `select` tool taps a stroke, or a text/shape mark is
+   * tapped while `select` is active — the caller (AnnotateScreen) owns the
+   * style/edit-sheet UI, this component only knows a gesture happened. */
+  onEditRequest?: (id: string) => void;
   /** true pauses drawing so the wrapped content can be scrolled with a
    * normal single-finger drag instead — a single finger can't both draw
    * and scroll, so Annotate mode's tool row offers this as an explicit
    * toggle. */
   scrollMode: boolean;
-  /** Only meaningful for the `musicxml` view — lets pin/stroke placement
+  /** Only meaningful for the `musicxml` view — lets pin/stroke/mark placement
    * anchor to the score's nearest measure, and lets `reprojectSignal`
    * reposition existing anchored annotations after a transpose. Omitted on
    * every other view (chords/image/pdf), which have no measures to anchor
@@ -51,13 +108,28 @@ export function AnnotateCanvas({
   /** Changes value whenever the score behind `scoreRef` just re-rendered
    * from a transpose — triggers a reprojection pass via `onReproject`. */
   reprojectSignal?: number;
+  /** Style newly drawn pen/square strokes pick up. */
+  penStyle: InkStyle;
+  highlighterStyle: InkStyle;
+  /** Style newly placed text/notation marks pick up. */
+  markStyle: MarkStyle;
+  /** Style newly placed shape marks pick up. */
+  shapeStyle: MarkStyle;
+  /** Which notation stamp the Notation tool places next. */
+  armedSymbol: ArmedSymbol;
+  /** Which shape the Shapes tool places next. */
+  armedShape: ShapeId;
+  eraserSize: number;
   children: ReactNode;
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const draft = useRef<Stroke | null>(null);
   const activePointer = useRef<number | null>(null);
+  const selectDrag = useRef<{ id: string; startX: number; startY: number; dx: number; dy: number } | null>(null);
+  const placeStart = useRef<{ x: number; y: number } | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [dragPreview, setDragPreview] = useState<{ id: string; dx: number; dy: number } | null>(null);
   const [editingPin, setEditingPin] = useState<{ id: string; x: number; y: number; text: string; anchor: Pin["anchor"]; isNew: boolean } | null>(
     null
   );
@@ -86,34 +158,24 @@ export function AnnotateCanvas({
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = resolveAccentColor(canvas);
-    ctx.lineWidth = STROKE_WIDTH;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    const all = draft.current ? [...strokesOf(annotations), draft.current] : strokesOf(annotations);
-    for (const s of all) {
-      if (s.points.length === 0) continue;
-      if (s.tool === "square" && s.points.length === 2) {
-        const [a, b] = s.points;
-        ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-      } else {
-        ctx.beginPath();
-        ctx.moveTo(s.points[0].x, s.points[0].y);
-        for (const p of s.points.slice(1)) ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-      }
+    for (const s of strokesOf(annotations)) {
+      const offset = dragPreview && dragPreview.id === s.id ? { x: dragPreview.dx, y: dragPreview.dy } : undefined;
+      drawStroke(ctx, s, canvas, offset);
     }
+    if (draft.current) drawStroke(ctx, draft.current, canvas);
     // draft.current is a ref (mutated imperatively by the pointer handlers
     // below, not React state) so it isn't itself a dependency — this effect
-    // re-runs whenever `annotations` or `size` change, and the handlers call
-    // the canvas's 2D context directly for the in-progress preview in between.
+    // re-runs whenever `annotations`/`size`/`dragPreview` change, and the
+    // handlers call the canvas's 2D context directly for the in-progress
+    // preview in between.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotations, size]);
+  }, [annotations, size, dragPreview]);
 
-  // Reprojection: silently re-derives every anchored pin/stroke's on-screen
-  // position from the score's current layout after a transpose-triggered
-  // re-render — see MxlScoreHandle.clientPointForAnchor. Not a user edit, so
-  // it goes through `onReproject`, not `onCommit` (no undo-history entry).
+  // Reprojection: silently re-derives every anchored pin/mark/stroke's
+  // on-screen position from the score's current layout after a
+  // transpose-triggered re-render — see MxlScoreHandle.clientPointForAnchor.
+  // Not a user edit, so it goes through `onReproject`, not `onCommit` (no
+  // undo-history entry).
   useEffect(() => {
     const handle = scoreRef?.current;
     const wrapperEl = wrapperRef.current;
@@ -122,7 +184,7 @@ export function AnnotateCanvas({
     const toContent = (client: { clientX: number; clientY: number }) => ({ x: client.clientX - rect.left, y: client.clientY - rect.top });
     let changed = false;
     const next = annotations.map((a) => {
-      if (isPin(a)) {
+      if (isPin(a) || isMark(a)) {
         if (!a.anchor) return a;
         const pt = handle.clientPointForAnchor(a.anchor);
         if (!pt) return a;
@@ -149,8 +211,16 @@ export function AnnotateCanvas({
   };
 
   const eraseAt = (p: { x: number; y: number }) => {
-    const kept = annotations.filter((a) => !hitTestAnnotation(a, p));
+    const kept = annotations.filter((a) => !hitTestAnnotation(a, p, eraserSize));
     if (kept.length !== annotations.length) onCommit(kept);
+  };
+
+  const capture = (e: React.PointerEvent) => {
+    try {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      // Nice-to-have only.
+    }
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -172,22 +242,36 @@ export function AnnotateCanvas({
       });
       return;
     }
-    try {
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-    } catch {
-      // Nice-to-have only.
+    if (tool === "select") {
+      const hitId = topStrokeHit(p, annotations, SELECT_HIT_RADIUS);
+      if (!hitId) return;
+      capture(e);
+      activePointer.current = e.pointerId;
+      selectDrag.current = { id: hitId, startX: p.x, startY: p.y, dx: 0, dy: 0 };
+      return;
     }
+    if (tool === "text" || tool === "notation" || tool === "shapes") {
+      capture(e);
+      activePointer.current = e.pointerId;
+      placeStart.current = p;
+      return;
+    }
+    capture(e);
     activePointer.current = e.pointerId;
     // All-or-nothing per stroke: if the very first point can't anchor (the
     // score isn't ready yet), the whole stroke stays pixel-only rather than
     // a partially-anchored array — mixing anchored and unanchored points
     // within one stroke isn't a state reprojection needs to handle.
     const firstAnchor = scoreRef?.current?.anchorAtClientPoint(e.clientX, e.clientY);
+    const style = tool === "highlighter" ? highlighterStyle : penStyle;
     draft.current = {
       id: `stroke-${Date.now()}`,
       tool,
       points: [p],
       anchors: firstAnchor ? [firstAnchor] : undefined,
+      color: style.color,
+      size: style.size,
+      opacity: style.opacity,
     };
   };
 
@@ -199,6 +283,14 @@ export function AnnotateCanvas({
       eraseAt(p);
       return;
     }
+    if (tool === "select") {
+      if (!selectDrag.current) return;
+      selectDrag.current.dx = p.x - selectDrag.current.startX;
+      selectDrag.current.dy = p.y - selectDrag.current.startY;
+      setDragPreview({ id: selectDrag.current.id, dx: selectDrag.current.dx, dy: selectDrag.current.dy });
+      return;
+    }
+    if (tool === "text" || tool === "notation" || tool === "shapes") return;
     if (!draft.current) return;
     // A later point failing to anchor (point strayed off any measure and
     // findNearestMeasureAnchor still found *something* nearest, so this
@@ -221,27 +313,69 @@ export function AnnotateCanvas({
     const ctx = canvas?.getContext("2d");
     if (canvas && ctx && draft.current) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = resolveAccentColor(canvas);
-      ctx.lineWidth = STROKE_WIDTH;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      for (const s of [...strokesOf(annotations), draft.current]) {
-        if (s.tool === "square" && s.points.length === 2) {
-          const [a, b] = s.points;
-          ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-        } else if (s.points.length > 0) {
-          ctx.beginPath();
-          ctx.moveTo(s.points[0].x, s.points[0].y);
-          for (const pt of s.points.slice(1)) ctx.lineTo(pt.x, pt.y);
-          ctx.stroke();
-        }
-      }
+      for (const s of strokesOf(annotations)) drawStroke(ctx, s, canvas);
+      drawStroke(ctx, draft.current, canvas);
     }
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
     if (activePointer.current !== e.pointerId) return;
     activePointer.current = null;
+    const p = toContentPoint(e);
+
+    if (tool === "select") {
+      const drag = selectDrag.current;
+      selectDrag.current = null;
+      setDragPreview(null);
+      if (!drag) return;
+      if (Math.hypot(drag.dx, drag.dy) > TAP_THRESHOLD) {
+        // A manual reposition wins over reprojection going forward — keeping
+        // a stale anchor would silently snap the stroke back to its old spot
+        // on the next transpose.
+        onCommit(
+          annotations.map((a) =>
+            a.id === drag.id && isStroke(a)
+              ? { ...a, points: a.points.map((pt) => ({ x: pt.x + drag.dx, y: pt.y + drag.dy })), anchors: undefined }
+              : a
+          )
+        );
+      } else {
+        onEditRequest?.(drag.id);
+      }
+      return;
+    }
+
+    if (tool === "text" || tool === "notation" || tool === "shapes") {
+      const start = placeStart.current;
+      placeStart.current = null;
+      if (!start) return;
+      if (Math.hypot(p.x - start.x, p.y - start.y) > TAP_THRESHOLD) return;
+      const anchor = scoreRef?.current?.anchorAtClientPoint(e.clientX, e.clientY) ?? undefined;
+      const id = `mark-${Date.now()}`;
+      if (tool === "shapes") {
+        const mark: ShapeMark = { id, kind: "shape", position: start, shapeId: armedShape, color: shapeStyle.color, size: shapeStyle.size, anchor };
+        onCommit([...annotations, mark]);
+      } else if (tool === "text") {
+        const mark: TextMark = { id, kind: "text", position: start, text: "Note", color: markStyle.color, size: markStyle.size, anchor };
+        onCommit([...annotations, mark]);
+        onEditRequest?.(id);
+      } else {
+        const mark: TextMark = {
+          id,
+          kind: "text",
+          position: start,
+          text: armedSymbol.glyph ?? "",
+          iconGlyph: armedSymbol.icon,
+          symbolId: armedSymbol.id,
+          color: markStyle.color,
+          size: markStyle.size,
+          anchor,
+        };
+        onCommit([...annotations, mark]);
+      }
+      return;
+    }
+
     if (draft.current && draft.current.points.length > 0) {
       onCommit([...annotations, draft.current]);
     }
@@ -272,6 +406,10 @@ export function AnnotateCanvas({
   };
 
   const wrapWidth = wrapperRef.current?.clientWidth ?? size.width;
+  // Canvas ignores pointer events for tools that place/select via the
+  // transparent overlay below (pin/select/text/notation/shapes) so it
+  // doesn't also try to start an ink stroke.
+  const overlayTool = tool === "pin" || tool === "select" || tool === "text" || tool === "notation" || tool === "shapes";
 
   return (
     <div ref={wrapperRef} style={{ position: "relative" }}>
@@ -286,21 +424,24 @@ export function AnnotateCanvas({
           left: 0,
           width: "100%",
           touchAction: scrollMode ? "pan-y" : "none",
-          pointerEvents: scrollMode || tool === "pin" ? "none" : "auto",
+          pointerEvents: scrollMode || overlayTool ? "none" : "auto",
         }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       />
-      {/* Pin tool still needs to know where on the chart was tapped, even
-          though the canvas itself ignores pointer events while it's active
-          (so it doesn't also try to start a stroke) — this transparent
-          layer catches the tap instead. */}
-      {tool === "pin" && !scrollMode && (
+      {/* Placement/select tools still need to know where on the chart was
+          tapped, even though the canvas itself ignores pointer events while
+          one of them is active (so it doesn't also try to start a stroke) —
+          this transparent layer catches the gesture instead. */}
+      {overlayTool && !scrollMode && (
         <div
           style={{ position: "absolute", inset: 0, touchAction: "none" }}
           onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
         />
       )}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
@@ -318,6 +459,19 @@ export function AnnotateCanvas({
             }}
           />
         ))}
+        {marksOf(annotations).map((mark) => (
+          <MarkBadge
+            key={mark.id}
+            mark={mark}
+            tool={tool}
+            onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
+            onEdit={() => onEditRequest?.(mark.id)}
+            onDrag={(x, y, clientX, clientY) => {
+              const anchor = scoreRef?.current?.anchorAtClientPoint(clientX, clientY) ?? undefined;
+              onCommit(annotations.map((a) => (a.id === mark.id ? { ...a, position: { x, y }, anchor } : a)));
+            }}
+          />
+        ))}
         {editingPin && (
           <PinEditor
             x={editingPin.x}
@@ -330,6 +484,98 @@ export function AnnotateCanvas({
           />
         )}
       </div>
+    </div>
+  );
+}
+
+export function ShapeGlyph({ shapeId, color, size }: { shapeId: ShapeId; color: string; size: number }) {
+  const w = size * SHAPE_ASPECT;
+  const common = { stroke: color, strokeWidth: 2.5, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  return (
+    <svg width={w} height={size} viewBox="0 0 60 22" style={{ display: "block" }}>
+      {shapeId === "slur" && <path d="M2 18 Q30 2 58 18" {...common} />}
+      {shapeId === "hairpin-cresc" && <path d="M58 2 L2 11 L58 20" {...common} />}
+      {shapeId === "hairpin-dim" && <path d="M2 2 L58 11 L2 20" {...common} />}
+      {shapeId === "arrow" && <path d="M2 11 L54 11 M54 11 L44 4 M54 11 L44 18" {...common} />}
+      {shapeId === "line" && <path d="M2 11 L58 11" {...common} />}
+      {shapeId === "bracket" && <path d="M2 3 L2 11 L58 11 L58 3" {...common} />}
+      {shapeId === "rect-outline" && <rect x="3" y="3" width="54" height="16" rx="2" {...common} />}
+      {shapeId === "rect-fill" && <rect x="3" y="3" width="54" height="16" rx="2" fill={color} stroke="none" />}
+      {shapeId === "ellipse-outline" && <ellipse cx="30" cy="11" rx="27" ry="9" {...common} />}
+      {shapeId === "ellipse-fill" && <ellipse cx="30" cy="11" rx="27" ry="9" fill={color} stroke="none" />}
+    </svg>
+  );
+}
+
+function renderMarkGlyph(item: TextMark | ShapeMark) {
+  if (item.kind === "shape") return <ShapeGlyph shapeId={item.shapeId} color={item.color} size={item.size} />;
+  if (item.iconGlyph) return <Icon name={item.iconGlyph as IconName} size={item.size} strokeWidth={2} />;
+  return item.text;
+}
+
+function MarkBadge({
+  mark,
+  tool,
+  onErase,
+  onEdit,
+  onDrag,
+}: {
+  mark: TextMark | ShapeMark;
+  tool: AnnotateTool;
+  onErase: () => void;
+  onEdit: () => void;
+  onDrag: (x: number, y: number, clientX: number, clientY: number) => void;
+}) {
+  const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
+  const interactive = tool === "select" || tool === "eraser";
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: mark.position.x,
+        top: mark.position.y,
+        transform: "translate(-50%, -50%)",
+        color: mark.color,
+        fontSize: mark.kind === "text" ? mark.size : undefined,
+        fontWeight: 700,
+        fontFamily: "var(--font-heading)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: interactive ? "auto" : "none",
+        cursor: tool === "select" ? "grab" : "default",
+        userSelect: "none",
+        touchAction: "none",
+        whiteSpace: "nowrap",
+      }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        if (tool === "eraser") {
+          onErase();
+          return;
+        }
+        if (tool !== "select") return;
+        dragState.current = { startX: e.clientX, startY: e.clientY, origX: mark.position.x, origY: mark.position.y, moved: false };
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        const d = dragState.current;
+        if (!d) return;
+        if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 3) d.moved = true;
+      }}
+      onPointerUp={(e) => {
+        const d = dragState.current;
+        dragState.current = null;
+        if (!d) return;
+        if (d.moved) {
+          onDrag(d.origX + (e.clientX - d.startX), d.origY + (e.clientY - d.startY), e.clientX, e.clientY);
+        } else {
+          onEdit();
+        }
+      }}
+    >
+      {renderMarkGlyph(mark)}
     </div>
   );
 }

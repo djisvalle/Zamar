@@ -45,20 +45,29 @@ export interface MusicalAnchor {
 
 export interface Stroke {
   id: string;
-  tool: "pen" | "square";
-  /** "pen": every point on the drawn polyline, in order. "square": exactly
-   * two points — the drag's start and end corners. Coordinates are in CSS
-   * pixels relative to the top-left of the view's content area, at that
-   * content's natural (unzoomed) size. Current on-screen position — for a
-   * musicxml-view stroke with `anchors` set, this is kept in sync by
-   * reprojection after every re-render; it's the only representation for
-   * chords/image/pdf, which have no measures to anchor to. */
+  tool: "pen" | "square" | "highlighter";
+  /** "pen"/"highlighter": every point on the drawn polyline, in order.
+   * "square": exactly two points — the drag's start and end corners.
+   * Coordinates are in CSS pixels relative to the top-left of the view's
+   * content area, at that content's natural (unzoomed) size. Current
+   * on-screen position — for a musicxml-view stroke with `anchors` set,
+   * this is kept in sync by reprojection after every re-render; it's the
+   * only representation for chords/image/pdf, which have no measures to
+   * anchor to. */
   points: { x: number; y: number }[];
   /** One anchor per point, parallel to `points`, present only for strokes
    * drawn on the `musicxml` view. Absent — including for strokes persisted
    * before this feature — means "not reprojectable"; `points` is then used
    * as-is with no repositioning. */
   anchors?: MusicalAnchor[];
+  /** Per-stroke color/width/opacity. Undefined on every stroke drawn before
+   * per-object styling existed — that (and any stroke drawn without
+   * touching the style controls) falls back to the original fixed
+   * accent-color / `STROKE_WIDTH` / opacity-1 rendering, so old persisted
+   * data needs no migration. */
+  color?: string;
+  size?: number;
+  opacity?: number;
 }
 
 export interface Pin {
@@ -71,11 +80,57 @@ export interface Pin {
   anchor?: MusicalAnchor;
 }
 
+export type ShapeId =
+  | "slur"
+  | "hairpin-cresc"
+  | "hairpin-dim"
+  | "arrow"
+  | "line"
+  | "bracket"
+  | "rect-outline"
+  | "rect-fill"
+  | "ellipse-outline"
+  | "ellipse-fill";
+
+/** A draggable text/symbol stamp placed with the Text or Notation tool —
+ * distinct from `Pin`, which is a sticky note with its own tap-to-open
+ * textarea editor. `TextMark`/`ShapeMark` render and drag directly on the
+ * chart like a `Stroke`, share one edit sheet (see AnnotateScreen.tsx's
+ * `EditMarkSheet`), and share `Pin`'s reprojection model: a single
+ * `position` + optional single `anchor`, not the parallel `points`/`anchors`
+ * arrays a multi-point `Stroke` needs. */
+export interface TextMark {
+  id: string;
+  kind: "text";
+  position: { x: number; y: number };
+  text: string;
+  color: string;
+  size: number;
+  /** Set for a notation-stamp mark placed via the Notation tool in place of
+   * typed text — names one of the notation icons (fermata, up/down bow).
+   * Glyph-only stamps (pp, f, >, ♭, …) are stored directly in `text`. */
+  iconGlyph?: string;
+  /** Which notation stamp produced this mark, so re-editing shows it can't
+   * be mistaken for free text even though both are `kind: "text"`. */
+  symbolId?: string;
+  anchor?: MusicalAnchor;
+}
+
+export interface ShapeMark {
+  id: string;
+  kind: "shape";
+  position: { x: number; y: number };
+  shapeId: ShapeId;
+  color: string;
+  size: number;
+  anchor?: MusicalAnchor;
+}
+
 /** `Stroke` keeps its own `tool` discriminant rather than gaining a `kind`
  * field, so persisted `Stroke[]` JSON from before pins existed parses as
  * valid `AnnotationObject[]` with no migration — see `utils/annotations.ts`'s
  * `isPin`. */
-export type AnnotationObject = Stroke | Pin;
+export type AnnotationObject = Stroke | Pin | TextMark | ShapeMark;
 
 export interface Song {
   id: string;

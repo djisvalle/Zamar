@@ -1,12 +1,17 @@
-import type { AnnotationObject, Pin, Stroke } from "../state/types";
+import type { AnnotationObject, Pin, ShapeMark, Stroke, TextMark } from "../state/types";
 
 export const STROKE_WIDTH = 3;
 export const ERASE_RADIUS = 14;
 /** Pin badges are bigger than a stroke's hit radius (see `AnnotateCanvas.tsx`'s
  * `.pin-badge`-equivalent sizing), so the eraser needs a matching bigger
  * radius to feel consistent — tapping near a pin should erase it as readily
- * as tapping near a line of ink does. */
+ * as tapping near a line of ink does. Also used as the floor for text/shape
+ * marks, which are similarly bigger targets than a bare stroke. */
 export const PIN_ERASE_RADIUS = 18;
+/** Width-to-height ratio every shape glyph is drawn at (see `ShapeGlyph` in
+ * AnnotateScreen.tsx) — shared with hit-testing so a shape's erase/edit
+ * target matches what's actually drawn on screen. */
+export const SHAPE_ASPECT = 60 / 22;
 
 /** `Stroke` kept its own `tool` discriminant rather than gaining a `kind`
  * field when `Pin` was added, so persisted `Stroke[]` JSON from before pins
@@ -14,6 +19,24 @@ export const PIN_ERASE_RADIUS = 18;
  * the one place that distinguishes them. */
 export function isPin(obj: AnnotationObject): obj is Pin {
   return "kind" in obj && obj.kind === "pin";
+}
+
+export function isTextMark(obj: AnnotationObject): obj is TextMark {
+  return "kind" in obj && obj.kind === "text";
+}
+
+export function isShapeMark(obj: AnnotationObject): obj is ShapeMark {
+  return "kind" in obj && obj.kind === "shape";
+}
+
+/** Text and shape stamps share one drag/tap/edit-sheet code path in
+ * AnnotateScreen.tsx — only their glyph differs. */
+export function isMark(obj: AnnotationObject): obj is TextMark | ShapeMark {
+  return isTextMark(obj) || isShapeMark(obj);
+}
+
+export function isStroke(obj: AnnotationObject): obj is Stroke {
+  return !("kind" in obj);
 }
 
 interface Point {
@@ -56,27 +79,62 @@ function strokeSegments(stroke: Stroke): [Point, Point][] {
 
 /** True if `point` lands within `radius` of any part of `stroke`'s drawn
  * path. Used by the eraser tool, which removes whole strokes rather than
- * partial pixel regions — see the spec's "object eraser" decision. */
+ * partial pixel regions — see the spec's "object eraser" decision. `radius`
+ * defaults to `ERASE_RADIUS` but grows with the eraser-size control and a
+ * thick stroke's own half-width, so erasing feels proportional to what's
+ * actually drawn. */
 export function hitTestStroke(stroke: Stroke, point: Point, radius: number = ERASE_RADIUS): boolean {
-  return strokeSegments(stroke).some(([a, b]) => distanceToSegment(point, a, b) <= radius);
+  const effective = Math.max(radius, (stroke.size ?? STROKE_WIDTH) / 2 + radius / 2);
+  return strokeSegments(stroke).some(([a, b]) => distanceToSegment(point, a, b) <= effective);
 }
 
 /** True if `point` lands within `radius` of `pin`'s position. */
 export function hitTestPin(pin: Pin, point: Point, radius: number = PIN_ERASE_RADIUS): boolean {
-  return Math.hypot(point.x - pin.position.x, point.y - pin.position.y) <= radius;
+  return Math.hypot(point.x - pin.position.x, point.y - pin.position.y) <= Math.max(radius, PIN_ERASE_RADIUS);
+}
+
+/** True if `point` lands within a text/shape mark's rough bounding box —
+ * good enough for an eraser/select-tool hit test, not pixel-exact glyph
+ * metrics. */
+export function hitTestMark(mark: TextMark | ShapeMark, point: Point, radius: number = PIN_ERASE_RADIUS): boolean {
+  const floor = Math.max(radius, PIN_ERASE_RADIUS);
+  const halfW = mark.kind === "shape" ? Math.max(floor, (mark.size * SHAPE_ASPECT) / 2) : Math.max(floor, (mark.text.length || 1) * mark.size * 0.32);
+  const halfH = Math.max(floor, mark.size * (mark.kind === "shape" ? 0.5 : 0.9));
+  return Math.abs(point.x - mark.position.x) <= halfW && Math.abs(point.y - mark.position.y) <= halfH;
 }
 
 /** Eraser-tool hit test across a mixed `AnnotationObject[]` array, regardless
  * of kind — the one tool that removes anything. */
-export function hitTestAnnotation(obj: AnnotationObject, point: Point): boolean {
-  return isPin(obj) ? hitTestPin(obj, point) : hitTestStroke(obj, point);
+export function hitTestAnnotation(obj: AnnotationObject, point: Point, radius?: number): boolean {
+  if (isPin(obj)) return hitTestPin(obj, point, radius);
+  if (isMark(obj)) return hitTestMark(obj, point, radius);
+  return hitTestStroke(obj, point, radius);
+}
+
+/** Topmost ink stroke under a point, for the select tool's tap-to-edit /
+ * drag-to-move — text/shape marks handle their own hit-testing via their own
+ * DOM nodes, so only strokes need this at the canvas level. */
+export function topStrokeHit(point: Point, items: AnnotationObject[], radius: number = ERASE_RADIUS): string | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (!isStroke(item)) continue;
+    if (hitTestStroke(item, point, radius)) return item.id;
+  }
+  return null;
 }
 
 /** Resolves the app's single fixed annotation color from the live theme's
  * `--acc` custom property (read off `el`'s computed style), so drawn marks
- * track the accent color in both Light and Stage Dark without hardcoding a
- * hex value that could drift out of sync with theme.css. */
+ * without an explicit `color` track the accent color in both Light and
+ * Stage Dark without hardcoding a hex value that could drift out of sync
+ * with theme.css. */
 export function resolveAccentColor(el: Element): string {
   const value = getComputedStyle(el).getPropertyValue("--acc").trim();
   return value || "#5980a6";
 }
+
+// Two swipeable 16-swatch pages, shared by every color-picking control.
+export const PALETTE_PAGES: string[][] = [
+  ["#1a1a1a", "#e63946", "#ffd400", "#2a6fdb", "#3fb950", "#4b3fd6", "#e08e0b", "#9aa0a6", "#cfd4d9", "#a3242c", "#c9a227", "#7ec8ff", "#2a9d5c", "#7c3fd6", "#7a4b2a", "#33383d"],
+  ["#f4f1ea", "#ef5da8", "#f2c94c", "#4fd1ff", "#a9e8a0", "#a53fe0", "#e0b98a", "#8aa6e8", "#4d6fd1", "#2f8f8a", "#4fd1c5", "#7fb23a", "#3fd1e0", "#4a74d6", "#7fe0c6", "#2f8f5c"],
+];
