@@ -1,3 +1,5 @@
+import type { IconName } from "../components/Icon";
+
 export type SongSource = "typed" | "chordpro" | "musicxml" | "imported-pdf";
 export type ChartFormat = "chordpro" | "chords-over-lyrics";
 export type AttachmentKind = "image" | "pdf" | "musicxml";
@@ -60,6 +62,52 @@ export interface Setlist {
 
 export type ChartView = "chords" | "sheet";
 export type Drawer = "add-song" | "quick-edit" | "add-to-set" | null;
+
+/** Live Stage's annotate-mode tools. "select" is the default/idle tool —
+ * it lets an existing text/notation mark be dragged without drawing. */
+export type AnnotationTool = "select" | "pen" | "highlighter" | "eraser" | "text" | "notation";
+
+export interface AnnotationPoint {
+  x: number;
+  y: number;
+}
+
+/** A single freehand stroke (pen or highlighter) — points are recorded in
+ * the chart's own content-coordinate space (SVG-local pixels, unaffected by
+ * scroll) so a stroke stays put under the exact lyric it was drawn next to. */
+export interface InkAnnotation {
+  id: string;
+  kind: "ink";
+  tool: "pen" | "highlighter";
+  color: string;
+  size: number;
+  opacity: number;
+  points: AnnotationPoint[];
+}
+
+/** A movable text box — also used for the notation-symbol stamps, so both
+ * share one drag/color/size/delete code path. `symbolId` marks a stamp (its
+ * content isn't freeform-editable, only color/size/position are); a couple
+ * of symbols (bow marks) have no clean plain-text glyph, so those render via
+ * `iconGlyph` instead of `text`. */
+export interface TextAnnotation {
+  id: string;
+  kind: "text";
+  text: string;
+  iconGlyph?: IconName;
+  symbolId?: string;
+  color: string;
+  size: number;
+  x: number;
+  y: number;
+}
+
+export type AnnotationItem = InkAnnotation | TextAnnotation;
+
+export interface AnnotationHistoryEntry {
+  past: AnnotationItem[][];
+  future: AnnotationItem[][];
+}
 
 export interface StageState {
   songId: string | null;

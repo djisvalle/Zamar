@@ -21,7 +21,16 @@ export type IconName =
   | "stop"
   | "eraser"
   | "square"
-  | "plus";
+  | "plus"
+  | "undo"
+  | "redo"
+  | "trash"
+  | "text"
+  | "highlighter"
+  | "fermata"
+  | "bow-up"
+  | "bow-down"
+  | "cursor";
 
 /**
  * One small, hand-drawn icon set (Feather-style: 24x24 grid, round caps/joins)
@@ -173,4 +182,45 @@ const ICON_PATHS: Record<IconName, JSX.Element> = {
       <line x1="5" y1="12" x2="19" y2="12" />
     </>
   ),
+  undo: (
+    <>
+      <polyline points="9 14 4 9 9 4" />
+      <path d="M4 9h10.5A5.5 5.5 0 0 1 20 14.5v0A5.5 5.5 0 0 1 14.5 20H11" />
+    </>
+  ),
+  redo: (
+    <>
+      <polyline points="15 4 20 9 15 14" />
+      <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13" />
+    </>
+  ),
+  trash: (
+    <>
+      <polyline points="4 7 20 7" />
+      <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
+      <path d="M9.5 7V4.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V7" />
+    </>
+  ),
+  text: (
+    <>
+      <polyline points="4 6.5 4 4 20 4 20 6.5" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+      <line x1="8.5" y1="20" x2="15.5" y2="20" />
+    </>
+  ),
+  highlighter: (
+    <>
+      <path d="M6.5 14.5 15 6l3 3-8.5 8.5H6.5v-3z" />
+      <line x1="4" y1="21" x2="10.5" y2="21" />
+    </>
+  ),
+  fermata: (
+    <>
+      <path d="M4 15a8 8 0 0 1 16 0" />
+      <circle cx="12" cy="11.5" r="1.1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  "bow-up": <polyline points="6 8 12 17 18 8" />,
+  "bow-down": <polyline points="6 8 6 15 18 15 18 8" />,
+  cursor: <polygon points="5 3 5 19 9.5 15.5 12.5 21 15 19.5 12 14 17.5 13.5" fill="currentColor" stroke="none" />,
 };

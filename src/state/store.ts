@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useReducer, useRef, type Dispatch, type ReactNode, createElement } from "react";
-import type { Setlist, SetlistItem, Settings, Song, StageState, ThemeMode, Viewport } from "./types";
+import type { AnnotationHistoryEntry, AnnotationItem, Setlist, SetlistItem, Settings, Song, StageState, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
 import * as songsRepo from "../data/songsRepo";
 import * as setlistsRepo from "../data/setlistsRepo";
@@ -12,6 +12,13 @@ export interface AppState {
   settings: Settings;
   stage: StageState;
   viewport: Viewport;
+  /** Annotate-mode ink/text marks, keyed by song id. Each song's chart is its
+   * own "page" for the purposes of undo/redo and clear-current-vs-clear-all —
+   * a setlist's run sheet is effectively a binder of these pages. Session-only,
+   * like the rest of the mockup's live state: never persisted, reseeded empty
+   * on reload. */
+  annotations: Record<string, AnnotationItem[]>;
+  annotationHistory: Record<string, AnnotationHistoryEntry>;
 }
 
 /** A song with no chords/lyrics text but a sheet-music/static-file
@@ -58,11 +65,13 @@ export function initialState(): AppState {
     },
     stage: emptyStage,
     viewport: "phone",
+    annotations: {},
+    annotationHistory: {},
   };
 }
 
 export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
-  return { songs, setlists, settings, stage: emptyStage, viewport: "phone" };
+  return { songs, setlists, settings, stage: emptyStage, viewport: "phone", annotations: {}, annotationHistory: {} };
 }
 
 export type Action =
@@ -101,7 +110,12 @@ export type Action =
   | { type: "STAGE_SET_CHROME_HIDDEN"; hidden: boolean }
   | { type: "STAGE_ADVANCE" }
   | { type: "STAGE_REPLAY" }
-  | { type: "STAGE_EXIT" };
+  | { type: "STAGE_EXIT" }
+  | { type: "ANNOTATE_COMMIT"; songId: string; items: AnnotationItem[] }
+  | { type: "ANNOTATE_UNDO"; songId: string }
+  | { type: "ANNOTATE_REDO"; songId: string }
+  | { type: "ANNOTATE_CLEAR_PAGE"; songId: string }
+  | { type: "ANNOTATE_CLEAR_ALL" };
 
 function flattenSongIds(setlist: Setlist): string[] {
   return setlist.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song").map((i) => i.songId!));
@@ -357,6 +371,65 @@ export function reducer(state: AppState, action: Action): AppState {
     }
     case "STAGE_EXIT":
       return { ...state, stage: emptyStage };
+    case "ANNOTATE_COMMIT": {
+      const prevItems = state.annotations[action.songId] ?? [];
+      const hist = state.annotationHistory[action.songId] ?? { past: [], future: [] };
+      return {
+        ...state,
+        annotations: { ...state.annotations, [action.songId]: action.items },
+        annotationHistory: { ...state.annotationHistory, [action.songId]: { past: [...hist.past, prevItems], future: [] } },
+      };
+    }
+    case "ANNOTATE_UNDO": {
+      const hist = state.annotationHistory[action.songId];
+      if (!hist || hist.past.length === 0) return state;
+      const restored = hist.past[hist.past.length - 1];
+      const currentItems = state.annotations[action.songId] ?? [];
+      return {
+        ...state,
+        annotations: { ...state.annotations, [action.songId]: restored },
+        annotationHistory: {
+          ...state.annotationHistory,
+          [action.songId]: { past: hist.past.slice(0, -1), future: [currentItems, ...hist.future] },
+        },
+      };
+    }
+    case "ANNOTATE_REDO": {
+      const hist = state.annotationHistory[action.songId];
+      if (!hist || hist.future.length === 0) return state;
+      const restored = hist.future[0];
+      const currentItems = state.annotations[action.songId] ?? [];
+      return {
+        ...state,
+        annotations: { ...state.annotations, [action.songId]: restored },
+        annotationHistory: {
+          ...state.annotationHistory,
+          [action.songId]: { past: [...hist.past, currentItems], future: hist.future.slice(1) },
+        },
+      };
+    }
+    case "ANNOTATE_CLEAR_PAGE": {
+      const prevItems = state.annotations[action.songId] ?? [];
+      if (prevItems.length === 0) return state;
+      const hist = state.annotationHistory[action.songId] ?? { past: [], future: [] };
+      return {
+        ...state,
+        annotations: { ...state.annotations, [action.songId]: [] },
+        annotationHistory: { ...state.annotationHistory, [action.songId]: { past: [...hist.past, prevItems], future: [] } },
+      };
+    }
+    case "ANNOTATE_CLEAR_ALL": {
+      const songIds = Object.keys(state.annotations).filter((id) => (state.annotations[id]?.length ?? 0) > 0);
+      if (songIds.length === 0) return state;
+      const annotations = { ...state.annotations };
+      const annotationHistory = { ...state.annotationHistory };
+      for (const id of songIds) {
+        const hist = annotationHistory[id] ?? { past: [], future: [] };
+        annotationHistory[id] = { past: [...hist.past, annotations[id]], future: [] };
+        annotations[id] = [];
+      }
+      return { ...state, annotations, annotationHistory };
+    }
     default:
       return state;
   }
