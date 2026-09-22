@@ -64,8 +64,9 @@ export type ChartView = "chords" | "sheet";
 export type Drawer = "add-song" | "quick-edit" | "add-to-set" | null;
 
 /** Live Stage's annotate-mode tools. "select" is the default/idle tool —
- * it lets an existing text/notation mark be dragged without drawing. */
-export type AnnotationTool = "select" | "pen" | "highlighter" | "eraser" | "text" | "notation";
+ * it lets an existing ink stroke, text box, or stamp be tapped (to edit) or
+ * dragged (to move) without drawing. */
+export type AnnotationTool = "select" | "pen" | "highlighter" | "eraser" | "text" | "notation" | "shapes";
 
 export interface AnnotationPoint {
   x: number;
@@ -102,7 +103,34 @@ export interface TextAnnotation {
   y: number;
 }
 
-export type AnnotationItem = InkAnnotation | TextAnnotation;
+export type ShapeId =
+  | "slur"
+  | "hairpin-cresc"
+  | "hairpin-dim"
+  | "arrow"
+  | "line"
+  | "bracket"
+  | "rect-outline"
+  | "rect-fill"
+  | "ellipse-outline"
+  | "ellipse-fill";
+
+/** A movable geometric stamp (hairpin, arrow, bracket, line, rect, ellipse) —
+ * shares the same drag/color/size/duplicate/delete handling as `TextAnnotation`
+ * (see `MarkAnnotation` in AnnotateMode.tsx) but renders as a small vector
+ * glyph instead of a glyph/text. `size` is the rendered height; width is
+ * derived from a fixed per-shape-set aspect ratio. */
+export interface ShapeAnnotation {
+  id: string;
+  kind: "shape";
+  shapeId: ShapeId;
+  color: string;
+  size: number;
+  x: number;
+  y: number;
+}
+
+export type AnnotationItem = InkAnnotation | TextAnnotation | ShapeAnnotation;
 
 export interface AnnotationHistoryEntry {
   past: AnnotationItem[][];

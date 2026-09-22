@@ -30,7 +30,9 @@ export type IconName =
   | "fermata"
   | "bow-up"
   | "bow-down"
-  | "cursor";
+  | "cursor"
+  | "duplicate"
+  | "shapes";
 
 /**
  * One small, hand-drawn icon set (Feather-style: 24x24 grid, round caps/joins)
@@ -223,4 +225,16 @@ const ICON_PATHS: Record<IconName, JSX.Element> = {
   "bow-up": <polyline points="6 8 12 17 18 8" />,
   "bow-down": <polyline points="6 8 6 15 18 15 18 8" />,
   cursor: <polygon points="5 3 5 19 9.5 15.5 12.5 21 15 19.5 12 14 17.5 13.5" fill="currentColor" stroke="none" />,
+  duplicate: (
+    <>
+      <rect x="8" y="8" width="13" height="13" rx="2" />
+      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+    </>
+  ),
+  shapes: (
+    <>
+      <rect x="3.5" y="3.5" width="10.5" height="10.5" rx="2" />
+      <circle cx="16.5" cy="16.5" r="5.5" />
+    </>
+  ),
 };
