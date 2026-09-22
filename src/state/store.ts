@@ -44,7 +44,6 @@ export function makeEmptyStage(textScale: number): StageState {
     dispKey: defaultSong?.defaultKey ?? null,
     capo: 0,
     view: defaultView(defaultSong),
-    toolbarExpanded: false,
     drawer: null,
     chromeHidden: false,
     lyricsOnly: false,
@@ -99,7 +98,6 @@ export type Action =
   | { type: "STAGE_SET_VIEW"; view: StageState["view"] }
   | { type: "STAGE_SET_KEY"; key: string }
   | { type: "STAGE_SET_CAPO"; capo: number }
-  | { type: "STAGE_TOGGLE_TOOLBAR" }
   | { type: "STAGE_OPEN_DRAWER"; drawer: StageState["drawer"] }
   | { type: "STAGE_TOGGLE_LYRICS_ONLY" }
   | { type: "STAGE_SET_ZOOM"; zoom: number }
@@ -293,8 +291,6 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, stage: { ...state.stage, dispKey: action.key } };
     case "STAGE_SET_CAPO":
       return { ...state, stage: { ...state.stage, capo: Math.max(0, action.capo) } };
-    case "STAGE_TOGGLE_TOOLBAR":
-      return { ...state, stage: { ...state.stage, toolbarExpanded: !state.stage.toolbarExpanded } };
     case "STAGE_OPEN_DRAWER":
       return { ...state, stage: { ...state.stage, drawer: action.drawer } };
     case "STAGE_TOGGLE_LYRICS_ONLY":

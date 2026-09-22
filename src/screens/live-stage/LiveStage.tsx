@@ -4,15 +4,13 @@ import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
 import { MxlScore, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
-import { Icon } from "../../components/Icon";
-import { Sheet } from "../../components/Overlays";
 import { keySemitoneShift } from "../../utils/chordpro";
-import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
+import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
 import type { AttachmentKind } from "../../state/types";
 import { AddSongDrawer } from "./AddSongDrawer";
 import { QuickEditSheet } from "./QuickEditSheet";
-import { InstrumentFilterModal } from "./InstrumentFilterModal";
 import { MusicToolbar } from "./MusicToolbar";
+import { StageToolsSheet } from "./StageToolsSheet";
 import { AnnotateScreen } from "./AnnotateScreen";
 
 const IDLE_MS = 6000;
@@ -22,8 +20,7 @@ export function LiveStage() {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
   const { stage } = state;
-  const [partsOpen, setPartsOpen] = useState(false);
-  const [versionPickerOpen, setVersionPickerOpen] = useState(false);
+  const [stageToolsOpen, setStageToolsOpen] = useState(false);
   const [scoreInstruments, setScoreInstruments] = useState<ScoreInstrument[]>([]);
   const [hiddenParts, setHiddenParts] = useState<Set<string>>(new Set());
   const [activeKind, setActiveKind] = useState<AttachmentKind | undefined>(undefined);
@@ -154,6 +151,15 @@ export function LiveStage() {
     dispatch({ type: "STAGE_LOAD", songId: setlistSongIds[prevIndex], setlistId: setlist.id, setlistIndex: prevIndex });
   };
 
+  const selectChordsView = () => {
+    dispatch({ type: "STAGE_SET_VIEW", view: "chords" });
+  };
+  const selectSheetView = (kind: AttachmentKind, versionId?: string) => {
+    setActiveKind(kind);
+    setActiveVersionId(versionId ?? selectedVersion(song.attachments[kind]!).id);
+    dispatch({ type: "STAGE_SET_VIEW", view: "sheet" });
+  };
+
   const onChartPointerDown = (e: React.PointerEvent) => {
     swipeStartX.current = e.clientX;
   };
@@ -168,7 +174,6 @@ export function LiveStage() {
 
   const onScreenClick = () => {
     resetIdle();
-    if (stage.toolbarExpanded) dispatch({ type: "STAGE_TOGGLE_TOOLBAR" });
   };
 
   return (
@@ -196,101 +201,12 @@ export function LiveStage() {
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, padding: "10px 14px 8px" }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>
-              <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                {song.artist}
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: "none" }}>
-              <div style={{ display: "flex", gap: 2, background: "var(--line)", borderRadius: 8, padding: 3 }}>
-                <button
-                  disabled={!hasChords}
-                  onClick={() => dispatch({ type: "STAGE_SET_VIEW", view: "chords" })}
-                  style={{
-                    fontSize: 11,
-                    padding: "4px 11px",
-                    borderRadius: 5,
-                    border: "none",
-                    fontWeight: 700,
-                    opacity: hasChords ? 1 : 0.35,
-                    background: stage.view === "chords" ? "var(--acc)" : "transparent",
-                    color: stage.view === "chords" ? "var(--onacc)" : "var(--mut)",
-                  }}
-                >
-                  Chord
-                </button>
-                <button
-                  disabled={availableKinds.length === 0}
-                  onClick={() => dispatch({ type: "STAGE_SET_VIEW", view: "sheet" })}
-                  style={{
-                    fontSize: 11,
-                    padding: "4px 11px",
-                    borderRadius: 5,
-                    border: "none",
-                    fontWeight: 700,
-                    opacity: availableKinds.length === 0 ? 0.35 : 1,
-                    background: stage.view === "sheet" ? "var(--acc)" : "transparent",
-                    color: stage.view === "sheet" ? "var(--onacc)" : "var(--mut)",
-                  }}
-                >
-                  {activeKind ? ATTACHMENT_LABEL[activeKind] : "Sheet"}
-                </button>
-              </div>
-              {stage.view === "chords" ? (
-                <div className="accent-deep" style={{ fontSize: 10, fontWeight: 700 }}>
-                  Key of {stage.dispKey}
-                </div>
-              ) : activeKind ? (
-                <div className="muted" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
-                  {ATTACHMENT_LABEL[activeKind].toUpperCase()}
-                </div>
-              ) : (
-                <button
-                  className="chip"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setPartsOpen(true);
-                  }}
-                >
-                  Parts · 2/3
-                </button>
-              )}
-            </div>
+      <div style={{ padding: "10px 14px 8px" }}>
+        <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>
+        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+          {song.artist}
+        </div>
       </div>
-
-      {stage.view === "sheet" && availableKinds.length > 1 && (
-        <div style={{ display: "flex", gap: 6, padding: "0 14px 8px" }}>
-          {availableKinds.map((k) => (
-            <button
-              key={k}
-              className={"chip" + (activeKind === k ? " active" : "")}
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveKind(k);
-                setActiveVersionId(selectedVersion(song.attachments[k]!).id);
-              }}
-            >
-              {ATTACHMENT_LABEL[k]}
-            </button>
-          ))}
-        </div>
-      )}
-      {stage.view === "sheet" && activeBucket && activeVersion && activeBucket.versions.length > 1 && (
-        <div style={{ padding: "0 14px 8px" }}>
-          <button
-            className="chip"
-            style={{ borderColor: "var(--acc-deep)", color: "var(--acc-deep)" }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setVersionPickerOpen(true);
-            }}
-          >
-            ▾ {activeVersion.label}
-          </button>
-        </div>
-      )}
 
       <div
         className="flex-1 hidden-scroll"
@@ -347,19 +263,7 @@ export function LiveStage() {
       </div>
 
       {!stage.chromeHidden && (hasChords || hasScore) && (
-        <MusicToolbar
-          view={stage.view}
-          hasChords={hasChords}
-          instruments={scoreInstruments}
-          hiddenParts={hiddenParts}
-          onToggleInstrument={toggleInstrument}
-          transposeLocked={transposeLocked}
-          chordsLocked={chordsAnnotated}
-          instrumentsLocked={musicxmlAnnotated}
-          onAddSong={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" })}
-          onQuickEdit={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "quick-edit" })}
-          onAnnotate={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "annotate" })}
-        />
+        <MusicToolbar transposeLocked={transposeLocked} onOpenTools={() => setStageToolsOpen(true)} />
       )}
 
       {stage.drawer === "add-song" && (
@@ -368,28 +272,26 @@ export function LiveStage() {
       {stage.drawer === "quick-edit" && (
         <QuickEditSheet songId={song.id} onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
       )}
-      {partsOpen && <InstrumentFilterModal onClose={() => setPartsOpen(false)} />}
-      {versionPickerOpen && activeKind && activeBucket && (
-        <Sheet onClose={() => setVersionPickerOpen(false)}>
-          <div className="sheet-title">{ATTACHMENT_LABEL[activeKind]} versions</div>
-          {activeBucket.versions.map((v) => (
-            <button
-              key={v.id}
-              className="sheet-row"
-              onClick={() => {
-                setActiveVersionId(v.id);
-                setVersionPickerOpen(false);
-              }}
-            >
-              <span>
-                {v.label} <span className="muted">· {v.name}</span>
-              </span>
-              <span className="accent-deep" style={{ opacity: v.id === activeVersionId ? 1 : 0, display: "flex" }}>
-                <Icon name="check" size={14} strokeWidth={2.2} />
-              </span>
-            </button>
-          ))}
-        </Sheet>
+      {stageToolsOpen && (
+        <StageToolsSheet
+          song={song}
+          view={stage.view}
+          hasChords={hasChords}
+          availableKinds={availableKinds}
+          activeKind={activeKind}
+          activeVersionId={activeVersionId}
+          onSelectChords={selectChordsView}
+          onSelectSheet={selectSheetView}
+          instruments={scoreInstruments}
+          hiddenParts={hiddenParts}
+          onToggleInstrument={toggleInstrument}
+          chordsLocked={chordsAnnotated}
+          instrumentsLocked={musicxmlAnnotated}
+          onAddSong={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "add-song" })}
+          onQuickEdit={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "quick-edit" })}
+          onAnnotate={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: "annotate" })}
+          onClose={() => setStageToolsOpen(false)}
+        />
       )}
     </div>
   );

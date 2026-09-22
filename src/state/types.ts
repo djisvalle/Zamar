@@ -102,7 +102,6 @@ export interface StageState {
   dispKey: string | null;
   capo: number;
   view: ChartView;
-  toolbarExpanded: boolean;
   drawer: Drawer;
   chromeHidden: boolean;
   lyricsOnly: boolean;
