@@ -86,7 +86,10 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const label = METHOD_LABEL[method];
   const canDeclareContent = method !== "musicxml";
   const attachmentKind: AttachmentKind = method === "pdf" ? "pdf" : method === "musicxml" ? "musicxml" : "image";
-  const willAttach = skipContentDeclaration || (contentType === "sheet" && !!file);
+  // A format with no sheet/chords fork (MusicXML) is unambiguously real sheet
+  // music — treat it the same as an explicit "Sheet music" declaration.
+  const isSheetContent = contentType === "sheet" || !canDeclareContent;
+  const willAttach = skipContentDeclaration || (isSheetContent && !!file);
 
   const buildVersion = (): AttachmentVersion => ({
     id: `att-${Date.now()}`,
@@ -408,18 +411,18 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             <button
               className="btn"
               onClick={() => {
-                if (skipContentDeclaration || contentType === "sheet") {
+                if (skipContentDeclaration || isSheetContent) {
                   goToReview();
                 } else {
                   startConvert(false);
                 }
               }}
             >
-              {skipContentDeclaration || contentType === "sheet" ? "Continue" : "Convert to chart"}
+              {skipContentDeclaration || isSheetContent ? "Continue" : "Convert to chart"}
             </button>
           )}
         </div>
-        {file && !skipContentDeclaration && contentType === "chords" && (
+        {file && !skipContentDeclaration && !isSheetContent && (
           <button
             className="muted"
             style={{ background: "none", border: "none", fontSize: 11, textDecoration: "underline" }}

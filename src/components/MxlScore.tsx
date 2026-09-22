@@ -204,7 +204,15 @@ export function MxlScore({
       osmd.TransposeCalculator = new TransposeCalculator();
       osmdRef.current = osmd;
       try {
-        await osmd.load(src);
+        // osmd.load(string) only recognizes raw XML text, raw zip bytes, or
+        // a short URL to fetch itself — a user-imported .mxl's base64 data
+        // URL (routinely thousands of characters) matches none of those, so
+        // it gets silently rejected as an invalid document. Fetching it into
+        // a Blob first hits osmd's Blob branch instead, which unzips a real
+        // .mxl correctly regardless of source (data URL or plain URL alike).
+        const blob = await (await fetch(src)).blob();
+        if (cancelled || !hostRef.current) return;
+        await osmd.load(blob);
         if (cancelled || !hostRef.current) return;
         onInstrumentsChange?.(osmd.Sheet.Instruments.map((i) => ({ id: String(i.Id), name: i.Name })));
         osmd.Sheet.Transpose = transpose;
