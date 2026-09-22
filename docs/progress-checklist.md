@@ -59,7 +59,7 @@ working tree on 2026-09-19.
       it was entered — chords, image, PDF, or MusicXML — not just the chords view the old
       shell was stuck on, and not a persistent overlay on the normal Live Stage view itself.
       Controls that would reflow a view's
-      content (transpose, capo, chord-chart zoom, lyrics-only, MusicXML instrument
+      content (transpose, chord-chart zoom, lyrics-only, MusicXML instrument
       visibility, MusicXML's own pinch-zoom) disable once that view has strokes, so
       marks never silently drift out of alignment. See
       `docs/superpowers/specs/2026-09-20-song-notes-and-annotations-design.md` for the
@@ -82,6 +82,14 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       licensing/bundling an OMR engine or model, on-device feasibility offline). **Action:**
       spike/R&D only for now — evaluate feasibility and candidate approaches before
       committing to a real implementation.
+- [ ] **Real Capo functionality.** Cut entirely on 2026-09-22 rather than left half-wired
+      (see "Dead Capo control" above) — the Stage Tools stepper and the run sheet's per-slot
+      override existed but neither ever changed anything rendered. Low priority: core,
+      high-priority work (Annotate pins, MusicXML transpose-safe reprojection) comes first.
+      When revisited, this needs its own small design pass rather than just re-adding a bare
+      stepper — a real capo has to reconcile with the existing transpose/key system (what a
+      capo actually changes is the relationship between the key you finger and the key that
+      sounds, not an independent number sitting next to it).
 
 ## Done — working functionality
 
@@ -94,9 +102,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       sql.js/jeep-sqlite fallback)
 
 ### Live Stage
-- [x] Chord chart rendering with real transpose/capo math (not hand-placed spacing)
+- [x] Chord chart rendering with real transpose math (not hand-placed spacing)
 - [x] One consolidated Stage Tools sheet (Add-Song, Quick-edit, annotate mode, view picker,
-      capo/lyrics/zoom-or-instrument controls) opened from a slim one-row bottom bar
+      lyrics/zoom-or-instrument controls) opened from a slim one-row bottom bar
 - [x] Idle auto-hide chrome (6s); advancing past a setlist's last song is a no-op
 - [x] A song can persist a default Live Stage view (chords, or a specific attachment kind),
       set from Add/Edit Song
@@ -110,7 +118,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ### Setlists
 - [x] Upcoming/Past/Templates tabs, run-sheet detail, derived per-slot start times
-- [x] Per-slot key/capo/note override sheet, Add-to-set drawer
+- [x] Per-slot key/note override sheet, Add-to-set drawer
 
 ### Add/Edit Song
 - [x] Combined new/edit screen, ChordPro-vs-Chords-over-Lyrics editing
@@ -151,6 +159,15 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       migration, and the now-unused generic `UPDATE_SETTINGS` action) rather than wiring them up
       — neither had a real mechanism behind it (Wake Lock plugin, scroll timer) worth adding as a
       new native dependency in this pass.
+- [x] **Dead Capo control.** Fixed: removed `stage.capo`/`STAGE_SET_CAPO` (Stage Tools' Capo
+      stepper) and `SetlistItem.capo` (the run sheet's per-slot Capo override) entirely, same
+      call as `keepAwake`/`autoscroll` above — both were pure UI state with no effect on any
+      rendered chart; `chordpro.ts` never read `capo`, so the value had nothing to drive. The
+      SQLite `setlist_items.capo` column is left in place, unused, rather than migrated away
+      (nullable, harmless). `AddEditSong.tsx`'s `{capo: ...}` ChordPro directive detection is
+      untouched — a different concern (recognizing real ChordPro syntax in typed/imported
+      charts), not the interactive stepper. See "Real Capo functionality" below for the
+      low-priority follow-up.
 - [x] **"Stage Dark" copy vs. behavior mismatch.** Fixed: Settings' Appearance row now reads "One
       theme for the whole device, applied everywhere at once," matching `App.tsx`'s actual
       `data-theme`-on-`.device`-root behavior instead of describing the per-surface scoping this
