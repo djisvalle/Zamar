@@ -401,13 +401,22 @@ export function AnnotateScreen({
           </button>
           <button
             className="sheet-row"
-            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            style={{
+              color: "var(--danger)",
+              fontWeight: 700,
+              justifyContent: "flex-start",
+              gap: 8,
+              padding: "9px 8px",
+              borderRadius: 8,
+              background: "color-mix(in srgb, var(--danger) 10%, transparent)",
+            }}
             onClick={() => {
               commit([]);
               setAllViewsCleared(true);
               setClearOpen(false);
             }}
           >
+            <Icon name="trash" size={15} strokeWidth={1.8} />
             <span>Clear all views on this song</span>
           </button>
           <button className="sheet-row" onClick={() => setClearOpen(false)}>
