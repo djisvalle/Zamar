@@ -2,16 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useStore, activeSetlistSongIds } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
-import { MxlScore, type ScoreInstrument } from "../../components/MxlScore";
+import { MxlScore, type MxlScoreHandle, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
+import { AnnotateCanvas } from "../../components/AnnotateCanvas";
 import { keySemitoneShift } from "../../utils/chordpro";
 import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
-import type { AttachmentKind } from "../../state/types";
+import type { AnnotationObject, AnnotationView, AttachmentKind } from "../../state/types";
 import { AddSongDrawer } from "./AddSongDrawer";
 import { QuickEditSheet } from "./QuickEditSheet";
 import { MusicToolbar } from "./MusicToolbar";
 import { StageToolsSheet } from "./StageToolsSheet";
-import { AnnotateScreen } from "./AnnotateScreen";
+import { AnnotateOverlay } from "./AnnotateOverlay";
 
 const IDLE_MS = 6000;
 const SWIPE_THRESHOLD = 50;
@@ -25,6 +26,8 @@ export function LiveStage() {
   const [hiddenParts, setHiddenParts] = useState<Set<string>>(new Set());
   const [activeKind, setActiveKind] = useState<AttachmentKind | undefined>(undefined);
   const [activeVersionId, setActiveVersionId] = useState<string | undefined>(undefined);
+  const mxlScoreRef = useRef<MxlScoreHandle>(null);
+  const [reprojectTick, setReprojectTick] = useState(0);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const swipeStartX = useRef<number | null>(null);
 
@@ -125,21 +128,17 @@ export function LiveStage() {
 
   const chordsAnnotated = Boolean(song.annotations.chords?.length);
   const musicxmlAnnotated = Boolean(song.annotations.musicxml?.length);
-
-  if (stage.drawer === "annotate") {
-    return (
-      <AnnotateScreen
-        song={song}
-        view={stage.view}
-        activeKind={activeKind}
-        activeVersion={activeVersion}
-        semitones={semitones}
-        hiddenParts={hiddenParts}
-        fontScale={stage.zoom / 100}
-        onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })}
-      />
-    );
-  }
+  const dockOpen = stage.drawer === "annotate";
+  const annotationView: AnnotationView = stage.view === "chords" ? "chords" : activeKind ?? "chords";
+  const persistedAnnotations: AnnotationObject[] = song.annotations[annotationView] ?? [];
+  // Reprojection (see AnnotateCanvas's onReproject doc) keeps anchored
+  // MusicXML annotations aligned after a transpose even while the Annotate
+  // dock is closed — the read-only overlay below is the only thing that can
+  // persist that silently-corrected position back to the store when nobody
+  // has the dock open to do it via Done.
+  const onReprojectPersisted = (next: AnnotationObject[]) => {
+    dispatch({ type: "UPDATE_SONG", song: { ...song, annotations: { ...song.annotations, [annotationView]: next } } });
+  };
 
   const goToSongOffset = (delta: 1 | -1) => {
     if (!setlist) return;
@@ -177,95 +176,131 @@ export function LiveStage() {
     resetIdle();
   };
 
+  // Built once and shared by both the read-only overlay (below, always
+  // mounted) and AnnotateOverlay's interactive canvas (mounted only while
+  // the dock is open) — see the annotate-as-overlay design spec's "One
+  // content instance, not two" section. `disableZoom` on MxlScore/PdfPages
+  // now also accounts for `dockOpen`, matching what AnnotateOverlay always
+  // forced while it built its own separate copy of this content: pinch-zoom
+  // gestures shouldn't fight with active drawing gestures.
+  const content =
+    stage.view === "chords" ? (
+      <ChordChart
+        chordpro={song.chordpro}
+        semitones={semitones}
+        fontScale={stage.zoom / 100}
+        hideChords={stage.lyricsOnly}
+      />
+    ) : activeKind && activeVersion ? (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
+        {activeKind === "image" ? (
+          <img
+            src={activeVersion.dataUrl}
+            alt={activeVersion.name}
+            style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
+          />
+        ) : activeKind === "musicxml" ? (
+          <MxlScore
+            ref={mxlScoreRef}
+            src={activeVersion.dataUrl}
+            transpose={semitones}
+            hiddenParts={hiddenParts}
+            onInstrumentsChange={setScoreInstruments}
+            disableZoom={musicxmlAnnotated || dockOpen}
+            staveSpacing={state.settings.staveSpacing}
+            onRerendered={() => setReprojectTick((t) => t + 1)}
+          />
+        ) : (
+          <PdfPages src={activeVersion.dataUrl} disableZoom={dockOpen} />
+        )}
+        <span style={{ fontSize: 11, color: "var(--sheet-mut)" }}>
+          {activeKind === "musicxml"
+            ? `${activeVersion.name} · engraved from the score, no chords detected`
+            : `${activeVersion.name} · saved as-is, no chords detected`}
+        </span>
+      </div>
+    ) : (
+      <div className="empty">
+        <div className="empty-title" style={{ color: "var(--sheet-fg)" }}>No sheet music attached</div>
+        <div className="empty-body" style={{ color: "var(--sheet-mut)" }}>Attach a PDF, photo, or MusicXML score from Add/Edit Song to see it here.</div>
+      </div>
+    );
+
   return (
     <div className="screen" onClick={onScreenClick}>
-      <div className={"hdr" + (setlist ? " tinted" : "")} />
+      {dockOpen ? (
+        <AnnotateOverlay
+          song={song}
+          view={stage.view}
+          activeKind={activeKind}
+          scoreRef={mxlScoreRef}
+          reprojectTick={reprojectTick}
+          onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })}
+        >
+          {content}
+        </AnnotateOverlay>
+      ) : (
+        <>
+          <div className={"hdr" + (setlist ? " tinted" : "")} />
 
-      {setlist && (
-        <div style={{ padding: "8px 14px 0" }}>
-          <div className="muted" style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
-            {songIndex + 1 < setlistSongIds.length
-              ? `Next: ${state.songs.find((s) => s.id === setlistSongIds[songIndex + 1])?.title ?? ""}`
-              : "Last song"}
-          </div>
-          <div style={{ width: "100%", height: 4, background: "var(--line)", borderRadius: 99 }}>
-            <div
-              style={{
-                width: `${((songIndex + 1) / setlistSongIds.length) * 100}%`,
-                height: 4,
-                background: "var(--acc)",
-                borderRadius: 99,
-                transition: "width .2s",
-              }}
-            />
-          </div>
-        </div>
-      )}
+          {setlist && (
+            <div style={{ padding: "8px 14px 0" }}>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+                {songIndex + 1 < setlistSongIds.length
+                  ? `Next: ${state.songs.find((s) => s.id === setlistSongIds[songIndex + 1])?.title ?? ""}`
+                  : "Last song"}
+              </div>
+              <div style={{ width: "100%", height: 4, background: "var(--line)", borderRadius: 99 }}>
+                <div
+                  style={{
+                    width: `${((songIndex + 1) / setlistSongIds.length) * 100}%`,
+                    height: 4,
+                    background: "var(--acc)",
+                    borderRadius: 99,
+                    transition: "width .2s",
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
-      <div style={{ padding: "10px 14px 8px" }}>
-        <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-          {song.artist}
-        </div>
-      </div>
-
-      <div
-        className="flex-1 hidden-scroll"
-        style={{
-          padding: "16px 14px 150px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          touchAction: "pan-y",
-          background: stage.view === "sheet" ? "var(--sheet-bg)" : undefined,
-          color: stage.view === "sheet" ? "var(--sheet-fg)" : undefined,
-        }}
-        onPointerDown={onChartPointerDown}
-        onPointerUp={onChartPointerUp}
-      >
-        {stage.view === "chords" ? (
-          <ChordChart
-            chordpro={song.chordpro}
-            semitones={semitones}
-            fontScale={stage.zoom / 100}
-            hideChords={stage.lyricsOnly}
-          />
-        ) : activeKind && activeVersion ? (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
-            {activeKind === "image" ? (
-              <img
-                src={activeVersion.dataUrl}
-                alt={activeVersion.name}
-                style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
-              />
-            ) : activeKind === "musicxml" ? (
-              <MxlScore
-                src={activeVersion.dataUrl}
-                transpose={semitones}
-                hiddenParts={hiddenParts}
-                onInstrumentsChange={setScoreInstruments}
-                disableZoom={musicxmlAnnotated}
-                staveSpacing={state.settings.staveSpacing}
-              />
-            ) : (
-              <PdfPages src={activeVersion.dataUrl} />
-            )}
-            <span style={{ fontSize: 11, color: "var(--sheet-mut)" }}>
-              {activeKind === "musicxml"
-                ? `${activeVersion.name} · engraved from the score, no chords detected`
-                : `${activeVersion.name} · saved as-is, no chords detected`}
-            </span>
+          <div style={{ padding: "10px 14px 8px" }}>
+            <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+              {song.artist}
+            </div>
           </div>
-        ) : (
-          <div className="empty">
-            <div className="empty-title" style={{ color: "var(--sheet-fg)" }}>No sheet music attached</div>
-            <div className="empty-body" style={{ color: "var(--sheet-mut)" }}>Attach a PDF, photo, or MusicXML score from Add/Edit Song to see it here.</div>
-          </div>
-        )}
-      </div>
 
-      {!stage.chromeHidden && (hasChords || hasAttachment) && (
-        <MusicToolbar onOpenTools={() => setStageToolsOpen(true)} />
+          <div
+            className="flex-1 hidden-scroll"
+            style={{
+              padding: "16px 14px 150px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              touchAction: "pan-y",
+              background: stage.view === "sheet" ? "var(--sheet-bg)" : undefined,
+              color: stage.view === "sheet" ? "var(--sheet-fg)" : undefined,
+            }}
+            onPointerDown={onChartPointerDown}
+            onPointerUp={onChartPointerUp}
+          >
+            <AnnotateCanvas
+              annotations={persistedAnnotations}
+              interactive={false}
+              onCommit={() => {}}
+              onReproject={onReprojectPersisted}
+              scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
+              reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
+            >
+              {content}
+            </AnnotateCanvas>
+          </div>
+
+          {!stage.chromeHidden && (hasChords || hasAttachment) && (
+            <MusicToolbar onOpenTools={() => setStageToolsOpen(true)} />
+          )}
+        </>
       )}
 
       {stage.drawer === "add-song" && (

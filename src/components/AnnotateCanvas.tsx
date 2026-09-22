@@ -6,6 +6,7 @@ import {
   isMark,
   isPin,
   isStroke,
+  PALETTE_PAGES,
   resolveAccentColor,
   resolveSelectionColor,
   rotateAround,
@@ -103,26 +104,34 @@ function drawSelectionHalo(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTM
  * wiring — see the spec's "Canvas mechanics" section. */
 export function AnnotateCanvas({
   annotations,
-  tool,
+  interactive,
+  tool = "select",
   onCommit,
   onReproject,
   onEditRequest,
   onSelectRequest,
   selectedId,
-  scrollMode,
+  scrollMode = false,
   scoreRef,
   reprojectSignal,
-  penStyle,
-  highlighterStyle,
-  markStyle,
-  shapeStyle,
-  armedSymbol,
-  armedShape,
-  eraserSize,
+  penStyle = { color: PALETTE_PAGES[0][0], size: STROKE_WIDTH, opacity: 1 },
+  highlighterStyle = { color: PALETTE_PAGES[0][2], size: 16, opacity: 0.3 },
+  markStyle = { color: PALETTE_PAGES[0][3], size: 20 },
+  shapeStyle = { color: PALETTE_PAGES[0][0], size: 22 },
+  armedSymbol = { id: "" },
+  armedShape = "line",
+  eraserSize = 16,
   children,
 }: {
   annotations: AnnotationObject[];
-  tool: AnnotateTool;
+  /** false renders every stroke/mark/pin purely as static visuals — no
+   * pointer capture, no drag/select/erase, no edit-sheet triggers — so the
+   * chart underneath stays fully scrollable/swipeable/pinch-zoomable. Used
+   * for Live Stage's persistent "annotations are always visible" overlay
+   * (see the annotate-as-overlay design spec); `true` is today's full
+   * drawing/editing behavior, used while the Annotate dock is open. */
+  interactive: boolean;
+  tool?: AnnotateTool;
   /** Called with the full next array whenever a draw/erase/place/move gesture
    * changes it — the caller owns undo history; this component only reports
    * finished user mutations. */
@@ -133,7 +142,7 @@ export function AnnotateCanvas({
    * entry the way `onCommit` does. */
   onReproject: (next: AnnotationObject[]) => void;
   /** Fires when the `select` tool taps a stroke, or a text/shape mark is
-   * tapped while `select` is active — the caller (AnnotateScreen) owns the
+   * tapped while `select` is active — the caller (AnnotateOverlay) owns the
    * style/edit-sheet UI, this component only knows a gesture happened. */
   onEditRequest?: (id: string) => void;
   /** Fires when the `select` tool's first tap lands on a `ShapeMark` that
@@ -142,7 +151,7 @@ export function AnnotateCanvas({
    * Distinct from `onEditRequest`: tapping an already-selected shape (or any
    * non-shape mark) still goes straight through `onEditRequest` as before.
    * The caller is expected to keep its own selected-id state in sync with
-   * both this and `onEditRequest` (see AnnotateScreen). Also fires with
+   * both this and `onEditRequest` (see AnnotateOverlay). Also fires with
    * `null` when the `select` tool taps empty canvas — the caller should
    * clear its selected-id state in that case. */
   onSelectRequest?: (id: string | null) => void;
@@ -155,7 +164,7 @@ export function AnnotateCanvas({
    * normal single-finger drag instead — a single finger can't both draw
    * and scroll, so Annotate mode's tool row offers this as an explicit
    * toggle. */
-  scrollMode: boolean;
+  scrollMode?: boolean;
   /** Only meaningful for the `musicxml` view — lets pin/stroke/mark placement
    * anchor to the score's nearest measure, and lets `reprojectSignal`
    * reposition existing anchored annotations after a transpose. Omitted on
@@ -166,17 +175,17 @@ export function AnnotateCanvas({
    * from a transpose — triggers a reprojection pass via `onReproject`. */
   reprojectSignal?: number;
   /** Style newly drawn pen/square strokes pick up. */
-  penStyle: InkStyle;
-  highlighterStyle: InkStyle;
+  penStyle?: InkStyle;
+  highlighterStyle?: InkStyle;
   /** Style newly placed text/notation marks pick up. */
-  markStyle: MarkStyle;
+  markStyle?: MarkStyle;
   /** Style newly placed shape marks pick up. */
-  shapeStyle: MarkStyle;
+  shapeStyle?: MarkStyle;
   /** Which notation stamp the Notation tool places next. */
-  armedSymbol: ArmedSymbol;
+  armedSymbol?: ArmedSymbol;
   /** Which shape the Shapes tool places next. */
-  armedShape: ShapeId;
-  eraserSize: number;
+  armedShape?: ShapeId;
+  eraserSize?: number;
   children: ReactNode;
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -298,7 +307,7 @@ export function AnnotateCanvas({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if (scrollMode) return;
+    if (!interactive || scrollMode) return;
     e.stopPropagation();
     const p = toContentPoint(e);
     if (tool === "eraser") {
@@ -358,7 +367,7 @@ export function AnnotateCanvas({
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (scrollMode || activePointer.current !== e.pointerId) return;
+    if (!interactive || scrollMode || activePointer.current !== e.pointerId) return;
     e.stopPropagation();
     const p = toContentPoint(e);
     if (tool === "eraser") {
@@ -401,7 +410,7 @@ export function AnnotateCanvas({
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (activePointer.current !== e.pointerId) return;
+    if (!interactive || activePointer.current !== e.pointerId) return;
     activePointer.current = null;
     const p = toContentPoint(e);
 
@@ -511,8 +520,8 @@ export function AnnotateCanvas({
           top: 0,
           left: 0,
           width: "100%",
-          touchAction: scrollMode ? "pan-y" : "none",
-          pointerEvents: scrollMode || overlayTool ? "none" : "auto",
+          touchAction: interactive && !scrollMode ? "none" : "auto",
+          pointerEvents: interactive && !scrollMode && !overlayTool ? "auto" : "none",
         }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -523,7 +532,7 @@ export function AnnotateCanvas({
           tapped, even though the canvas itself ignores pointer events while
           one of them is active (so it doesn't also try to start a stroke) —
           this transparent layer catches the gesture instead. */}
-      {overlayTool && !scrollMode && (
+      {interactive && overlayTool && !scrollMode && (
         <div
           style={{ position: "absolute", inset: 0, touchAction: "none" }}
           onPointerDown={onPointerDown}
@@ -538,6 +547,7 @@ export function AnnotateCanvas({
             key={pin.id}
             pin={pin}
             tool={tool}
+            canvasInteractive={interactive}
             onErase={() => onCommit(annotations.filter((a) => a.id !== pin.id))}
             onOpen={() => setEditingPin({ id: pin.id, x: pin.position.x, y: pin.position.y, text: pin.text, anchor: pin.anchor, isNew: false })}
             onDrag={(x, y, clientX, clientY) => {
@@ -557,7 +567,8 @@ export function AnnotateCanvas({
               <MarkBadge
                 mark={displayMark}
                 tool={tool}
-                selected={tool === "select" && mark.id === selectedId}
+                canvasInteractive={interactive}
+                selected={interactive && tool === "select" && mark.id === selectedId}
                 onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
                 onEdit={() => onEditRequest?.(mark.id)}
                 onSelect={() => onSelectRequest?.(mark.id)}
@@ -566,7 +577,7 @@ export function AnnotateCanvas({
                   onCommit(annotations.map((a) => (a.id === mark.id ? { ...a, position: { x, y }, anchor } : a)));
                 }}
               />
-              {tool === "select" && selectedId === mark.id && mark.kind === "shape" && (
+              {interactive && tool === "select" && selectedId === mark.id && mark.kind === "shape" && (
                 <ShapeHandles
                   mark={displayMark as ShapeMark}
                   toContent={toContent}
@@ -622,6 +633,7 @@ function renderMarkGlyph(item: TextMark | ShapeMark) {
 function MarkBadge({
   mark,
   tool,
+  canvasInteractive,
   selected,
   onErase,
   onEdit,
@@ -630,6 +642,10 @@ function MarkBadge({
 }: {
   mark: TextMark | ShapeMark;
   tool: AnnotateTool;
+  /** Mirrors the wrapping AnnotateCanvas's `interactive` prop — `false`
+   * disables every pointer handler below regardless of `tool`, so a mark
+   * shown by the read-only overlay can't be dragged/tapped. */
+  canvasInteractive: boolean;
   selected: boolean;
   onErase: () => void;
   onEdit: () => void;
@@ -639,7 +655,7 @@ function MarkBadge({
   onDrag: (x: number, y: number, clientX: number, clientY: number) => void;
 }) {
   const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
-  const interactive = tool === "select" || tool === "eraser";
+  const interactive = canvasInteractive && (tool === "select" || tool === "eraser");
 
   return (
     <div
@@ -874,12 +890,16 @@ function ShapeHandles({
 function PinBadge({
   pin,
   tool,
+  canvasInteractive,
   onErase,
   onOpen,
   onDrag,
 }: {
   pin: Pin;
   tool: AnnotateTool;
+  /** Same role as MarkBadge's `canvasInteractive` — `false` makes the pin a
+   * static badge with no drag/tap handling, for the read-only overlay. */
+  canvasInteractive: boolean;
   onErase: () => void;
   onOpen: () => void;
   onDrag: (x: number, y: number, clientX: number, clientY: number) => void;
@@ -901,7 +921,7 @@ function PinBadge({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        pointerEvents: "auto",
+        pointerEvents: canvasInteractive ? "auto" : "none",
         transform: "translate(-6px, -6px)",
         boxShadow: "0 2px 5px rgba(29,31,32,0.18)",
         touchAction: "none",

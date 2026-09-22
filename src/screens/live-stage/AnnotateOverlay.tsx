@@ -1,8 +1,6 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { useStore } from "../../state/store";
-import { ChordChart } from "../../components/ChordChart";
-import { MxlScore, type MxlScoreHandle } from "../../components/MxlScore";
-import { PdfPages } from "../../components/PdfPages";
+import type { MxlScoreHandle } from "../../components/MxlScore";
 import { Icon, type IconName } from "../../components/Icon";
 import { Sheet } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
@@ -12,7 +10,6 @@ import type {
   AnnotationObject,
   AnnotationView,
   AttachmentKind,
-  AttachmentVersion,
   ChartView,
   ShapeId,
   ShapeMark,
@@ -104,24 +101,30 @@ interface History {
   future: AnnotationObject[][];
 }
 
-export function AnnotateScreen({
+export function AnnotateOverlay({
   song,
   view,
   activeKind,
-  activeVersion,
-  semitones,
-  hiddenParts,
-  fontScale,
+  scoreRef,
+  reprojectTick,
   onClose,
+  children,
 }: {
   song: Song;
   view: ChartView;
   activeKind?: AttachmentKind;
-  activeVersion?: AttachmentVersion;
-  semitones: number;
-  hiddenParts: ReadonlySet<string>;
-  fontScale: number;
+  /** The same ref Live Stage's shared content wires into its `MxlScore` —
+   * lets pin/stroke/mark placement anchor to the score's nearest measure.
+   * Only meaningful when the active view is `musicxml`. */
+  scoreRef: RefObject<MxlScoreHandle | null>;
+  /** Bumped by Live Stage whenever the shared content's `MxlScore` just
+   * re-rendered from a transpose — triggers reprojection here. */
+  reprojectTick: number;
   onClose: () => void;
+  /** The chart/attachment content itself — built once by Live Stage and
+   * shared with its own read-only annotation overlay, so this component no
+   * longer builds a second copy (see the annotate-as-overlay design spec). */
+  children: ReactNode;
 }) {
   const { state, dispatch } = useStore();
   const annotationView: AnnotationView = view === "chords" ? "chords" : activeKind ?? "chords";
@@ -148,8 +151,6 @@ export function AnnotateScreen({
   // matching the store (Done's own dispatch would then silently resurrect
   // every other view from that stale snapshot).
   const [allViewsCleared, setAllViewsCleared] = useState(false);
-  const mxlScoreRef = useRef<MxlScoreHandle>(null);
-  const [reprojectTick, setReprojectTick] = useState(0);
 
   const [penStyle, setPenStyle] = useState({ color: PALETTE_PAGES[0][0], size: STROKE_WIDTH, opacity: 1 });
   const [highlighterStyle, setHighlighterStyle] = useState({ color: PALETTE_PAGES[0][2], size: 16, opacity: 0.3 });
@@ -239,35 +240,8 @@ export function AnnotateScreen({
 
   const armed: ArmedSymbol = tool === "notation" ? { id: armedSymbol.id, glyph: armedSymbol.glyph, icon: armedSymbol.icon } : { id: "" };
 
-  const content =
-    view === "chords" ? (
-      <div style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 8, fontSize: 13, lineHeight: 1.35 }}>
-        <ChordChart chordpro={song.chordpro} semitones={semitones} fontScale={fontScale} />
-      </div>
-    ) : activeKind === "image" && activeVersion ? (
-      <img src={activeVersion.dataUrl} alt={activeVersion.name} style={{ width: "100%", display: "block" }} />
-    ) : activeKind === "musicxml" && activeVersion ? (
-      <div style={{ padding: 8 }}>
-        <MxlScore
-          ref={mxlScoreRef}
-          src={activeVersion.dataUrl}
-          transpose={semitones}
-          hiddenParts={hiddenParts}
-          disableZoom
-          staveSpacing={state.settings.staveSpacing}
-          onRerendered={() => setReprojectTick((t) => t + 1)}
-        />
-      </div>
-    ) : activeKind === "pdf" && activeVersion ? (
-      <PdfPages src={activeVersion.dataUrl} disableZoom />
-    ) : (
-      <div className="muted" style={{ padding: 20, fontSize: 12, textAlign: "center" }}>
-        Nothing to annotate yet.
-      </div>
-    );
-
   return (
-    <div className="screen">
+    <>
       <div
         style={{
           display: "flex",
@@ -306,6 +280,7 @@ export function AnnotateScreen({
         {mode === "draw" ? (
           <AnnotateCanvas
             annotations={annotations}
+            interactive
             tool={tool}
             onCommit={commit}
             onReproject={reproject}
@@ -316,7 +291,7 @@ export function AnnotateScreen({
             onSelectRequest={setSelectedId}
             selectedId={selectedId}
             scrollMode={scrollMode}
-            scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
+            scoreRef={annotationView === "musicxml" ? scoreRef : undefined}
             reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
             penStyle={penStyle}
             highlighterStyle={highlighterStyle}
@@ -326,7 +301,7 @@ export function AnnotateScreen({
             armedShape={armedShape}
             eraserSize={eraserSize}
           >
-            {content}
+            {children}
           </AnnotateCanvas>
         ) : (
           <textarea
@@ -451,7 +426,7 @@ export function AnnotateScreen({
           </button>
         </Sheet>
       )}
-    </div>
+    </>
   );
 }
 
