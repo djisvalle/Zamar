@@ -35,11 +35,13 @@ export function LiveStage() {
   const setlistSongIds = activeSetlistSongIds(setlist);
 
   // Which category/version is on screen belongs to the song currently on
-  // stage — reset to that song's default (highest-priority category, its
-  // bucket's default version) whenever the song changes.
+  // stage — reset to that song's saved default kind if it has one and it's
+  // still attached, else the highest-priority available category, then that
+  // bucket's own default version, whenever the song changes.
   useEffect(() => {
     const attachments = song?.attachments ?? {};
-    const kind = firstAvailableCategory(attachments);
+    const savedKind = song?.defaultView && song.defaultView !== "chords" ? song.defaultView : undefined;
+    const kind = savedKind && attachments[savedKind] ? savedKind : firstAvailableCategory(attachments);
     setActiveKind(kind);
     setActiveVersionId(kind ? selectedVersion(attachments[kind]!).id : undefined);
   }, [song?.id]);

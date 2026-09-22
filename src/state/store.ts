@@ -14,10 +14,16 @@ export interface AppState {
   viewport: Viewport;
 }
 
-/** A song with no chords/lyrics text but at least one attachment should
- * open on the attachment view, not an empty chart. */
-function defaultView(song: Song | undefined): StageState["view"] {
-  if (song && !song.chordpro.trim() && Object.keys(song.attachments).length > 0) return "sheet";
+/** A song's Live Stage view: honors a saved `song.defaultView` when it
+ * still applies to this song (its chords weren't cleared out, or its
+ * chosen attachment kind is still attached); otherwise falls back to the
+ * automatic guess — chords if the song has any, else its first available
+ * attachment, matching the behavior before per-song defaults existed. */
+function resolveDefaultView(song: Song | undefined): StageState["view"] {
+  if (!song) return "chords";
+  if (song.defaultView === "chords" && song.chordpro.trim()) return "chords";
+  if (song.defaultView && song.defaultView !== "chords" && song.attachments[song.defaultView]) return "sheet";
+  if (!song.chordpro.trim() && Object.keys(song.attachments).length > 0) return "sheet";
   return "chords";
 }
 
@@ -43,7 +49,7 @@ export function makeEmptyStage(textScale: number): StageState {
     setlistIndex: 0,
     dispKey: defaultSong?.defaultKey ?? null,
     capo: 0,
-    view: defaultView(defaultSong),
+    view: resolveDefaultView(defaultSong),
     drawer: null,
     chromeHidden: false,
     lyricsOnly: false,
@@ -281,7 +287,7 @@ export function reducer(state: AppState, action: Action): AppState {
           setlistId: action.setlistId ?? null,
           setlistIndex: action.setlistIndex ?? 0,
           dispKey,
-          view: defaultView(song),
+          view: resolveDefaultView(song),
         },
       };
     }
@@ -314,7 +320,7 @@ export function reducer(state: AppState, action: Action): AppState {
       }
       return {
         ...state,
-        stage: { ...state.stage, songId: nextId, setlistIndex: nextIndex, dispKey, view: defaultView(song) },
+        stage: { ...state.stage, songId: nextId, setlistIndex: nextIndex, dispKey, view: resolveDefaultView(song) },
       };
     }
     case "STAGE_EXIT":
