@@ -11,9 +11,9 @@ this file has been implemented yet unless noted as "done" below.
 - **Initial build-out**: freehand pen + highlighter (independent color/size/
   opacity), a 16-symbol notation stamp palette, a movable/editable text tool,
   an eraser, per-song undo/redo, and clear-this-page/clear-all. Lives in
-  `src/screens/live-stage/AnnotateMode.tsx`; state in
-  `state.annotations`/`state.annotationHistory` (`src/state/store.ts`),
-  keyed by song id, session-only (not persisted to SQLite).
+  `src/screens/live-stage/AnnotateScreen.tsx` and
+  `src/components/AnnotateCanvas.tsx`; state is `Song.annotations`
+  (`src/state/types.ts`), persisted per song — see the corrected note below.
 - **Phase 1 (object-editing model + Shapes tool)**: a full 32-color picker
   (2 swipeable pages), a live checkerboard preview showing the actual
   stroke/shape being styled, numeric Opacity(%)/Size(pt) readouts replacing
@@ -23,6 +23,15 @@ this file has been implemented yet unless noted as "done" below.
   Shapes tool (slur, crescendo/decrescendo hairpins, arrow, line, bracket,
   outline/filled rectangle and ellipse) sharing the same mark-object model
   as text/notation stamps.
+- **Quick wins 1–3** (collapsible tool panel, canvas selection highlight,
+  stronger Clear-page vs. Clear-all distinction) — done.
+- **Persisted annotations per song** (was tracked as backlog item 4 below).
+  Turned out to already be implemented by the time this doc was ported over
+  from `develop`: `Song.annotations` persists through `songsRepo.ts`'s
+  `annotations_json` column (schema v3, `src/data/db.ts`) as part of the
+  store's existing debounced songs/setlists/settings persistence effect
+  (`src/state/store.ts`). This doc's "Done so far" section didn't reflect
+  that merge — corrected here. No further work needed on this item.
 
 ## Deferred from the reference-image discussion
 
@@ -57,18 +66,16 @@ forgotten:
 
 ### Bigger, higher-value
 
-4. **Persist annotations per song.** Biggest real-world usefulness gap —
-   right now every reload wipes markup. The SQLite repo pattern already
-   exists for songs/setlists/settings (`src/data/songsRepo.ts` etc.); an
-   `annotationsRepo.ts` following the same shape, wired into
-   `StoreProvider`'s existing debounced persistence effect
-   (`src/state/store.ts`), is mostly plumbing rather than new design.
+4. ~~Persist annotations per song.~~ Already implemented — see "Done so
+   far" above.
 5. **Rotate/resize handles on shapes.** Without this, hairpins and arrows
    only work pointing horizontally right — a diminuendo hairpin under a
    rising vocal line, or an arrow at an angle, isn't possible. Needs
    drag-handle math (resize + rotation transform) on top of the existing
-   `ShapeAnnotation` model in `AnnotateMode.tsx`. Bigger lift than anything
-   above, but what actually makes the Shapes tool useful beyond a demo.
+   `ShapeMark` model in `AnnotateCanvas.tsx`/`AnnotateScreen.tsx`. Design
+   spec: `docs/superpowers/specs/2026-09-23-shape-rotate-resize-design.md`.
+   Bigger lift than the quick wins above, but what actually makes the
+   Shapes tool useful beyond a demo.
 
 ### Nice-to-have — lower priority
 
