@@ -9,7 +9,7 @@ export const ERASE_RADIUS = 14;
  * marks, which are similarly bigger targets than a bare stroke. */
 export const PIN_ERASE_RADIUS = 18;
 /** Width-to-height ratio every shape glyph is drawn at (see `ShapeGlyph` in
- * AnnotateScreen.tsx) — shared with hit-testing so a shape's erase/edit
+ * AnnotateOverlay.tsx) — shared with hit-testing so a shape's erase/edit
  * target matches what's actually drawn on screen. */
 export const SHAPE_ASPECT = 60 / 22;
 
@@ -87,7 +87,7 @@ export function isShapeMark(obj: AnnotationObject): obj is ShapeMark {
 }
 
 /** Text and shape stamps share one drag/tap/edit-sheet code path in
- * AnnotateScreen.tsx — only their glyph differs. */
+ * AnnotateOverlay.tsx — only their glyph differs. */
 export function isMark(obj: AnnotationObject): obj is TextMark | ShapeMark {
   return isTextMark(obj) || isShapeMark(obj);
 }

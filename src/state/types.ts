@@ -95,7 +95,7 @@ export type ShapeId =
 /** A draggable text/symbol stamp placed with the Text or Notation tool —
  * distinct from `Pin`, which is a sticky note with its own tap-to-open
  * textarea editor. `TextMark`/`ShapeMark` render and drag directly on the
- * chart like a `Stroke`, share one edit sheet (see AnnotateScreen.tsx's
+ * chart like a `Stroke`, share one edit sheet (see AnnotateOverlay.tsx's
  * `EditMarkSheet`), and share `Pin`'s reprojection model: a single
  * `position` + optional single `anchor`, not the parallel `points`/`anchors`
  * arrays a multi-point `Stroke` needs. */
@@ -168,7 +168,7 @@ export interface Song {
   defaultView?: "chords" | AttachmentKind;
   /** Freeform text notes for this song — reminders, cues, anything worth
    * having on hand regardless of chart type. "" when empty. UI label is
-   * "Cues" (see AnnotateScreen.tsx/AddEditSong.tsx); field name is unchanged
+   * "Cues" (see AnnotateOverlay.tsx/AddEditSong.tsx); field name is unchanged
    * to avoid an unnecessary SQLite column rename. */
   notes: string;
   /** Hand-drawn ink and pins, one layer per view type this song can show.

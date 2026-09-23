@@ -183,48 +183,60 @@ export function LiveStage() {
   // now also accounts for `dockOpen`, matching what AnnotateOverlay always
   // forced while it built its own separate copy of this content: pinch-zoom
   // gestures shouldn't fight with active drawing gestures.
-  const content =
-    stage.view === "chords" ? (
-      <ChordChart
-        chordpro={song.chordpro}
-        semitones={semitones}
-        fontScale={stage.zoom / 100}
-        hideChords={stage.lyricsOnly}
-      />
-    ) : activeKind && activeVersion ? (
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
-        {activeKind === "image" ? (
-          <img
-            src={activeVersion.dataUrl}
-            alt={activeVersion.name}
-            style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
-          />
-        ) : activeKind === "musicxml" ? (
-          <MxlScore
-            ref={mxlScoreRef}
-            src={activeVersion.dataUrl}
-            transpose={semitones}
-            hiddenParts={hiddenParts}
-            onInstrumentsChange={setScoreInstruments}
-            disableZoom={musicxmlAnnotated || dockOpen}
-            staveSpacing={state.settings.staveSpacing}
-            onRerendered={() => setReprojectTick((t) => t + 1)}
-          />
-        ) : (
-          <PdfPages src={activeVersion.dataUrl} disableZoom={dockOpen} />
-        )}
-        <span style={{ fontSize: 11, color: "var(--sheet-mut)" }}>
-          {activeKind === "musicxml"
-            ? `${activeVersion.name} · engraved from the score, no chords detected`
-            : `${activeVersion.name} · saved as-is, no chords detected`}
-        </span>
-      </div>
-    ) : (
-      <div className="empty">
-        <div className="empty-title" style={{ color: "var(--sheet-fg)" }}>No sheet music attached</div>
-        <div className="empty-body" style={{ color: "var(--sheet-mut)" }}>Attach a PDF, photo, or MusicXML score from Add/Edit Song to see it here.</div>
-      </div>
-    );
+  const content = (
+    <div
+      style={{
+        padding: "16px 14px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        background: stage.view === "sheet" ? "var(--sheet-bg)" : undefined,
+        color: stage.view === "sheet" ? "var(--sheet-fg)" : undefined,
+      }}
+    >
+      {stage.view === "chords" ? (
+        <ChordChart
+          chordpro={song.chordpro}
+          semitones={semitones}
+          fontScale={stage.zoom / 100}
+          hideChords={stage.lyricsOnly}
+        />
+      ) : activeKind && activeVersion ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
+          {activeKind === "image" ? (
+            <img
+              src={activeVersion.dataUrl}
+              alt={activeVersion.name}
+              style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
+            />
+          ) : activeKind === "musicxml" ? (
+            <MxlScore
+              ref={mxlScoreRef}
+              src={activeVersion.dataUrl}
+              transpose={semitones}
+              hiddenParts={hiddenParts}
+              onInstrumentsChange={setScoreInstruments}
+              disableZoom={musicxmlAnnotated || dockOpen}
+              staveSpacing={state.settings.staveSpacing}
+              onRerendered={() => setReprojectTick((t) => t + 1)}
+            />
+          ) : (
+            <PdfPages src={activeVersion.dataUrl} disableZoom={dockOpen} />
+          )}
+          <span style={{ fontSize: 11, color: "var(--sheet-mut)" }}>
+            {activeKind === "musicxml"
+              ? `${activeVersion.name} · engraved from the score, no chords detected`
+              : `${activeVersion.name} · saved as-is, no chords detected`}
+          </span>
+        </div>
+      ) : (
+        <div className="empty">
+          <div className="empty-title" style={{ color: "var(--sheet-fg)" }}>No sheet music attached</div>
+          <div className="empty-body" style={{ color: "var(--sheet-mut)" }}>Attach a PDF, photo, or MusicXML score from Add/Edit Song to see it here.</div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="screen" onClick={onScreenClick}>
@@ -273,15 +285,7 @@ export function LiveStage() {
 
           <div
             className="flex-1 hidden-scroll"
-            style={{
-              padding: "16px 14px 150px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              touchAction: "pan-y",
-              background: stage.view === "sheet" ? "var(--sheet-bg)" : undefined,
-              color: stage.view === "sheet" ? "var(--sheet-fg)" : undefined,
-            }}
+            style={{ paddingBottom: 150, touchAction: "pan-y" }}
             onPointerDown={onChartPointerDown}
             onPointerUp={onChartPointerUp}
           >
@@ -309,7 +313,7 @@ export function LiveStage() {
       {stage.drawer === "quick-edit" && (
         <QuickEditSheet songId={song.id} onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
       )}
-      {stageToolsOpen && (
+      {stageToolsOpen && !dockOpen && (
         <StageToolsSheet
           song={song}
           view={stage.view}

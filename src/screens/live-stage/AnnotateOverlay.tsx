@@ -126,11 +126,11 @@ export function AnnotateOverlay({
    * longer builds a second copy (see the annotate-as-overlay design spec). */
   children: ReactNode;
 }) {
-  const { state, dispatch } = useStore();
+  const { dispatch } = useStore();
   const annotationView: AnnotationView = view === "chords" ? "chords" : activeKind ?? "chords";
-  // Matches the exact condition that produces the "Nothing to annotate yet"
-  // fallback in `content` below — there's no real chart to attribute marks
-  // to, so `done()` must not write to `annotations` at all in this case.
+  // Matches the condition that produces Live Stage's "No sheet music
+  // attached" fallback for `content` — there's no real chart to attribute
+  // marks to, so `done()` must not write to `annotations` at all in this case.
   const noAnnotationTarget = view === "sheet" && activeKind === undefined;
 
   const [mode, setMode] = useState<"draw" | "cues">("draw");
