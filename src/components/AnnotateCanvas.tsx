@@ -204,24 +204,29 @@ export function AnnotateCanvas({
   // committed to `annotations` via onCommit on pointer-up (see ShapeHandles).
   const [shapePreview, setShapePreview] = useState<{ id: string; width?: number; size?: number; rotation?: number } | null>(null);
 
-  // Re-measures the wrapped content's natural size, but only while nothing
-  // has been placed yet on this view — once an annotation exists, the size
-  // freezes so redrawn marks never silently drift out of place. The controls
-  // that could otherwise change this content's layout (chord-chart zoom,
-  // lyrics-only, MusicXML engraving zoom, instrument visibility) are
-  // disabled elsewhere for the same reason once a view has annotations.
-  // Transpose is deliberately NOT one of those controls — see the spec's
-  // "Freeze rule (revised)": it reprojects instead of locking.
+  // Re-measures the wrapped content's natural size for as long as this
+  // AnnotateCanvas instance stays mounted. This used to stop once a view had
+  // any annotations (to stop marks drifting if content reflowed after being
+  // drawn) — but every control that could cause that reflow is already
+  // locked out elsewhere once a view has annotations (chordsLocked/
+  // instrumentsLocked gate transpose/capo/zoom/lyrics-only for chords, and
+  // zoom/instrument-visibility for musicxml; image/pdf have no reflowing
+  // controls at all), so the extra freeze here was redundant — and actively
+  // harmful for a freshly-mounted read-only canvas whose content (e.g. a
+  // MusicXML score) is still mid-engrave on first paint: it would measure a
+  // too-small size and then never correct it. Transpose is deliberately
+  // exempt from the lock (it reprojects instead) and can itself change a
+  // score's line-wrap height, so staying attached also keeps the canvas
+  // sized correctly across a transpose, not just at mount.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
     const measure = () => setSize({ width: el.clientWidth, height: el.scrollHeight });
     measure();
-    if (annotations.length > 0) return;
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [annotations.length]);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
