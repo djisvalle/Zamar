@@ -82,20 +82,35 @@ forgotten:
    spec: `docs/superpowers/specs/2026-09-23-shape-rotate-resize-design.md`.
    Bigger lift than the quick wins above, but what actually makes the
    Shapes tool useful beyond a demo.
+6. **Stop remounting chart content across the Annotate dock toggle.** Flagged by the
+   final whole-branch review of the annotate-as-overlay work (2026-09-23).
+   `LiveStage.tsx` renders `AnnotateOverlay` and the normal chrome as different element
+   types at the same JSX child slot, so React unmounts/remounts the whole
+   `AnnotateCanvas` + `content` region — `MxlScore`/`PdfPages` included — on every
+   Annotate open and close, discarding scroll/zoom state and forcing a fresh
+   re-engrave/re-render each time. Fix shape: hoist the chart-content region out of the
+   `dockOpen` ternary in `LiveStage.tsx` so it occupies one constant JSX slot, and only
+   the header/footer chrome around it swaps between `AnnotateOverlay`'s controls and the
+   normal title/`MusicToolbar`. This needs `AnnotateOverlay`'s staged
+   annotation/tool/undo state either lifted into `LiveStage` or exposed via render
+   props/children-as-function so its chrome can be composed around a content region it
+   no longer owns. See
+   `docs/superpowers/specs/2026-09-23-annotate-as-overlay-design.md`'s
+   "Post-implementation note" for the review finding.
 
 ### Nice-to-have — lower priority
 
-6. **Recently-used colors/symbols row** above the full color grid / notation
+7. **Recently-used colors/symbols row** above the full color grid / notation
    palette, for fast repeat stamping (e.g. placing the same "pp" or the same
    red color many times down one chart).
-7. **Snap-to-lyric-line guide** while placing/dragging a mark, so it's easy
+8. **Snap-to-lyric-line guide** while placing/dragging a mark, so it's easy
    to align a stamp exactly under a specific word or chord on a small phone
    screen.
-8. **Multi-select (marquee or shift-tap)** for batch move/delete/duplicate
+9. **Multi-select (marquee or shift-tap)** for batch move/delete/duplicate
    once a chart has many marks on it.
-9. **Long-press to cycle through overlapping strokes** when several marks
-   are stacked close together (tap currently always grabs the topmost one).
-10. **Pen stroke smoothing/simplification** (e.g. Douglas-Peucker) — a long
+10. **Long-press to cycle through overlapping strokes** when several marks
+    are stacked close together (tap currently always grabs the topmost one).
+11. **Pen stroke smoothing/simplification** (e.g. Douglas-Peucker) — a long
     or fast freehand gesture currently stores every raw pointer sample
     as-is; fine for a mockup, worth revisiting for a real build.
 

@@ -94,9 +94,9 @@ working tree on 2026-09-19.
       `MinimumDistanceBetweenSystems`, applied once when a score loads (not reactively —
       a spacing change only affects the next fresh load, never reflows an
       already-rendered, possibly-annotated one). Applies everywhere `MxlScore.tsx` is
-      used: Live Stage (including while its Annotate overlay is open, since it's the same
-      score instance, not a separate copy), Add/Edit Song's Sheet Music tab, and Import's
-      preview.
+      used: Live Stage (including while its Annotate overlay is open, though that instance
+      is not shared across the dock toggle — `LiveStage.tsx` remounts the score when
+      opening/closing Annotate), Add/Edit Song's Sheet Music tab, and Import's preview.
 
 ## Nice-to-have — R&D / spike candidates
 

@@ -1073,3 +1073,18 @@ pointer to the new spec.
 git add docs/progress-checklist.md docs/annotate-mode-roadmap.md
 git commit -m "Update annotate-mode docs to reflect the overlay architecture"
 ```
+
+## Post-implementation note
+
+A final whole-branch review (2026-09-23) found that this plan (and the spec it
+implements) overstated the "content never remounts" property: `LiveStage.tsx` renders
+`AnnotateOverlay` and the normal chrome as different element types at the same JSX
+child slot, so React actually unmounts/remounts the whole chart-content subtree
+(`MxlScore`/`PdfPages` included) on every dock toggle, losing scroll/zoom state and
+forcing a fresh engrave/render each time. The plan's actual load-bearing guarantee —
+exactly one `AnnotateCanvas` wrapping one `content` instance at a time — still holds and
+is what this plan delivered. The same review also caught and fixed a real bug this
+remount had been masking: the two `AnnotateCanvas` mounts measured different wrapper
+widths (dock-open had no side padding, dock-closed had 14px), so a stroke/mark drawn in
+one dock state landed in a different relative position in the other. See
+`docs/annotate-mode-roadmap.md` for the follow-up to actually eliminate the remount.

@@ -196,3 +196,19 @@ is the correctness bar, plus manual click-through:
 8. Force-reload — confirm annotations still render on the normal view after reload
    (this exercises the `interactive={false}` path reading straight from persisted
    `song.annotations`, independent of ever having opened the dock this session).
+
+## Post-implementation note
+
+A final whole-branch review (2026-09-23) found that this spec's "content never
+remounts between them" framing doesn't hold as written: React remounts the chart
+content on every dock toggle, because `LiveStage.tsx` renders `AnnotateOverlay` and the
+normal chrome as different element types at the same JSX child slot, not because of
+anything about `content`'s own identity. The *other* half of the governing invariant —
+exactly one `AnnotateCanvas` wrapping one `content` instance at a time — does hold, and
+is what actually delivers this spec's goal (no divergent duplicate content, no
+dock-open/dock-closed drift). The same review also found and fixed a real
+coordinate-space bug this remount masked: the two `AnnotateCanvas` mounts measured
+different wrapper widths (dock-open had no side padding, dock-closed had 14px), so a
+mark drawn in one dock state landed in a different relative position in the other.
+Annotations now agree between dock states. See `docs/annotate-mode-roadmap.md` for the
+follow-up to actually eliminate the remount.
