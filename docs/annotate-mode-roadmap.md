@@ -11,9 +11,15 @@ this file has been implemented yet unless noted as "done" below.
 - **Initial build-out**: freehand pen + highlighter (independent color/size/
   opacity), a 16-symbol notation stamp palette, a movable/editable text tool,
   an eraser, per-song undo/redo, and clear-this-page/clear-all. Lives in
-  `src/screens/live-stage/AnnotateScreen.tsx` and
+  `src/screens/live-stage/AnnotateOverlay.tsx` and
   `src/components/AnnotateCanvas.tsx`; state is `Song.annotations`
   (`src/state/types.ts`), persisted per song — see the corrected note below.
+  Originally built as a dedicated full-screen `AnnotateScreen.tsx` that
+  replaced Live Stage while open; as of 2026-09-23, Annotate is composed as an
+  overlay on the persistent Live Stage screen instead (drawn annotations now
+  render on the normal chord/sheet view at all times, not just while the
+  Annotate dock is open) — see
+  `docs/superpowers/specs/2026-09-23-annotate-as-overlay-design.md`.
 - **Phase 1 (object-editing model + Shapes tool)**: a full 32-color picker
   (2 swipeable pages), a live checkerboard preview showing the actual
   stroke/shape being styled, numeric Opacity(%)/Size(pt) readouts replacing

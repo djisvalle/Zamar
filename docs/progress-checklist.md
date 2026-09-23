@@ -53,16 +53,19 @@ working tree on 2026-09-19.
       design — just the next-song name and the bar.
 - [x] **Annotate / custom notes on a song.** Three real capabilities, not the old
       decorative shell: freeform typed cues (`Song.notes`, UI-labeled "Cues" — editable
-      from both Add/Edit Song's Cues tab and Live Stage's Annotate screen), real
+      from both Add/Edit Song's Cues tab and Live Stage's Annotate overlay), real
       canvas-drawn ink (pen/rectangle via `AnnotateCanvas.tsx`), and pins — short typed
       notes dropped at a point, rendered as their own DOM layer (not canvas pixels) so
       they stay individually tappable/draggable after placement. Ink and pins share one
-      `Song.annotations` array per view (`AnnotationObject = Stroke | Pin`), drawn and
-      reviewed inside the dedicated Annotate screen over whichever chart type was open
-      when it was entered — chords, image, PDF, or MusicXML — not just the chords view
-      the old shell was stuck on, and not a persistent overlay on the normal Live Stage
-      view itself. Eraser removes either kind; Undo/Clear operate on the whole mixed
-      array uniformly.
+      `Song.annotations` array per view (`AnnotationObject = Stroke | Pin`), rendered on
+      Live Stage's normal (non-annotate) view at all times — not just while drawing — over
+      whichever chart type is on screen: chords, image, PDF, or MusicXML, not just the
+      chords view the old shell was stuck on. The Annotate dock (`AnnotateOverlay.tsx`) is
+      an overlay on that same persistent Live Stage screen, not a separate screen with its
+      own copy of the chart — opening it swaps in Annotate's header/toolbar and drawing
+      controls over the same content instance already on screen, rather than navigating
+      away. Eraser removes either kind; Undo/Clear operate on the whole mixed array
+      uniformly.
       Controls that would reflow a view's content (chord-chart zoom, lyrics-only,
       MusicXML instrument visibility, MusicXML's own pinch-zoom) disable once that view
       has any annotation, so marks never silently drift out of alignment — **except
@@ -83,14 +86,17 @@ working tree on 2026-09-19.
       `docs/superpowers/specs/2026-09-22-annotation-pins-and-stave-spacing-design.md` for
       pins, reprojection, and stave spacing — including its "Future work / TODO" section
       (stickers, a color picker, per-song stave spacing, and reprojecting across an
-      engraving-zoom change, all deliberately deferred, not gaps in this pass).
+      engraving-zoom change, all deliberately deferred, not gaps in this pass), and
+      `docs/superpowers/specs/2026-09-23-annotate-as-overlay-design.md` for the move from
+      a dedicated full-screen Annotate screen to this overlay-on-Live-Stage architecture.
 - [x] **Stave spacing (Settings > Notation).** A global Compact/Default/Roomy preset
       (`Settings.staveSpacing`) maps to `osmd.EngravingRules.StaffDistance`/
       `MinimumDistanceBetweenSystems`, applied once when a score loads (not reactively —
       a spacing change only affects the next fresh load, never reflows an
       already-rendered, possibly-annotated one). Applies everywhere `MxlScore.tsx` is
-      used: Live Stage, Add/Edit Song's Sheet Music tab, Import's preview, and the
-      Annotate screen.
+      used: Live Stage (including while its Annotate overlay is open, since it's the same
+      score instance, not a separate copy), Add/Edit Song's Sheet Music tab, and Import's
+      preview.
 
 ## Nice-to-have — R&D / spike candidates
 
