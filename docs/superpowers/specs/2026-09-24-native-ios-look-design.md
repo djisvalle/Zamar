@@ -133,7 +133,9 @@ The rest of this spec assumes option 1.
 - Dialogs become iOS alerts (centered text, hairline-divided buttons, destructive in
   red). Sheets group their action rows into inset sections, with destructive actions in
   their own section.
-- iPad: iPadOS 18+ puts the tab bar at the top of the screen. This pass keeps it as a
-  compact capsule at the bottom on iPad too, for one layout across sizes; moving it to
-  the top on iPad is a possible follow-up.
+- iPad: like iPadOS 18+, the tab bar is a text-only capsule centered at the top
+  (decided 2026-09-24). iPhone-width layouts, including iPad Split View at a narrow
+  width, keep the bottom bar. On iPad every non-modal screen reserves the top strip
+  (`.tabs-top`) even while the bar is hidden, so Live Stage's chart doesn't jump when its
+  chrome auto-hides or Annotate opens.
 
