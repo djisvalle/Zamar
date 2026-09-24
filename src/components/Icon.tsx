@@ -31,7 +31,9 @@ export type IconName =
   | "trash"
   | "fermata"
   | "bow-up"
-  | "bow-down";
+  | "bow-down"
+  | "undo"
+  | "redo";
 
 /**
  * One small, hand-drawn icon set (Feather-style: 24x24 grid, round caps/joins)
@@ -230,4 +232,16 @@ const ICON_PATHS: Record<IconName, JSX.Element> = {
   ),
   "bow-up": <polyline points="6 8 12 17 18 8" />,
   "bow-down": <polyline points="6 8 6 15 18 15 18 8" />,
+  undo: (
+    <>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </>
+  ),
+  redo: (
+    <>
+      <path d="m15 14 5-5-5-5" />
+      <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+    </>
+  ),
 };

@@ -75,6 +75,7 @@ export default function App() {
       <div
         className="device device--native"
         data-theme={state.settings.theme}
+        data-platform={Capacitor.getPlatform()}
         style={{ "--status-h": vp.statusH } as React.CSSProperties}
       >
         {nav.booted ? <ScreenHost /> : <Splash />}
@@ -133,6 +134,7 @@ export default function App() {
         <div
           className="device"
           data-theme={state.settings.theme}
+          data-platform={Capacitor.getPlatform()}
           data-viewport={state.viewport}
           style={
             {
