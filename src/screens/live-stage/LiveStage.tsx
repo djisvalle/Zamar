@@ -277,7 +277,10 @@ export function LiveStage() {
         </div>
       )}
 
-      <div style={{ padding: "10px 14px 8px" }}>
+      {/* Hidden, not removed, while annotating: the Annotate bar floats over
+          this spot and shows the title itself, and keeping the block's space
+          means the chart below doesn't shift. */}
+      <div style={{ padding: "10px 14px 8px", visibility: dockOpen ? "hidden" : undefined }}>
         <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>
         <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
           {song.artist}
@@ -285,11 +288,12 @@ export function LiveStage() {
       </div>
 
       {/* Must stay at this exact position/type in both dock states — see
-          `content` above. The Annotate toolbar below is in normal flow, so
-          opening it only shortens this viewport; nothing in it moves. */}
+          `content` above. The Annotate toolbar's bars float over this
+          viewport rather than taking space from it, so opening it changes
+          nothing in here. */}
       <div
         className="flex-1 hidden-scroll"
-        style={{ paddingBottom: dockOpen ? 24 : 150, touchAction: "pan-y" }}
+        style={{ paddingBottom: 150, touchAction: "pan-y" }}
         onPointerDown={onChartPointerDown}
         onPointerUp={onChartPointerUp}
       >
@@ -305,7 +309,7 @@ export function LiveStage() {
       </div>
 
       {dockOpen ? (
-        <AnnotateToolbar session={annotateSession} />
+        <AnnotateToolbar session={annotateSession} title={song.title} />
       ) : (
         !stage.chromeHidden && (hasChords || hasAttachment) && <MusicToolbar onOpenTools={() => setStageToolsOpen(true)} />
       )}
