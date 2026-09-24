@@ -1,6 +1,6 @@
 # Native iOS look across the app
 
-**Status:** draft, awaiting review.
+**Status:** approved 2026-09-24 (option 1, all three open questions answered yes).
 
 ## Context
 
@@ -97,20 +97,20 @@ The rest of this spec assumes option 1.
 - The chart is no longer pushed up while picking a tool, since the popover floats over
   it. Zoom and scroll stay locked exactly as PR #8 leaves them.
 
-## Open questions
+## Decisions (were open questions)
 
 1. **Brand font.** Dropping Barlow for SF Pro is what makes it read as iOS. Keep Bebas Neue
-   for the splash wordmark only? (Default: yes.)
+   for the splash wordmark only? **Decided: yes.**
 2. **Android.** With option 1 nothing is native on either platform, so Android runs the
    same CSS and gets the same iOS-style look (glass bars, popovers, grouped lists). The
    system font stack resolves to Roboto there instead of SF Pro. `backdrop-filter` works in
    Android System WebView 76+; the `.glass` utility falls back to a solid surface where it
    doesn't. A root `data-platform` attribute (from `Capacitor.getPlatform()`) is added now
    so a later pass can adjust Android-only details (hardware back button, no rubber-band
-   bounce, Material ripples) without touching iOS. (Default: same look this pass; Android
-   tweaks afterwards if Android users ask.)
-3. **Stage Dark.** Map Stage Dark to iOS dark (true black) or keep the navy? (Default:
-   iOS dark, since true black is better on stage and on OLED.)
+   bounce, Material ripples) without touching iOS. **Decided: same look this pass;
+   Android tweaks afterwards.**
+3. **Stage Dark.** Map Stage Dark to iOS dark (true black) or keep the navy? **Decided: iOS
+   dark (true black).**
 
 ## Rollout
 
