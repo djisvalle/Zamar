@@ -1,10 +1,11 @@
-import { useRef, useState, type ReactNode, type RefObject } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "../../state/store";
-import type { MxlScoreHandle } from "../../components/MxlScore";
 import { Icon, type IconName } from "../../components/Icon";
+import { SmuflGlyph } from "../../components/SmuflGlyph";
+import { NOTATION_SYMBOLS, type NotationSymbol } from "../../utils/notation";
 import { Sheet } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
-import { AnnotateCanvas, ShapeGlyph, type AnnotateTool, type ArmedSymbol } from "../../components/AnnotateCanvas";
+import { ShapeGlyph, type AnnotateTool, type ArmedSymbol } from "../../components/AnnotateCanvas";
 import { isMark, isStroke, PALETTE_PAGES, STROKE_WIDTH } from "../../utils/annotations";
 import type {
   AnnotationObject,
@@ -22,34 +23,6 @@ interface Point {
   x: number;
   y: number;
 }
-
-interface NotationSymbol {
-  id: string;
-  label: string;
-  glyph?: string;
-  icon?: IconName;
-}
-
-// Curated starter set — the full multi-page notation library (dynamics,
-// ornaments, clefs, noteheads, etc.) is a separate follow-up pass.
-const NOTATION_SYMBOLS: NotationSymbol[] = [
-  { id: "pp", label: "Pianissimo", glyph: "pp" },
-  { id: "p", label: "Piano", glyph: "p" },
-  { id: "mp", label: "Mezzo-piano", glyph: "mp" },
-  { id: "mf", label: "Mezzo-forte", glyph: "mf" },
-  { id: "f", label: "Forte", glyph: "f" },
-  { id: "ff", label: "Fortissimo", glyph: "ff" },
-  { id: "sfz", label: "Sforzando", glyph: "sfz" },
-  { id: "accent", label: "Accent", glyph: ">" },
-  { id: "staccato", label: "Staccato", glyph: "•" },
-  { id: "fermata", label: "Fermata", icon: "fermata" },
-  { id: "flat", label: "Flat", glyph: "♭" },
-  { id: "sharp", label: "Sharp", glyph: "♯" },
-  { id: "natural", label: "Natural", glyph: "♮" },
-  { id: "trill", label: "Trill", glyph: "tr" },
-  { id: "up-bow", label: "Up bow", icon: "bow-up" },
-  { id: "down-bow", label: "Down bow", icon: "bow-down" },
-];
 
 interface ShapeDef {
   id: ShapeId;
@@ -101,55 +74,56 @@ interface History {
   future: AnnotationObject[][];
 }
 
-export function AnnotateOverlay({
+export type AnnotateSession = ReturnType<typeof useAnnotateSession>;
+
+/**
+ * Everything the Annotate toolbar edits — the draft annotations, undo/redo
+ * history, cues text, current tool and tool styles — kept in a hook Live
+ * Stage owns, rather than inside a component that wraps the chart.
+ *
+ * Annotate used to be a component that took over Live Stage and re-parented
+ * the chart under its own canvas, so opening it unmounted and remounted the
+ * whole chart: a MusicXML score re-engraved at 1x, a PDF re-rasterized at 1x,
+ * and the scroll position jumped to the top. Now Live Stage keeps exactly
+ * one chart + `AnnotateCanvas` mounted at all times and only flips that
+ * canvas between read-only and interactive; opening Annotate just swaps the
+ * bottom toolbar. This hook is what the toolbar and the canvas share.
+ *
+ * The draft is re-seeded from the song every time the dock opens (tracked
+ * via `sessionKey` during render, not an effect, so the first open frame
+ * never shows a stale draft), and only written back to the song on Done.
+ */
+export function useAnnotateSession({
   song,
-  view,
-  activeKind,
-  scoreRef,
-  reprojectTick,
+  open,
+  annotationView,
+  noAnnotationTarget,
   onClose,
-  children,
 }: {
-  song: Song;
-  view: ChartView;
-  activeKind?: AttachmentKind;
-  /** The same ref Live Stage's shared content wires into its `MxlScore` —
-   * lets pin/stroke/mark placement anchor to the score's nearest measure.
-   * Only meaningful when the active view is `musicxml`. */
-  scoreRef: RefObject<MxlScoreHandle | null>;
-  /** Bumped by Live Stage whenever the shared content's `MxlScore` just
-   * re-rendered from a transpose — triggers reprojection here. */
-  reprojectTick: number;
+  song: Song | null;
+  open: boolean;
+  annotationView: AnnotationView;
+  /** True when there's no real chart to attribute marks to (sheet view with
+   * nothing attached) — `done()` must not write to `annotations` then. */
+  noAnnotationTarget: boolean;
   onClose: () => void;
-  /** The chart/attachment content itself — built once by Live Stage and
-   * shared with its own read-only annotation overlay, so this component no
-   * longer builds a second copy (see the annotate-as-overlay design spec). */
-  children: ReactNode;
 }) {
   const { dispatch } = useStore();
-  const annotationView: AnnotationView = view === "chords" ? "chords" : activeKind ?? "chords";
-  // Matches the condition that produces Live Stage's "No sheet music
-  // attached" fallback for `content` — there's no real chart to attribute
-  // marks to, so `done()` must not write to `annotations` at all in this case.
-  const noAnnotationTarget = view === "sheet" && activeKind === undefined;
 
   const [mode, setMode] = useState<"draw" | "cues">("draw");
   const [tool, setTool] = useState<AnnotateTool>("select");
   const [scrollMode, setScrollMode] = useState(false);
-  const [annotations, setAnnotations] = useState<AnnotationObject[]>(() => song.annotations[annotationView] ?? []);
+  const [annotations, setAnnotations] = useState<AnnotationObject[]>([]);
   // Captures the exact array reference `annotations` started from, so
   // `done()` can tell "never drew/erased/pinned this session" (still the
   // same reference) from "drew, then cleared back to []" (a new, different
   // empty array).
-  const initialAnnotationsRef = useRef(annotations);
+  const initialAnnotationsRef = useRef<AnnotationObject[]>(annotations);
   const [history, setHistory] = useState<History>({ past: [], future: [] });
-  const [cuesText, setCuesText] = useState(song.notes);
-  const [clearOpen, setClearOpen] = useState(false);
+  const [cuesText, setCuesText] = useState("");
   // Set by "Clear all views on this song" — deferred to Done (see `done()`)
-  // rather than dispatched immediately, since an immediate UPDATE_SONG here
-  // would go stale the instant this screen's own `song` prop stopped
-  // matching the store (Done's own dispatch would then silently resurrect
-  // every other view from that stale snapshot).
+  // rather than dispatched immediately, so Done's own dispatch can't
+  // silently resurrect every other view from a stale snapshot.
   const [allViewsCleared, setAllViewsCleared] = useState(false);
 
   const [penStyle, setPenStyle] = useState({ color: PALETTE_PAGES[0][0], size: STROKE_WIDTH, opacity: 1 });
@@ -164,12 +138,34 @@ export function AnnotateOverlay({
   // can select it (showing AnnotateCanvas's resize/rotate handles) without
   // also opening its edit sheet — see onEditRequest/onSelectRequest below.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
+
+  // Re-seed the per-session draft whenever the dock opens (or the song/view
+  // it's open on changes). Tool and style choices deliberately carry over
+  // between sessions, like a real notation app's last-used pen.
+  const sessionKey = open && song ? `${song.id}:${annotationView}` : null;
+  const [seededKey, setSeededKey] = useState<string | null>(null);
+  if (sessionKey !== seededKey) {
+    setSeededKey(sessionKey);
+    if (sessionKey && song) {
+      const initial = song.annotations[annotationView] ?? [];
+      initialAnnotationsRef.current = initial;
+      setAnnotations(initial);
+      setHistory({ past: [], future: [] });
+      setCuesText(song.notes);
+      setAllViewsCleared(false);
+      setMode("draw");
+      setEditingId(null);
+      setSelectedId(null);
+      setClearOpen(false);
+    }
+  }
 
   // Selection (and its resize/rotate handles) only makes sense while the
   // Select tool is active — switching to any other tool drops it, so a
   // shape doesn't stay visibly "selected" under Pen/Eraser/etc. with no way
   // to reach it.
-  const handleSelectTool = (t: AnnotateTool) => {
+  const selectTool = (t: AnnotateTool) => {
     setTool(t);
     if (t !== "select") setSelectedId(null);
   };
@@ -198,6 +194,10 @@ export function AnnotateOverlay({
   };
 
   const done = () => {
+    if (!song) {
+      onClose();
+      return;
+    }
     const cuesChanged = cuesText !== song.notes;
     const annotationsChanged = annotations !== initialAnnotationsRef.current;
     if (!cuesChanged && !annotationsChanged && !allViewsCleared) {
@@ -221,6 +221,81 @@ export function AnnotateOverlay({
     onClose();
   };
 
+  const armed: ArmedSymbol = tool === "notation" ? { id: armedSymbol.id, glyph: armedSymbol.text } : { id: "" };
+
+  /** Props for Live Stage's one `AnnotateCanvas` while the dock is open. */
+  const canvasProps = {
+    annotations,
+    interactive: mode === "draw",
+    tool,
+    onCommit: commit,
+    onReproject: reproject,
+    onEditRequest: (id: string) => {
+      setSelectedId(id);
+      setEditingId(id);
+    },
+    onSelectRequest: setSelectedId,
+    selectedId,
+    scrollMode,
+    penStyle,
+    highlighterStyle,
+    markStyle,
+    shapeStyle,
+    armedSymbol: armed,
+    armedShape,
+    eraserSize,
+  };
+
+  return {
+    mode,
+    setMode,
+    tool,
+    selectTool,
+    scrollMode,
+    setScrollMode,
+    annotations,
+    history,
+    cuesText,
+    setCuesText,
+    setAllViewsCleared,
+    penStyle,
+    setPenStyle,
+    highlighterStyle,
+    setHighlighterStyle,
+    markStyle,
+    setMarkStyle,
+    shapeStyle,
+    setShapeStyle,
+    eraserSize,
+    setEraserSize,
+    armedSymbol,
+    setArmedSymbol,
+    armedShape,
+    setArmedShape,
+    editingId,
+    setEditingId,
+    setSelectedId,
+    clearOpen,
+    setClearOpen,
+    commit,
+    undo,
+    redo,
+    done,
+    canvasProps,
+  };
+}
+
+/**
+ * The Annotate toolbar — takes the place of Live Stage's key/tools toolbar
+ * at the bottom of the screen while annotating. The chart above it is left
+ * exactly as it was (same instance, same zoom, same scroll position); only
+ * this toolbar is new. Its edit/clear sheets render as siblings so their
+ * backdrops cover the whole stage.
+ */
+export function AnnotateToolbar({ session }: { session: AnnotateSession }) {
+  const s = session;
+  const { annotations, commit, editingId, setEditingId, setSelectedId } = s;
+
   const editingStroke = annotations.find((a): a is Stroke => a.id === editingId && isStroke(a));
   const editingMark = annotations.find((a): a is TextMark | ShapeMark => a.id === editingId && isMark(a));
 
@@ -238,114 +313,102 @@ export function AnnotateOverlay({
     setEditingId(copy.id);
   };
 
-  const armed: ArmedSymbol = tool === "notation" ? { id: armedSymbol.id, glyph: armedSymbol.glyph, icon: armedSymbol.icon } : { id: "" };
-
   return (
     <>
       <div
         style={{
+          flex: "none",
+          maxHeight: "58%",
           display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "12px 14px",
-          background: "var(--tint)",
-          borderBottom: "1px solid var(--acc)",
+          flexDirection: "column",
+          borderTop: "1px solid var(--acc)",
+          background: "var(--surface)",
+          position: "relative",
+          zIndex: 6,
         }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <button className="hdr-action" onClick={undo} disabled={history.past.length === 0}>
-          Undo
-        </button>
-        <button className="hdr-action" onClick={redo} disabled={history.future.length === 0}>
-          Redo
-        </button>
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          <Segmented
-            options={[
-              { value: "draw", label: "Draw" },
-              { value: "cues", label: "Cues" },
-            ]}
-            value={mode}
-            onChange={setMode}
-          />
+        <div
+          style={{
+            flex: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 12px",
+            background: "var(--tint)",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
+          <button className="hdr-action" onClick={s.undo} disabled={s.history.past.length === 0}>
+            Undo
+          </button>
+          <button className="hdr-action" onClick={s.redo} disabled={s.history.future.length === 0}>
+            Redo
+          </button>
+          <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+            <Segmented
+              options={[
+                { value: "draw", label: "Draw" },
+                { value: "cues", label: "Cues" },
+              ]}
+              value={s.mode}
+              onChange={s.setMode}
+            />
+          </div>
+          <button className="hdr-action" onClick={() => s.setClearOpen(true)}>
+            Clear
+          </button>
+          <button className="hdr-action" onClick={s.done}>
+            Done
+          </button>
         </div>
-        <button className="hdr-action" onClick={() => setClearOpen(true)}>
-          Clear
-        </button>
-        <button className="hdr-action" onClick={done}>
-          Done
-        </button>
-      </div>
 
-      <div className="flex-1 hidden-scroll" style={{ position: "relative" }}>
-        {mode === "draw" ? (
-          <AnnotateCanvas
-            annotations={annotations}
-            interactive
-            tool={tool}
-            onCommit={commit}
-            onReproject={reproject}
-            onEditRequest={(id) => {
-              setSelectedId(id);
-              setEditingId(id);
-            }}
-            onSelectRequest={setSelectedId}
-            selectedId={selectedId}
-            scrollMode={scrollMode}
-            scoreRef={annotationView === "musicxml" ? scoreRef : undefined}
-            reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
-            penStyle={penStyle}
-            highlighterStyle={highlighterStyle}
-            markStyle={markStyle}
-            shapeStyle={shapeStyle}
-            armedSymbol={armed}
-            armedShape={armedShape}
-            eraserSize={eraserSize}
-          >
-            {children}
-          </AnnotateCanvas>
-        ) : (
-          <textarea
-            value={cuesText}
-            onChange={(e) => setCuesText(e.target.value)}
-            placeholder="Cues for this song — reminders, anything you want on hand while you're on stage."
-            style={{
-              width: "100%",
-              height: "100%",
-              border: "none",
-              padding: "16px 14px",
-              fontFamily: "inherit",
-              fontSize: 14,
-              lineHeight: 1.5,
-              background: "var(--bg)",
-              color: "var(--fg)",
-              resize: "none",
-            }}
-          />
-        )}
+        <div style={{ overflowY: "auto", minHeight: 0 }}>
+          {s.mode === "draw" ? (
+            <AnnotateDock
+              tool={s.tool}
+              onSelectTool={s.selectTool}
+              scrollMode={s.scrollMode}
+              onToggleScroll={() => s.setScrollMode((v) => !v)}
+              penStyle={s.penStyle}
+              onPenStyleChange={s.setPenStyle}
+              highlighterStyle={s.highlighterStyle}
+              onHighlighterStyleChange={s.setHighlighterStyle}
+              markStyle={s.markStyle}
+              onMarkStyleChange={s.setMarkStyle}
+              shapeStyle={s.shapeStyle}
+              onShapeStyleChange={s.setShapeStyle}
+              eraserSize={s.eraserSize}
+              onEraserSizeChange={s.setEraserSize}
+              armedSymbol={s.armedSymbol}
+              onArmSymbol={s.setArmedSymbol}
+              armedShape={s.armedShape}
+              onArmShape={s.setArmedShape}
+            />
+          ) : (
+            // Cues edit in the toolbar itself rather than replacing the
+            // chart, so the song stays on screen while you write them.
+            <textarea
+              value={s.cuesText}
+              onChange={(e) => s.setCuesText(e.target.value)}
+              placeholder="Cues for this song — reminders, anything you want on hand while you're on stage."
+              style={{
+                display: "block",
+                width: "100%",
+                height: 150,
+                border: "none",
+                padding: "12px 14px",
+                fontFamily: "inherit",
+                fontSize: 14,
+                lineHeight: 1.5,
+                background: "var(--surface)",
+                color: "var(--fg)",
+                resize: "none",
+              }}
+            />
+          )}
+        </div>
       </div>
-
-      {mode === "draw" && (
-        <AnnotateDock
-          tool={tool}
-          onSelectTool={handleSelectTool}
-          scrollMode={scrollMode}
-          onToggleScroll={() => setScrollMode((s) => !s)}
-          penStyle={penStyle}
-          onPenStyleChange={setPenStyle}
-          highlighterStyle={highlighterStyle}
-          onHighlighterStyleChange={setHighlighterStyle}
-          markStyle={markStyle}
-          onMarkStyleChange={setMarkStyle}
-          shapeStyle={shapeStyle}
-          onShapeStyleChange={setShapeStyle}
-          eraserSize={eraserSize}
-          onEraserSizeChange={setEraserSize}
-          armedSymbol={armedSymbol}
-          onArmSymbol={setArmedSymbol}
-          armedShape={armedShape}
-          onArmShape={setArmedShape}
-        />
-      )}
 
       {editingStroke && (
         <EditInkSheet
@@ -389,14 +452,14 @@ export function AnnotateOverlay({
         />
       )}
 
-      {clearOpen && (
-        <Sheet onClose={() => setClearOpen(false)}>
+      {s.clearOpen && (
+        <Sheet onClose={() => s.setClearOpen(false)}>
           <div className="sheet-title">Clear annotations</div>
           <button
             className="sheet-row"
             onClick={() => {
               commit([]);
-              setClearOpen(false);
+              s.setClearOpen(false);
             }}
           >
             <span>Clear this view</span>
@@ -414,14 +477,14 @@ export function AnnotateOverlay({
             }}
             onClick={() => {
               commit([]);
-              setAllViewsCleared(true);
-              setClearOpen(false);
+              s.setAllViewsCleared(true);
+              s.setClearOpen(false);
             }}
           >
             <Icon name="trash" size={15} strokeWidth={1.8} />
             <span>Clear all views on this song</span>
           </button>
-          <button className="sheet-row" onClick={() => setClearOpen(false)}>
+          <button className="sheet-row" onClick={() => s.setClearOpen(false)}>
             <span>Cancel</span>
           </button>
         </Sheet>
@@ -472,7 +535,9 @@ function AnnotateDock({
   const [expanded, setExpanded] = useState(true);
 
   return (
-    <div style={{ borderTop: "1px solid var(--line)", background: "var(--surface)", maxHeight: "58%", overflowY: "auto" }}>
+    // Height is capped (and scrolled) by AnnotateToolbar's wrapper — a
+    // second max-height here would clip the tool row.
+    <div style={{ background: "var(--surface)" }}>
       <button
         onClick={() => setExpanded((e) => !e)}
         aria-label={expanded ? "Collapse tool panel" : "Expand tool panel"}
@@ -503,11 +568,12 @@ function AnnotateDock({
                 <button
                   key={sym.id}
                   className={"chip" + (armedSymbol.id === sym.id ? " active" : "")}
-                  style={{ flex: "none", display: "flex", alignItems: "center", gap: 4, minWidth: 30, justifyContent: "center" }}
+                  style={{ flex: "none", display: "flex", alignItems: "center", minWidth: 38, height: 34, justifyContent: "center" }}
                   onClick={() => onArmSymbol(sym)}
                   aria-label={sym.label}
+                  title={sym.label}
                 >
-                  {sym.icon ? <Icon name={sym.icon} size={13} strokeWidth={2} /> : sym.glyph}
+                  <SmuflGlyph glyph={sym.smufl} size={24} />
                 </button>
               ))}
             </div>

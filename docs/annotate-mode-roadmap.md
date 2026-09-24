@@ -82,21 +82,17 @@ forgotten:
    spec: `docs/superpowers/specs/2026-09-23-shape-rotate-resize-design.md`.
    Bigger lift than the quick wins above, but what actually makes the
    Shapes tool useful beyond a demo.
-6. **Stop remounting chart content across the Annotate dock toggle.** Flagged by the
-   final whole-branch review of the annotate-as-overlay work (2026-09-23).
-   `LiveStage.tsx` renders `AnnotateOverlay` and the normal chrome as different element
-   types at the same JSX child slot, so React unmounts/remounts the whole
-   `AnnotateCanvas` + `content` region — `MxlScore`/`PdfPages` included — on every
-   Annotate open and close, discarding scroll/zoom state and forcing a fresh
-   re-engrave/re-render each time. Fix shape: hoist the chart-content region out of the
-   `dockOpen` ternary in `LiveStage.tsx` so it occupies one constant JSX slot, and only
-   the header/footer chrome around it swaps between `AnnotateOverlay`'s controls and the
-   normal title/`MusicToolbar`. This needs `AnnotateOverlay`'s staged
-   annotation/tool/undo state either lifted into `LiveStage` or exposed via render
-   props/children-as-function so its chrome can be composed around a content region it
-   no longer owns. See
-   `docs/superpowers/specs/2026-09-23-annotate-as-overlay-design.md`'s
-   "Post-implementation note" for the review finding.
+6. ~~**Stop remounting chart content across the Annotate dock toggle.**~~ **Done
+   (2026-09-24).** `LiveStage.tsx` now keeps its scroll container + one
+   `AnnotateCanvas` + `content` at a single constant JSX slot in both dock states; only
+   the canvas's props flip between read-only and interactive, and the bottom toolbar
+   swaps (`MusicToolbar` ↔ `AnnotateToolbar`). `AnnotateOverlay`'s staged
+   annotation/tool/undo state moved into a `useAnnotateSession` hook Live Stage owns.
+   Opening Annotate no longer re-engraves the score or resets its zoom/scroll; the zoom
+   is locked (not reset) while the dock is open. Cues now edit inside the toolbar
+   instead of replacing the chart. Notation stamps also switched from UI-font letters
+   to engraved SMuFL glyphs from a bundled Bravura font (`src/utils/notation.ts`,
+   `src/components/SmuflGlyph.tsx`).
 
 ### Nice-to-have — lower priority
 

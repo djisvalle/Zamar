@@ -12,7 +12,7 @@ import { AddSongDrawer } from "./AddSongDrawer";
 import { QuickEditSheet } from "./QuickEditSheet";
 import { MusicToolbar } from "./MusicToolbar";
 import { StageToolsSheet } from "./StageToolsSheet";
-import { AnnotateOverlay } from "./AnnotateOverlay";
+import { AnnotateToolbar, useAnnotateSession } from "./AnnotateOverlay";
 
 const IDLE_MS = 6000;
 const SWIPE_THRESHOLD = 50;
@@ -36,6 +36,19 @@ export function LiveStage() {
   const hasAttachment = Boolean(song && Object.keys(song.attachments).length > 0);
   const setlist = stage.setlistId ? state.setlists.find((sl) => sl.id === stage.setlistId) : null;
   const setlistSongIds = activeSetlistSongIds(setlist);
+
+  const dockOpen = stage.drawer === "annotate";
+  const annotationView: AnnotationView = stage.view === "chords" ? "chords" : activeKind ?? "chords";
+  const annotateSession = useAnnotateSession({
+    song: song ?? null,
+    open: dockOpen,
+    annotationView,
+    // Matches the condition that produces the "No sheet music attached"
+    // fallback in `content` below — there's no real chart to attribute
+    // marks to then.
+    noAnnotationTarget: stage.view === "sheet" && activeKind === undefined,
+    onClose: () => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null }),
+  });
 
   // Which category/version is on screen belongs to the song currently on
   // stage — reset to that song's saved default kind if it has one and it's
@@ -128,8 +141,6 @@ export function LiveStage() {
 
   const chordsAnnotated = Boolean(song.annotations.chords?.length);
   const musicxmlAnnotated = Boolean(song.annotations.musicxml?.length);
-  const dockOpen = stage.drawer === "annotate";
-  const annotationView: AnnotationView = stage.view === "chords" ? "chords" : activeKind ?? "chords";
   const persistedAnnotations: AnnotationObject[] = song.annotations[annotationView] ?? [];
   // Reprojection (see AnnotateCanvas's onReproject doc) keeps anchored
   // MusicXML annotations aligned after a transpose even while the Annotate
@@ -161,6 +172,9 @@ export function LiveStage() {
   };
 
   const onChartPointerDown = (e: React.PointerEvent) => {
+    // No song-to-song swipes while annotating — a stroke is a horizontal
+    // drag too, and the stage is meant to stay put under the pen.
+    if (dockOpen) return;
     swipeStartX.current = e.clientX;
   };
   const onChartPointerUp = (e: React.PointerEvent) => {
@@ -176,13 +190,13 @@ export function LiveStage() {
     resetIdle();
   };
 
-  // Built once and shared by both the read-only overlay (below, always
-  // mounted) and AnnotateOverlay's interactive canvas (mounted only while
-  // the dock is open) — see the annotate-as-overlay design spec's "One
-  // content instance, not two" section. `disableZoom` on MxlScore/PdfPages
-  // now also accounts for `dockOpen`, matching what AnnotateOverlay always
-  // forced while it built its own separate copy of this content: pinch-zoom
-  // gestures shouldn't fight with active drawing gestures.
+  // The one chart instance on Live Stage. It sits at the same place in the
+  // tree whether or not Annotate is open (only the AnnotateCanvas around it
+  // flips between read-only and interactive), so opening Annotate never
+  // remounts it: the score/PDF keeps its current zoom, the chart keeps its
+  // scroll position. `disableZoom` then *locks* that zoom while the dock is
+  // open — pinch-zoom gestures shouldn't fight with drawing gestures, and a
+  // re-layout under fresh ink would misalign it.
   const content = (
     <div
       style={{
@@ -240,71 +254,60 @@ export function LiveStage() {
 
   return (
     <div className="screen" onClick={onScreenClick}>
-      {dockOpen ? (
-        <AnnotateOverlay
-          song={song}
-          view={stage.view}
-          activeKind={activeKind}
-          scoreRef={mxlScoreRef}
-          reprojectTick={reprojectTick}
-          onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })}
+      <div className={"hdr" + (setlist ? " tinted" : "")} />
+
+      {setlist && (
+        <div style={{ padding: "8px 14px 0" }}>
+          <div className="muted" style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+            {songIndex + 1 < setlistSongIds.length
+              ? `Next: ${state.songs.find((s) => s.id === setlistSongIds[songIndex + 1])?.title ?? ""}`
+              : "Last song"}
+          </div>
+          <div style={{ width: "100%", height: 4, background: "var(--line)", borderRadius: 99 }}>
+            <div
+              style={{
+                width: `${((songIndex + 1) / setlistSongIds.length) * 100}%`,
+                height: 4,
+                background: "var(--acc)",
+                borderRadius: 99,
+                transition: "width .2s",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div style={{ padding: "10px 14px 8px" }}>
+        <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>
+        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+          {song.artist}
+        </div>
+      </div>
+
+      {/* Must stay at this exact position/type in both dock states — see
+          `content` above. The Annotate toolbar below is in normal flow, so
+          opening it only shortens this viewport; nothing in it moves. */}
+      <div
+        className="flex-1 hidden-scroll"
+        style={{ paddingBottom: dockOpen ? 24 : 150, touchAction: "pan-y" }}
+        onPointerDown={onChartPointerDown}
+        onPointerUp={onChartPointerUp}
+      >
+        <AnnotateCanvas
+          {...(dockOpen
+            ? annotateSession.canvasProps
+            : { annotations: persistedAnnotations, interactive: false, onCommit: () => {}, onReproject: onReprojectPersisted })}
+          scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
+          reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
         >
           {content}
-        </AnnotateOverlay>
+        </AnnotateCanvas>
+      </div>
+
+      {dockOpen ? (
+        <AnnotateToolbar session={annotateSession} />
       ) : (
-        <>
-          <div className={"hdr" + (setlist ? " tinted" : "")} />
-
-          {setlist && (
-            <div style={{ padding: "8px 14px 0" }}>
-              <div className="muted" style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
-                {songIndex + 1 < setlistSongIds.length
-                  ? `Next: ${state.songs.find((s) => s.id === setlistSongIds[songIndex + 1])?.title ?? ""}`
-                  : "Last song"}
-              </div>
-              <div style={{ width: "100%", height: 4, background: "var(--line)", borderRadius: 99 }}>
-                <div
-                  style={{
-                    width: `${((songIndex + 1) / setlistSongIds.length) * 100}%`,
-                    height: 4,
-                    background: "var(--acc)",
-                    borderRadius: 99,
-                    transition: "width .2s",
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          <div style={{ padding: "10px 14px 8px" }}>
-            <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-              {song.artist}
-            </div>
-          </div>
-
-          <div
-            className="flex-1 hidden-scroll"
-            style={{ paddingBottom: 150, touchAction: "pan-y" }}
-            onPointerDown={onChartPointerDown}
-            onPointerUp={onChartPointerUp}
-          >
-            <AnnotateCanvas
-              annotations={persistedAnnotations}
-              interactive={false}
-              onCommit={() => {}}
-              onReproject={onReprojectPersisted}
-              scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
-              reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
-            >
-              {content}
-            </AnnotateCanvas>
-          </div>
-
-          {!stage.chromeHidden && (hasChords || hasAttachment) && (
-            <MusicToolbar onOpenTools={() => setStageToolsOpen(true)} />
-          )}
-        </>
+        !stage.chromeHidden && (hasChords || hasAttachment) && <MusicToolbar onOpenTools={() => setStageToolsOpen(true)} />
       )}
 
       {stage.drawer === "add-song" && (

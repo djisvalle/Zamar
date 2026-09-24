@@ -240,7 +240,7 @@ export function PdfPages({ src, disableZoom = false }: { src: string; disableZoo
               onDoubleClick: pz.onDoubleClick,
             })}
       />
-      {status === "ready" && zoomed && (
+      {status === "ready" && zoomed && !disableZoom && (
         <button className="chip" onClick={pz.reset} style={{ display: "block", margin: "8px auto 0" }}>
           Reset zoom
         </button>

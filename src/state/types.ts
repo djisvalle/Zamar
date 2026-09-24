@@ -106,12 +106,14 @@ export interface TextMark {
   text: string;
   color: string;
   size: number;
-  /** Set for a notation-stamp mark placed via the Notation tool in place of
-   * typed text — names one of the notation icons (fermata, up/down bow).
-   * Glyph-only stamps (pp, f, >, ♭, …) are stored directly in `text`. */
+  /** Legacy: notation stamps saved before they switched to SMuFL glyphs
+   * named an icon here (fermata, up/down bow). No longer written; those
+   * marks now render from `symbolId` instead. */
   iconGlyph?: string;
-  /** Which notation stamp produced this mark, so re-editing shows it can't
-   * be mistaken for free text even though both are `kind: "text"`. */
+  /** Which notation stamp produced this mark (a `NotationSymbol` id, see
+   * utils/notation.ts) — it renders as that symbol's engraved SMuFL glyph,
+   * with `text` only a plain-text stand-in, and re-editing knows it isn't
+   * free text even though both are `kind: "text"`. */
   symbolId?: string;
   anchor?: MusicalAnchor;
 }

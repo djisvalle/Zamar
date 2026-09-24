@@ -18,6 +18,8 @@ import {
 } from "../utils/annotations";
 import type { MxlScoreHandle } from "./MxlScore";
 import { Icon, type IconName } from "./Icon";
+import { SmuflGlyph } from "./SmuflGlyph";
+import { notationSymbol, SMUFL_SIZE_SCALE } from "../utils/notation";
 
 export type AnnotateTool = "select" | "pen" | "highlighter" | "square" | "pin" | "text" | "notation" | "shapes" | "eraser";
 
@@ -33,9 +35,10 @@ interface MarkStyle {
 }
 
 export interface ArmedSymbol {
+  /** A `NotationSymbol` id (see utils/notation.ts). */
   id: string;
+  /** Plain-text stand-in stored as the placed mark's `text`. */
   glyph?: string;
-  icon?: IconName;
 }
 
 const TAP_THRESHOLD = 6;
@@ -467,7 +470,6 @@ export function AnnotateCanvas({
           kind: "text",
           position: start,
           text: armedSymbol.glyph ?? "",
-          iconGlyph: armedSymbol.icon,
           symbolId: armedSymbol.id,
           color: markStyle.color,
           size: markStyle.size,
@@ -631,6 +633,11 @@ export function ShapeGlyph({ shapeId, color, size, width }: { shapeId: ShapeId; 
 
 function renderMarkGlyph(item: TextMark | ShapeMark) {
   if (item.kind === "shape") return <ShapeGlyph shapeId={item.shapeId} color={item.color} size={item.size} width={item.width} />;
+  // Notation stamps draw as real engraved SMuFL glyphs. Looked up by
+  // symbolId, so stamps saved before the switch (whose `text` is the bare
+  // letters, e.g. "pp") render as proper glyphs too.
+  const symbol = notationSymbol(item.symbolId);
+  if (symbol) return <SmuflGlyph glyph={symbol.smufl} size={item.size * SMUFL_SIZE_SCALE} color={item.color} />;
   if (item.iconGlyph) return <Icon name={item.iconGlyph as IconName} size={item.size} strokeWidth={2} />;
   return item.text;
 }
