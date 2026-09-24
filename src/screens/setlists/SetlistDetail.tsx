@@ -156,6 +156,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
 
       {menuOpen && (
         <Sheet onClose={() => setMenuOpen(false)}>
+          <div className="sheet-group">
           <button
             className="sheet-row"
             onClick={() => {
@@ -174,9 +175,10 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
           >
             Export set
           </button>
+          </div>
+          <div className="sheet-group">
           <button
-            className="sheet-row"
-            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            className="sheet-row destructive"
             onClick={() => {
               setMenuOpen(false);
               setConfirmDeleteSet(true);
@@ -184,6 +186,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
           >
             Delete set
           </button>
+          </div>
         </Sheet>
       )}
       {addOpen && <AddToSetDrawer setlist={setlist} onClose={() => setAddOpen(false)} />}
@@ -201,6 +204,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
       {sectionSheetFor && (
         <Sheet onClose={() => setSectionSheetFor(null)}>
           <div className="sheet-title">{sectionSheetFor.label}</div>
+          <div className="sheet-group">
           <button
             className="sheet-row"
             onClick={() => {
@@ -212,9 +216,10 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
           >
             <span>Rename section</span>
           </button>
+          </div>
+          <div className="sheet-group">
           <button
-            className="sheet-row"
-            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            className="sheet-row destructive"
             onClick={() => {
               const sec = sectionSheetFor;
               setSectionSheetFor(null);
@@ -223,6 +228,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
           >
             <span>Delete section</span>
           </button>
+          </div>
         </Sheet>
       )}
 

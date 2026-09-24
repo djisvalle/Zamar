@@ -79,7 +79,7 @@ export function StageToolsSheet({
       </div>
 
       {showViewPicker && (
-        <div style={{ borderBottom: "1px solid var(--line)", paddingBottom: 2 }}>
+        <div className="sheet-group">
           {hasChords && (
             <button className="sheet-row" onClick={run(onSelectChords)}>
               <span>Chords/Lyrics</span>

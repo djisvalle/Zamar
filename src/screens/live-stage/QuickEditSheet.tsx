@@ -41,7 +41,7 @@ export function QuickEditSheet({ songId, onClose }: { songId: string; onClose: (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: 14 }}>Quick edit</span>
           <button
-            className="hdr-action"
+            className="hdr-action hdr-action--done"
             onClick={() => {
               dispatch({ type: "UPDATE_SONG", song: { ...song, chordpro: text } });
               onClose();

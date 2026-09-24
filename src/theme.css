@@ -38,6 +38,9 @@
   --sheet-fg: #000000;
   --sheet-mut: rgba(60, 60, 67, 0.6);
   --danger-fg: #ff3b30;
+  --cell: #ffffff;
+  --sheet-material: rgba(242, 242, 247, 0.9);
+  --grabber: rgba(60, 60, 67, 0.3);
   --glass-bg: rgba(250, 250, 252, 0.72);
   --glass-border: rgba(255, 255, 255, 0.75);
   --glass-edge: rgba(0, 0, 0, 0.08);
@@ -63,6 +66,9 @@
   --sheet-fg: #1d1f20;
   --sheet-mut: #7a7a7d;
   --danger-fg: #ff453a;
+  --cell: #2c2c2e;
+  --sheet-material: rgba(28, 28, 30, 0.92);
+  --grabber: rgba(235, 235, 245, 0.3);
   --glass-bg: rgba(30, 30, 32, 0.86);
   --glass-border: rgba(255, 255, 255, 0.12);
   --glass-edge: rgba(0, 0, 0, 0.4);
@@ -232,47 +238,110 @@ button {
   min-height: 0;
 }
 
-/* ---- nav header ---- */
+/* ---- nav header (iOS navigation bar) ----
+   44pt bar: back chevron + previous title on the left, a centered 17pt
+   semibold title, tint-colored text/icon buttons on the right. At rest it
+   blends into the screen; once content scrolls, it takes on the bar
+   material and a hairline (`.scrolled`, set by Header.tsx). */
 .hdr {
   position: relative;
   flex: none;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 13px 14px;
+  min-height: 44px;
+  padding: 0 8px;
   background: var(--bg);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+/* Live Stage's bare spacer bar (no title or buttons). */
+.hdr:empty {
+  min-height: 26px;
 }
 .hdr.tinted {
   background: var(--tint);
 }
-.hdr-btn {
-  width: 32px;
-  height: 32px;
-  margin: -4px;
+.hdr.scrolled,
+.hdr-large-wrap.scrolled {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 0.5px 0 var(--line);
+  z-index: 2;
+}
+.hdr-back {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 40%;
+  height: 44px;
+  margin-left: -4px;
+  padding: 0 6px 0 0;
   border: none;
   background: none;
-  color: var(--fg);
+  color: var(--acc-deep);
+  font-size: 17px;
+}
+.hdr-back span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: -3px;
+}
+.hdr-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+.hdr-btn {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--acc-deep);
   font-size: 22px;
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 999px;
 }
-.hdr-btn:hover {
-  background: var(--tint);
+.hdr-btn:active {
+  background: var(--fill);
 }
+/* Absolutely centered so it stays in the middle of the bar whatever the
+   widths of the back label and the right-hand buttons. */
 .hdr-title {
-  flex: 1;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 56%;
   font-family: var(--font-heading);
   font-weight: 600;
-  font-size: 16px;
+  font-size: 17px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 .hdr-action {
-  font-size: 13px;
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 17px;
   color: var(--acc-deep);
   background: none;
   border: none;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+}
+/* The confirming action of a modal bar (Save, Done, Attach). */
+.hdr-action--done {
   font-weight: 600;
 }
 .hdr-action:disabled {
@@ -281,21 +350,24 @@ button {
 
 /* ---- iOS-style large title (root screens) ---- */
 .hdr-large-wrap {
+  position: relative;
   flex: none;
   background: var(--bg);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 .hdr-large-wrap.tinted {
   background: var(--tint);
 }
 .hdr-large-wrap .hdr {
   background: none;
-  padding-bottom: 0;
 }
 .hdr-large-title {
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 30px;
-  padding: 2px 14px 10px;
+  font-size: 34px;
+  line-height: 41px;
+  letter-spacing: 0.01em;
+  padding: 0 16px 8px;
 }
 
 /* ---- buttons ---- */
@@ -376,36 +448,82 @@ button {
   justify-content: center;
 }
 
-/* ---- bottom tab bar ---- */
-.tab-bar {
+/* ---- floating tab bar (iOS 26) ----
+   A glass capsule inset from the screen edges that content scrolls under.
+   `.has-tab-bar` (set by App.tsx while the bar shows) reserves --tab-clear at
+   the bottom of every screen so fixed footers and the last list rows stay
+   above it; the main scroll area of a screen opts into running under the
+   glass with `.scroll-under-tabs`. */
+.device {
+  --tab-h: 62px;
+  /* On a phone with a home indicator the bar sits partly inside the bottom
+     safe area, as the native one does. Resolves to 10px in the dev frame. */
+  --tab-bottom: max(calc(env(safe-area-inset-bottom, 0px) - 12px), 10px);
+  --tab-clear: 0px;
+}
+.device.has-tab-bar {
+  --tab-clear: calc(var(--tab-bottom) + var(--tab-h) + 8px);
+}
+.device.has-tab-bar .screen {
+  padding-bottom: var(--tab-clear);
+}
+.device.has-tab-bar .scroll-under-tabs {
+  margin-bottom: calc(-1 * var(--tab-clear));
+}
+.device.has-tab-bar .scroll-under-tabs:not(.no-tab-spacer)::after {
+  content: "";
+  display: block;
   flex: none;
+  height: var(--tab-clear);
+}
+.tab-bar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: var(--tab-bottom);
+  height: var(--tab-h);
+  /* Above screen content and floating bars, below sheets and dialogs
+     (.backdrop is 10), which cover the tab bar as they do on iOS. */
+  z-index: 8;
   display: flex;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  /* Harmless everywhere (resolves to 0 with no safe area, e.g. the
-     dev-preview frame or a browser tab) — not gated to .device--native
-     the way the header's top inset is, since there's no fixed mock value
-     to conflict with here. */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  align-items: center;
+  padding: 0 4px;
+  border-radius: 999px;
+}
+/* iPad keeps the capsule compact and centered rather than stretched across
+   the whole width. */
+[data-viewport="ipadAir11"] .tab-bar,
+[data-viewport="ipadAir13"] .tab-bar {
+  left: 50%;
+  right: auto;
+  width: 520px;
+  margin-left: -260px;
 }
 .tab-bar-item {
   flex: 1;
+  min-width: 0;
+  height: 54px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 7px 0 6px;
+  gap: 1px;
+  padding: 0;
   border: none;
+  border-radius: 999px;
   background: none;
-  color: var(--mut);
+  color: var(--fg);
+  transition: background 0.2s ease, color 0.2s ease;
 }
 .tab-bar-item.active {
-  color: var(--acc);
+  color: var(--acc-deep);
+  background: var(--fill);
 }
 .tab-bar-label {
   font-size: 10px;
   font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 /* ---- cards / rows ---- */
@@ -639,13 +757,12 @@ button {
   position: absolute;
   inset: 0;
   background: var(--scrim);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0 20px;
+  animation: backdrop-in 0.2s ease-out;
 }
 .backdrop.align-bottom {
   align-items: flex-end;
@@ -659,64 +776,196 @@ button {
   justify-content: flex-start;
   padding: 0;
 }
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* iOS alert: a narrow centered glass card, centered text, and full-width
+   buttons divided by hairlines along the bottom. The buttons keep their
+   .btn/.btn-primary/.btn-danger classes; this restyles them in place. */
 .dialog {
-  width: 100%;
-  background: var(--surface);
-  border-radius: 12px;
-  padding: 16px;
+  width: 290px;
+  max-width: 100%;
+  background: var(--sheet-material);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 16px;
+  padding: 20px 16px 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 8px 24px rgba(29, 31, 32, 0.2);
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  animation: dialog-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    scale: 1.1;
+  }
 }
 .dialog-title {
   font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 22px;
+  text-align: center;
 }
 .dialog-body {
   font-size: 13px;
-  color: var(--mut);
-  line-height: 1.5;
+  color: var(--fg);
+  line-height: 18px;
+  text-align: center;
+  margin-top: -6px;
 }
+.dialog .field label {
+  text-align: left;
+}
+.dialog .btn-row,
+.dialog .btn-stack {
+  display: flex;
+  margin: 10px -16px 0;
+  gap: 0;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.dialog .btn-stack {
+  flex-direction: column;
+}
+.dialog .btn {
+  flex: 1;
+  height: 44px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--acc-deep);
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 400;
+}
+.dialog .btn-row .btn + .btn {
+  box-shadow: inset 0.5px 0 0 var(--line);
+}
+.dialog .btn-stack .btn + .btn {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.dialog .btn:active {
+  background: var(--fill);
+}
+.dialog .btn-primary {
+  font-weight: 600;
+}
+.dialog .btn-danger {
+  color: var(--danger-fg);
+}
+.dialog .btn.is-disabled,
+.dialog .btn:disabled {
+  opacity: 0.35;
+}
+
+/* iOS sheet: grabber, rounded top, glass material; content is grouped inset
+   sections (.sheet-group) of 44pt rows (.sheet-row) with inset hairlines. */
 .sheet {
   width: 100%;
-  background: var(--surface);
-  border-radius: 14px 14px 0 0;
-  box-shadow: 0 -6px 20px rgba(29, 31, 32, 0.18);
-  padding: 12px 16px 18px;
+  background: var(--sheet-material);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 10px 10px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
+  padding: 5px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   max-height: 90%;
   overflow-y: auto;
+  animation: sheet-in 0.32s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+/* iPad presents sheets as a centered card rather than edge to edge. */
+[data-viewport="ipadAir11"] .sheet,
+[data-viewport="ipadAir13"] .sheet {
+  width: 540px;
+  margin: 0 auto 24px;
+  border-radius: 16px;
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .sheet,
+  .dialog {
+    animation: none;
+  }
 }
 .sheet-grip {
   width: 36px;
-  height: 4px;
+  height: 5px;
+  flex: none;
   border-radius: 99px;
-  background: var(--line);
+  background: var(--grabber);
   align-self: center;
+  margin-bottom: 4px;
 }
 .sheet-title {
   font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: 600;
+  font-size: 17px;
+  text-align: center;
+}
+.sheet-group {
+  display: flex;
+  flex-direction: column;
+  background: var(--cell);
+  border-radius: 12px;
+  overflow: hidden;
+  flex: none;
 }
 .sheet-row {
-  border-top: 1px solid var(--line);
-  padding: 9px 2px;
-  font-size: 13px;
+  position: relative;
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 17px;
   background: none;
-  border-left: none;
-  border-right: none;
-  border-bottom: none;
+  border: none;
   text-align: left;
   width: 100%;
   color: inherit;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+}
+.sheet-row:active:not(:disabled) {
+  background: var(--fill);
+}
+.sheet-row:disabled {
+  opacity: 0.4;
+}
+/* Inset hairline above every row but the first in its group. */
+.sheet-group .sheet-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 0;
+  height: 0.5px;
+  background: var(--line);
+}
+.sheet-group > .sheet-row:first-child::before,
+.sheet-group > :first-child > .sheet-row:first-child::before {
+  display: none;
+}
+.sheet-row.destructive {
+  color: var(--danger-fg);
+}
+/* An action sheet's Cancel, in its own group below the actions. */
+.sheet-row--cancel {
+  justify-content: center;
+  font-weight: 600;
+  color: var(--acc-deep);
 }
 .drawer {
   width: 86%;

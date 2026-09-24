@@ -9,15 +9,16 @@ export function MusicToolbar({ onOpenTools }: { onOpenTools: () => void }) {
 
   return (
     <div
+      className="glass"
       style={{
         position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderTop: "1px solid var(--line)",
-        background: "var(--surface)",
+        left: 10,
+        right: 10,
+        // Floats just above the tab bar, which has room reserved as --tab-clear.
+        bottom: "max(var(--tab-clear), calc(env(safe-area-inset-bottom, 0px) + 10px))",
+        borderRadius: 26,
         zIndex: 6,
-        padding: "8px 10px 10px",
+        padding: 6,
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -30,12 +31,12 @@ export function MusicToolbar({ onOpenTools }: { onOpenTools: () => void }) {
           aria-label="Stage tools"
           style={{
             flex: "none",
-            width: 36,
-            height: 36,
-            borderRadius: 9,
-            border: "1px solid var(--line)",
-            background: "var(--bg)",
-            color: "var(--acc)",
+            width: 38,
+            height: 38,
+            borderRadius: 999,
+            border: "none",
+            background: "var(--fill)",
+            color: "var(--acc-deep)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
