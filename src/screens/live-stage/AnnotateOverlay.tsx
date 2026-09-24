@@ -1,10 +1,9 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "../../state/store";
 import { Icon, type IconName } from "../../components/Icon";
 import { SmuflGlyph } from "../../components/SmuflGlyph";
 import { NOTATION_SYMBOLS, type NotationSymbol } from "../../utils/notation";
 import { Sheet } from "../../components/Overlays";
-import { Segmented } from "../../components/Toggle";
 import { ShapeGlyph, type AnnotateTool, type ArmedSymbol } from "../../components/AnnotateCanvas";
 import { isMark, isStroke, PALETTE_PAGES, STROKE_WIDTH } from "../../utils/annotations";
 import type {
@@ -285,16 +284,101 @@ export function useAnnotateSession({
   };
 }
 
+const TOOLS: { id: AnnotateTool; icon: IconName; label: string }[] = [
+  { id: "select", icon: "cursor", label: "Select" },
+  { id: "pen", icon: "edit", label: "Pen" },
+  { id: "highlighter", icon: "highlighter", label: "Highlighter" },
+  { id: "square", icon: "square", label: "Rectangle" },
+  { id: "pin", icon: "note", label: "Pin" },
+  { id: "text", icon: "text", label: "Text" },
+  { id: "notation", icon: "music", label: "Notation" },
+  { id: "shapes", icon: "shapes", label: "Shapes" },
+  { id: "eraser", icon: "eraser", label: "Eraser" },
+];
+
+/** Glyphs per notation popover page: 6 columns × 3 rows, like forScore's stamp grid. */
+const GLYPHS_PER_PAGE = 18;
+
+interface PanelPlacement {
+  left: number;
+  width: number;
+  /** Distance from the host's bottom edge to the popover's bottom edge. */
+  bottom: number;
+  /** Arrow center, in host coordinates. */
+  arrowX: number;
+}
+
 /**
- * The Annotate toolbar — takes the place of Live Stage's key/tools toolbar
- * at the bottom of the screen while annotating. The chart above it is left
- * exactly as it was (same instance, same zoom, same scroll position); only
- * this toolbar is new. Its edit/clear sheets render as siblings so their
- * backdrops cover the whole stage.
+ * The Annotate toolbar, in the iOS 26 idiom: a floating glass bar at the
+ * top (Undo, Redo, song title, Done) and one at the bottom holding the tools,
+ * with each tool's settings in a glass popover pointing at it. Both bars
+ * float over the chart instead of taking space from it, so the chart above is
+ * left exactly as it was (same instance, same zoom, same scroll position).
+ * Its edit/clear sheets render as siblings so their backdrops cover the whole
+ * stage.
  */
-export function AnnotateToolbar({ session }: { session: AnnotateSession }) {
+export function AnnotateToolbar({ session, title }: { session: AnnotateSession; title: string }) {
   const s = session;
   const { annotations, commit, editingId, setEditingId, setSelectedId } = s;
+
+  // The tool whose settings popover is showing, if any. Cues mode shows its
+  // own panel in the same spot instead.
+  const [popoverTool, setPopoverTool] = useState<AnnotateTool | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const moreRef = useRef<HTMLButtonElement | null>(null);
+  const toolRefs = useRef<Partial<Record<AnnotateTool, HTMLButtonElement | null>>>({});
+  const [placement, setPlacement] = useState<PanelPlacement | null>(null);
+
+  const panel: AnnotateTool | "cues" | null = s.mode === "cues" ? "cues" : popoverTool;
+
+  // Measured after layout so the popover can center on (and point its arrow
+  // at) the tool that opened it, clamped inside the screen.
+  useLayoutEffect(() => {
+    if (!panel) return;
+    const place = () => {
+      const bar = barRef.current;
+      const host = bar?.offsetParent as HTMLElement | null;
+      if (!bar || !host) return;
+      const hostRect = host.getBoundingClientRect();
+      const barRect = bar.getBoundingClientRect();
+      const anchorEl = panel === "cues" ? moreRef.current : toolRefs.current[panel];
+      const r = anchorEl?.getBoundingClientRect() ?? barRect;
+      const width = Math.min(hostRect.width - 20, 400);
+      const cx = r.left + r.width / 2 - hostRect.left;
+      const left = Math.max(10, Math.min(cx - width / 2, hostRect.width - width - 10));
+      setPlacement({ left, width, bottom: hostRect.bottom - barRect.top + 12, arrowX: cx });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [panel]);
+
+  const hasSettings = (t: AnnotateTool) => t !== "select";
+
+  const onToolTap = (t: AnnotateTool) => {
+    setMenuOpen(false);
+    if (s.mode === "cues") s.setMode("draw");
+    if (s.tool === t) {
+      setPopoverTool((open) => (open ? null : hasSettings(t) ? t : null));
+      return;
+    }
+    s.selectTool(t);
+    setPopoverTool(hasSettings(t) ? t : null);
+  };
+
+  const closeFloating = () => {
+    setPopoverTool(null);
+    setMenuOpen(false);
+  };
+
+  const toolColor = (t: AnnotateTool): string | undefined => {
+    if (t === "pen" || t === "square") return s.penStyle.color;
+    if (t === "highlighter") return s.highlighterStyle.color;
+    if (t === "text" || t === "notation") return s.markStyle.color;
+    if (t === "shapes") return s.shapeStyle.color;
+    return undefined;
+  };
 
   const editingStroke = annotations.find((a): a is Stroke => a.id === editingId && isStroke(a));
   const editingMark = annotations.find((a): a is TextMark | ShapeMark => a.id === editingId && isMark(a));
@@ -313,101 +397,169 @@ export function AnnotateToolbar({ session }: { session: AnnotateSession }) {
     setEditingId(copy.id);
   };
 
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
   return (
     <>
-      <div
-        style={{
-          flex: "none",
-          maxHeight: "58%",
-          display: "flex",
-          flexDirection: "column",
-          borderTop: "1px solid var(--acc)",
-          background: "var(--surface)",
-          position: "relative",
-          zIndex: 6,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      {/* Tapping outside an open popover or menu only dismisses it, the way
+          iOS does — it never also draws on the chart underneath. */}
+      {(popoverTool || menuOpen) && (
         <div
-          style={{
-            flex: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 12px",
-            background: "var(--tint)",
-            borderBottom: "1px solid var(--line)",
+          className="popover-dismiss"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            closeFloating();
           }}
-        >
-          <button className="hdr-action" onClick={s.undo} disabled={s.history.past.length === 0}>
-            Undo
-          </button>
-          <button className="hdr-action" onClick={s.redo} disabled={s.history.future.length === 0}>
-            Redo
-          </button>
-          <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-            <Segmented
-              options={[
-                { value: "draw", label: "Draw" },
-                { value: "cues", label: "Cues" },
-              ]}
-              value={s.mode}
-              onChange={s.setMode}
-            />
-          </div>
-          <button className="hdr-action" onClick={() => s.setClearOpen(true)}>
-            Clear
-          </button>
-          <button className="hdr-action" onClick={s.done}>
-            Done
-          </button>
-        </div>
+          onClick={stop}
+        />
+      )}
 
-        <div style={{ overflowY: "auto", minHeight: 0 }}>
-          {s.mode === "draw" ? (
-            <AnnotateDock
-              tool={s.tool}
-              onSelectTool={s.selectTool}
-              scrollMode={s.scrollMode}
-              onToggleScroll={() => s.setScrollMode((v) => !v)}
-              penStyle={s.penStyle}
-              onPenStyleChange={s.setPenStyle}
-              highlighterStyle={s.highlighterStyle}
-              onHighlighterStyleChange={s.setHighlighterStyle}
-              markStyle={s.markStyle}
-              onMarkStyleChange={s.setMarkStyle}
-              shapeStyle={s.shapeStyle}
-              onShapeStyleChange={s.setShapeStyle}
-              eraserSize={s.eraserSize}
-              onEraserSizeChange={s.setEraserSize}
-              armedSymbol={s.armedSymbol}
-              onArmSymbol={s.setArmedSymbol}
-              armedShape={s.armedShape}
-              onArmShape={s.setArmedShape}
-            />
-          ) : (
-            // Cues edit in the toolbar itself rather than replacing the
-            // chart, so the song stays on screen while you write them.
-            <textarea
-              value={s.cuesText}
-              onChange={(e) => s.setCuesText(e.target.value)}
-              placeholder="Cues for this song — reminders, anything you want on hand while you're on stage."
-              style={{
-                display: "block",
-                width: "100%",
-                height: 150,
-                border: "none",
-                padding: "12px 14px",
-                fontFamily: "inherit",
-                fontSize: 14,
-                lineHeight: 1.5,
-                background: "var(--surface)",
-                color: "var(--fg)",
-                resize: "none",
-              }}
-            />
-          )}
+      <div className="glass glass-bar glass-bar--top" onClick={stop}>
+        <button className="bar-btn" onClick={s.undo} disabled={s.history.past.length === 0} aria-label="Undo">
+          <Icon name="undo" size={21} strokeWidth={2} />
+        </button>
+        <button className="bar-btn" onClick={s.redo} disabled={s.history.future.length === 0} aria-label="Redo">
+          <Icon name="redo" size={21} strokeWidth={2} />
+        </button>
+        <div className="glass-bar-title">
+          {title}
+          <small>{s.mode === "cues" ? "Editing cues" : "Annotating"}</small>
         </div>
+        <button className="bar-btn bar-btn--prominent" onClick={s.done}>
+          Done
+        </button>
+      </div>
+
+      {panel && placement && (
+        <>
+          <div
+            className="glass popover"
+            style={{ left: placement.left, width: placement.width, bottom: placement.bottom, "--arrow-x": `${placement.arrowX - placement.left}px` } as React.CSSProperties}
+            onClick={stop}
+            onPointerDown={stop}
+          >
+            {panel === "cues" ? (
+              // Cues edit in the toolbar itself rather than replacing the
+              // chart, so the song stays on screen while you write them.
+              <textarea
+                value={s.cuesText}
+                onChange={(e) => s.setCuesText(e.target.value)}
+                placeholder="Cues for this song — reminders, anything you want on hand while you're on stage."
+                style={{
+                  display: "block",
+                  width: "100%",
+                  height: 150,
+                  border: "none",
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                  fontFamily: "inherit",
+                  fontSize: 17,
+                  lineHeight: 1.4,
+                  background: "var(--fill)",
+                  color: "var(--fg)",
+                  resize: "none",
+                }}
+              />
+            ) : (
+              <ToolSettings
+                tool={panel}
+                penStyle={s.penStyle}
+                onPenStyleChange={s.setPenStyle}
+                highlighterStyle={s.highlighterStyle}
+                onHighlighterStyleChange={s.setHighlighterStyle}
+                markStyle={s.markStyle}
+                onMarkStyleChange={s.setMarkStyle}
+                shapeStyle={s.shapeStyle}
+                onShapeStyleChange={s.setShapeStyle}
+                eraserSize={s.eraserSize}
+                onEraserSizeChange={s.setEraserSize}
+                armedSymbol={s.armedSymbol}
+                onArmSymbol={s.setArmedSymbol}
+                armedShape={s.armedShape}
+                onArmShape={s.setArmedShape}
+              />
+            )}
+          </div>
+          {panel !== "cues" && <div className="popover-arrow" style={{ left: placement.arrowX, bottom: placement.bottom - 10 }} />}
+        </>
+      )}
+
+      {menuOpen && (
+        <div className="glass ios-menu" style={{ right: 14, bottom: "calc(env(safe-area-inset-bottom, 0px) + 82px)" }} onClick={stop} onPointerDown={stop}>
+          <button
+            onClick={() => {
+              s.setMode("draw");
+              setMenuOpen(false);
+            }}
+          >
+            Draw {s.mode === "draw" && <Icon name="check" size={17} strokeWidth={2.2} />}
+          </button>
+          <button
+            onClick={() => {
+              s.setMode("cues");
+              setPopoverTool(null);
+              setMenuOpen(false);
+            }}
+          >
+            Cues {s.mode === "cues" && <Icon name="check" size={17} strokeWidth={2.2} />}
+          </button>
+          <hr />
+          <button
+            onClick={() => {
+              s.setScrollMode((v) => !v);
+              setMenuOpen(false);
+            }}
+          >
+            Scroll mode {s.scrollMode && <Icon name="check" size={17} strokeWidth={2.2} />}
+          </button>
+          <hr />
+          <button
+            className="destructive"
+            onClick={() => {
+              setMenuOpen(false);
+              s.setClearOpen(true);
+            }}
+          >
+            Clear… <Icon name="trash" size={17} strokeWidth={1.9} />
+          </button>
+        </div>
+      )}
+
+      <div ref={barRef} className="glass glass-bar glass-bar--bottom" onClick={stop}>
+        <div className="bar-tools" onScroll={() => setPopoverTool(null)}>
+          {TOOLS.map((t) => {
+            const color = toolColor(t.id);
+            return (
+              <button
+                key={t.id}
+                ref={(el) => {
+                  toolRefs.current[t.id] = el;
+                }}
+                className={"bar-tool" + (s.mode === "draw" && s.tool === t.id ? " active" : "")}
+                onClick={() => onToolTap(t.id)}
+                aria-label={t.label}
+                aria-pressed={s.mode === "draw" && s.tool === t.id}
+                aria-expanded={hasSettings(t.id) ? popoverTool === t.id : undefined}
+              >
+                <Icon name={t.icon} size={22} strokeWidth={1.8} />
+                {color && <span className="bar-tool-swatch" style={{ background: color }} />}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          ref={moreRef}
+          className={"bar-tool" + (menuOpen || s.scrollMode ? " active" : "")}
+          style={{ width: 36 }}
+          onClick={() => {
+            setPopoverTool(null);
+            setMenuOpen((v) => !v);
+          }}
+          aria-label="More"
+          aria-expanded={menuOpen}
+        >
+          <Icon name="more" size={22} strokeWidth={1.8} />
+        </button>
       </div>
 
       {editingStroke && (
@@ -493,11 +645,9 @@ export function AnnotateToolbar({ session }: { session: AnnotateSession }) {
   );
 }
 
-function AnnotateDock({
+/** The settings popover's contents for one tool. */
+function ToolSettings({
   tool,
-  onSelectTool,
-  scrollMode,
-  onToggleScroll,
   penStyle,
   onPenStyleChange,
   highlighterStyle,
@@ -514,9 +664,6 @@ function AnnotateDock({
   onArmShape,
 }: {
   tool: AnnotateTool;
-  onSelectTool: (t: AnnotateTool) => void;
-  scrollMode: boolean;
-  onToggleScroll: () => void;
   penStyle: { color: string; size: number; opacity: number };
   onPenStyleChange: (v: { color: string; size: number; opacity: number }) => void;
   highlighterStyle: { color: string; size: number; opacity: number };
@@ -532,125 +679,109 @@ function AnnotateDock({
   armedShape: ShapeId;
   onArmShape: (s: ShapeId) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  if (tool === "pen" || tool === "square") {
+    return <InkControls value={penStyle} onChange={onPenStyleChange} sizeRange={[1, 14]} opacityRange={[0.3, 1]} />;
+  }
+  if (tool === "highlighter") {
+    return <InkControls value={highlighterStyle} onChange={onHighlighterStyleChange} sizeRange={[6, 34]} opacityRange={[0.1, 0.7]} />;
+  }
+  if (tool === "text" || tool === "notation") {
+    return (
+      <>
+        {tool === "notation" && (
+          <Paged
+            pages={chunk(NOTATION_SYMBOLS, GLYPHS_PER_PAGE)}
+            label="Notation page"
+            renderPage={(syms) => (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 4, alignContent: "start" }}>
+                {syms.map((sym) => (
+                  <button
+                    key={sym.id}
+                    className={"glyph-cell" + (armedSymbol.id === sym.id ? " active" : "")}
+                    onClick={() => onArmSymbol(sym)}
+                    aria-label={sym.label}
+                    aria-pressed={armedSymbol.id === sym.id}
+                    title={sym.label}
+                    style={{ color: markStyle.color }}
+                  >
+                    <SmuflGlyph glyph={sym.smufl} size={28} />
+                  </button>
+                ))}
+              </div>
+            )}
+          />
+        )}
+        <ColorGrid value={markStyle.color} onChange={(color) => onMarkStyleChange({ ...markStyle, color })} />
+        <NumberField label="Size" value={markStyle.size} unit="pt" min={10} max={48} onChange={(size) => onMarkStyleChange({ ...markStyle, size })} />
+      </>
+    );
+  }
+  if (tool === "shapes") {
+    return (
+      <>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
+          {SHAPE_LIST.map((sh) => (
+            <button
+              key={sh.id}
+              className={"glyph-cell" + (armedShape === sh.id ? " active" : "")}
+              onClick={() => onArmShape(sh.id)}
+              aria-label={sh.label}
+              aria-pressed={armedShape === sh.id}
+              title={sh.label}
+            >
+              <ShapeGlyph shapeId={sh.id} color={armedShape === sh.id ? shapeStyle.color : "var(--mut)"} size={15} />
+            </button>
+          ))}
+        </div>
+        <ColorGrid value={shapeStyle.color} onChange={(color) => onShapeStyleChange({ ...shapeStyle, color })} />
+        <NumberField label="Size" value={shapeStyle.size} unit="pt" min={12} max={48} onChange={(size) => onShapeStyleChange({ ...shapeStyle, size })} />
+      </>
+    );
+  }
+  if (tool === "eraser") {
+    return <NumberField label="Eraser size" value={eraserSize} unit="pt" min={8} max={40} onChange={onEraserSizeChange} />;
+  }
+  if (tool === "pin") {
+    return <div className="popover-hint">Tap the chart to drop a pin.</div>;
+  }
+  return null;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const pages: T[][] = [];
+  for (let i = 0; i < items.length; i += size) pages.push(items.slice(i, i + size));
+  return pages;
+}
+
+/** Horizontally paged content with iOS page dots, e.g. color swatches or
+ * the notation stamp grid. */
+function Paged<T>({ pages, label, renderPage }: { pages: T[]; label: string; renderPage: (page: T, index: number) => React.ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [page, setPage] = useState(0);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el || el.clientWidth === 0) return;
+    setPage(Math.round(el.scrollLeft / el.clientWidth));
+  };
+  const goTo = (i: number) => {
+    scrollRef.current?.scrollTo({ left: i * scrollRef.current.clientWidth, behavior: "smooth" });
+  };
 
   return (
-    // Height is capped (and scrolled) by AnnotateToolbar's wrapper — a
-    // second max-height here would clip the tool row.
-    <div style={{ background: "var(--surface)" }}>
-      <button
-        onClick={() => setExpanded((e) => !e)}
-        aria-label={expanded ? "Collapse tool panel" : "Expand tool panel"}
-        style={{
-          display: "block",
-          width: "100%",
-          background: "none",
-          border: "none",
-          padding: "4px 0 0",
-          fontSize: 16,
-          color: "var(--mut)",
-          textAlign: "center",
-        }}
-      >
-        {expanded ? "﹀" : "︿"}
-      </button>
-      {expanded && (
-      <>
-      {(tool === "pen" || tool === "square") && (
-        <InkControls value={penStyle} onChange={onPenStyleChange} sizeRange={[1, 14]} opacityRange={[0.3, 1]} />
-      )}
-      {tool === "highlighter" && <InkControls value={highlighterStyle} onChange={onHighlighterStyleChange} sizeRange={[6, 34]} opacityRange={[0.1, 0.7]} />}
-      {(tool === "text" || tool === "notation") && (
-        <div style={{ padding: "9px 14px 4px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {tool === "notation" && (
-            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-              {NOTATION_SYMBOLS.map((sym) => (
-                <button
-                  key={sym.id}
-                  className={"chip" + (armedSymbol.id === sym.id ? " active" : "")}
-                  style={{ flex: "none", display: "flex", alignItems: "center", minWidth: 38, height: 34, justifyContent: "center" }}
-                  onClick={() => onArmSymbol(sym)}
-                  aria-label={sym.label}
-                  title={sym.label}
-                >
-                  <SmuflGlyph glyph={sym.smufl} size={24} />
-                </button>
-              ))}
-            </div>
-          )}
-          <ColorGrid value={markStyle.color} onChange={(color) => onMarkStyleChange({ ...markStyle, color })} />
-          <NumberField label="Size" value={markStyle.size} unit="pt" min={10} max={48} onChange={(size) => onMarkStyleChange({ ...markStyle, size })} />
-        </div>
-      )}
-      {tool === "shapes" && (
-        <div style={{ padding: "9px 14px 4px", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-            {SHAPE_LIST.map((s) => (
-              <button
-                key={s.id}
-                className={"chip" + (armedShape === s.id ? " active" : "")}
-                style={{ flex: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: "6px 10px" }}
-                onClick={() => onArmShape(s.id)}
-                aria-label={s.label}
-              >
-                <ShapeGlyph shapeId={s.id} color={armedShape === s.id ? "#ffffff" : "#8a8f98"} size={13} />
-              </button>
-            ))}
-          </div>
-          <ColorGrid value={shapeStyle.color} onChange={(color) => onShapeStyleChange({ ...shapeStyle, color })} />
-          <NumberField label="Size" value={shapeStyle.size} unit="pt" min={12} max={48} onChange={(size) => onShapeStyleChange({ ...shapeStyle, size })} />
-        </div>
-      )}
-      {tool === "eraser" && (
-        <div style={{ padding: "10px 14px 4px" }}>
-          <NumberField label="Eraser size" value={eraserSize} unit="pt" min={8} max={40} onChange={onEraserSizeChange} />
-        </div>
-      )}
-      {tool === "select" && (
-        <div className="muted" style={{ padding: "10px 14px 2px", fontSize: 11 }}>
-          Tap a stroke or mark to edit it, drag to move it. Tap a shape to show its resize/rotate handles; tap again to edit it.
-        </div>
-      )}
-      {tool === "pin" && (
-        <div className="muted" style={{ padding: "10px 14px 2px", fontSize: 11 }}>
-          Tap the chart to drop a pin.
-        </div>
-      )}
-      </>
-      )}
-
-      <div style={{ padding: "8px 4px 10px", display: "flex", alignItems: "center", gap: 2 }}>
-        <div style={{ display: "flex", overflowX: "auto", flex: 1 }}>
-          <ToolButton icon="cursor" label="Select" active={tool === "select"} onClick={() => onSelectTool("select")} />
-          <ToolButton icon="edit" label="Pen" active={tool === "pen"} onClick={() => onSelectTool("pen")} />
-          <ToolButton icon="highlighter" label="Highlight" active={tool === "highlighter"} onClick={() => onSelectTool("highlighter")} />
-          <ToolButton icon="square" label="Rect" active={tool === "square"} onClick={() => onSelectTool("square")} />
-          <ToolButton icon="note" label="Pin" active={tool === "pin"} onClick={() => onSelectTool("pin")} />
-          <ToolButton icon="text" label="Text" active={tool === "text"} onClick={() => onSelectTool("text")} />
-          <ToolButton icon="music" label="Notation" active={tool === "notation"} onClick={() => onSelectTool("notation")} />
-          <ToolButton icon="shapes" label="Shapes" active={tool === "shapes"} onClick={() => onSelectTool("shapes")} />
-          <ToolButton icon="eraser" label="Eraser" active={tool === "eraser"} onClick={() => onSelectTool("eraser")} />
-        </div>
-        <button
-          onClick={onToggleScroll}
-          aria-label="Scroll mode"
-          style={{
-            background: "none",
-            border: "none",
-            color: scrollMode ? "var(--acc-deep)" : "var(--mut)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 3,
-            padding: "0 6px",
-          }}
-        >
-          <Icon name="grip" size={18} strokeWidth={1.8} />
-          <span className="muted" style={{ fontSize: 9, fontWeight: 600, color: scrollMode ? "var(--acc-deep)" : "var(--mut)" }}>
-            Scroll
-          </span>
-        </button>
+    <div>
+      <div ref={scrollRef} onScroll={onScroll} className="paged">
+        {pages.map((p, i) => (
+          <div key={i}>{renderPage(p, i)}</div>
+        ))}
       </div>
+      {pages.length > 1 && (
+        <div className="page-dots">
+          {pages.map((_, i) => (
+            <button key={i} className={page === i ? "active" : ""} onClick={() => goTo(i)} aria-label={`${label} ${i + 1}`} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -673,57 +804,29 @@ function InkPreview({ color, size, opacity, points }: { color: string; size: num
   );
 }
 
+/** Swatches per color page: one row of 8, paged with dots. */
+const SWATCHES_PER_PAGE = 8;
+
 function ColorGrid({ value, onChange }: { value: string; onChange: (c: string) => void }) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const [page, setPage] = useState(0);
-
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el || el.clientWidth === 0) return;
-    setPage(Math.round(el.scrollLeft / el.clientWidth));
-  };
-  const goTo = (i: number) => {
-    scrollRef.current?.scrollTo({ left: i * scrollRef.current.clientWidth, behavior: "smooth" });
-  };
-
   return (
-    <div>
-      <div ref={scrollRef} onScroll={onScroll} style={{ display: "flex", overflowX: "auto", scrollSnapType: "x mandatory" }}>
-        {PALETTE_PAGES.map((colors, pi) => (
-          <div
-            key={pi}
-            style={{ flex: "0 0 100%", scrollSnapAlign: "start", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, padding: "2px 1px" }}
-          >
-            {colors.map((c) => (
-              <button
-                key={c}
-                onClick={() => onChange(c)}
-                aria-label={`Color ${c}`}
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 99,
-                  background: c,
-                  border: value === c ? "2.5px solid var(--acc-deep)" : "1.5px solid var(--line)",
-                  boxShadow: value === c ? "0 0 0 2px var(--surface) inset" : undefined,
-                  justifySelf: "center",
-                }}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-      <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 6 }}>
-        {PALETTE_PAGES.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => goTo(i)}
-            aria-label={`Color page ${i + 1}`}
-            style={{ width: 6, height: 6, borderRadius: 99, border: "none", padding: 0, background: page === i ? "var(--acc-deep)" : "var(--line)" }}
-          />
-        ))}
-      </div>
-    </div>
+    <Paged
+      pages={chunk(PALETTE_PAGES.flat(), SWATCHES_PER_PAGE)}
+      label="Color page"
+      renderPage={(colors) => (
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${SWATCHES_PER_PAGE}, 1fr)`, padding: "6px 2px" }}>
+          {colors.map((c) => (
+            <button
+              key={c}
+              className={"swatch" + (value === c ? " active" : "")}
+              onClick={() => onChange(c)}
+              aria-label={`Color ${c}`}
+              aria-pressed={value === c}
+              style={{ background: c }}
+            />
+          ))}
+        </div>
+      )}
+    />
   );
 }
 
@@ -742,37 +845,27 @@ function NumberField({
   max: number;
   onChange: (v: number) => void;
 }) {
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3 }}>
-        <span className="muted" style={{ fontSize: 12 }}>
-          {label}
-        </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: 15 }}>{label}</span>
         <span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--acc-deep)" }}>{value}</span>{" "}
-          <span className="muted" style={{ fontSize: 11 }}>
-            {unit}
-          </span>
+          <span style={{ fontSize: 17, fontWeight: 600, color: "var(--acc-deep)", fontVariantNumeric: "tabular-nums" }}>{value}</span>{" "}
+          <span style={{ fontSize: 12, color: "var(--acc-deep)" }}>{unit}</span>
         </span>
       </div>
-      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: "100%", accentColor: "var(--acc)" }} />
+      <input
+        type="range"
+        className="ios-slider"
+        min={min}
+        max={max}
+        value={value}
+        aria-label={label}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ "--fill-pct": `${pct}%` } as React.CSSProperties}
+      />
     </div>
-  );
-}
-
-function ToolButton({ icon, label, active, onClick }: { icon: IconName; label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flex: "0 0 44px", background: "none", border: "none" }}
-    >
-      <span style={{ fontSize: 18, lineHeight: 1, display: "flex", color: active ? "var(--acc-deep)" : "var(--mut)" }}>
-        <Icon name={icon} size={18} strokeWidth={1.8} />
-      </span>
-      <span className="muted" style={{ fontSize: 9, fontWeight: 600, color: active ? "var(--acc-deep)" : "var(--mut)" }}>
-        {label}
-      </span>
-    </button>
   );
 }
 
@@ -788,22 +881,22 @@ function InkControls({
   opacityRange: [number, number];
 }) {
   return (
-    <div style={{ padding: "9px 14px 6px", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <ColorGrid value={value.color} onChange={(color) => onChange({ ...value, color })} />
+      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
         <InkPreview color={value.color} size={value.size} opacity={value.opacity} />
-        <div style={{ flex: 1 }}>
-          <ColorGrid value={value.color} onChange={(color) => onChange({ ...value, color })} />
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          <NumberField
+            label="Opacity"
+            value={Math.round(value.opacity * 100)}
+            unit="%"
+            min={Math.round(opacityRange[0] * 100)}
+            max={Math.round(opacityRange[1] * 100)}
+            onChange={(v) => onChange({ ...value, opacity: v / 100 })}
+          />
+          <NumberField label="Size" value={value.size} unit="pt" min={sizeRange[0]} max={sizeRange[1]} onChange={(size) => onChange({ ...value, size })} />
         </div>
       </div>
-      <NumberField
-        label="Opacity"
-        value={Math.round(value.opacity * 100)}
-        unit="%"
-        min={Math.round(opacityRange[0] * 100)}
-        max={Math.round(opacityRange[1] * 100)}
-        onChange={(v) => onChange({ ...value, opacity: v / 100 })}
-      />
-      <NumberField label="Size" value={value.size} unit="pt" min={sizeRange[0]} max={sizeRange[1]} onChange={(size) => onChange({ ...value, size })} />
     </div>
   );
 }
@@ -832,12 +925,8 @@ function EditInkSheet({
   return (
     <Sheet onClose={onClose}>
       <div className="sheet-title">{isHighlighter ? "Edit highlight" : "Edit stroke"}</div>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "2px 2px 0" }}>
-        <InkPreview color={color} size={size} opacity={opacity} points={item.points} />
-        <div style={{ flex: 1 }}>
-          <ColorGrid value={color} onChange={onColorChange} />
-        </div>
-      </div>
+      <InkPreview color={color} size={size} opacity={opacity} points={item.points} />
+      <ColorGrid value={color} onChange={onColorChange} />
       <NumberField
         label="Opacity"
         value={Math.round(opacity * 100)}
