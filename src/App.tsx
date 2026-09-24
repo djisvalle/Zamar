@@ -5,7 +5,7 @@ import { useStore } from "./state/store";
 import { useNavigator } from "./navigation/Navigator";
 import { StatusBar } from "./components/StatusBar";
 import { DeviceNotch } from "./components/DeviceNotch";
-import { TabBar, useTabBarVisible } from "./components/TabBar";
+import { TabBar, useTabBarClasses } from "./components/TabBar";
 import { Splash } from "./screens/onboarding/Splash";
 import { LiveStage } from "./screens/live-stage/LiveStage";
 import { Library } from "./screens/library/Library";
@@ -64,7 +64,7 @@ export default function App() {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
   const vp = VIEWPORT_VARS[state.viewport];
-  const tabBarVisible = useTabBarVisible();
+  const tabBarClasses = useTabBarClasses();
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -74,7 +74,7 @@ export default function App() {
   if (Capacitor.isNativePlatform()) {
     return (
       <div
-        className={"device device--native" + (tabBarVisible ? " has-tab-bar" : "")}
+        className={"device device--native" + tabBarClasses}
         data-theme={state.settings.theme}
         data-platform={Capacitor.getPlatform()}
         style={{ "--status-h": vp.statusH } as React.CSSProperties}
@@ -133,7 +133,7 @@ export default function App() {
 
       <div className="device-shell">
         <div
-          className={"device" + (tabBarVisible ? " has-tab-bar" : "")}
+          className={"device" + tabBarClasses}
           data-theme={state.settings.theme}
           data-platform={Capacitor.getPlatform()}
           data-viewport={state.viewport}

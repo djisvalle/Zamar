@@ -32,6 +32,8 @@ the tension rather than silently picking one.
 - **Never add Claude as a commit co-author.** No `Co-Authored-By: Claude ...` or any
   Claude/Anthropic trailer in commit messages. This overrides default attribution behavior.
 - **Never mention Claude, Anthropic, or AI authorship in code comments.**
+- **Never reference Claude, Anthropic, or AI authorship in PR descriptions** (no
+  "Generated with Claude Code" footer, session links, or model names).
 - **Commit messages describe the change** (what and why). No `fix:`/`feat:`-style prefixes.
 
 ## Tech stack
