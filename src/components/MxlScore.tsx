@@ -477,7 +477,7 @@ export const MxlScore = forwardRef<
           <div ref={hostRef} />
         </div>
       </div>
-      {zoomedOffDefault && (
+      {zoomedOffDefault && !disableZoom && (
         <button className="chip" onClick={ez.reset} style={{ alignSelf: "center" }}>
           Reset zoom
         </button>

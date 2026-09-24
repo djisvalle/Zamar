@@ -161,7 +161,9 @@ export function hitTestMark(mark: TextMark | ShapeMark, point: Point, radius: nu
     const { halfW, halfH } = shapeHalfExtents(mark);
     return Math.abs(local.x - mark.position.x) <= Math.max(floor, halfW) && Math.abs(local.y - mark.position.y) <= Math.max(floor, halfH);
   }
-  const halfW = Math.max(floor, (mark.text.length || 1) * mark.size * 0.32);
+  // A notation stamp is one glyph drawn at SMUFL_SIZE_SCALE × size (see
+  // AnnotateCanvas's renderMarkGlyph), not a run of UI-font letters.
+  const halfW = Math.max(floor, mark.symbolId ? mark.size * 0.8 : (mark.text.length || 1) * mark.size * 0.32);
   const halfH = Math.max(floor, mark.size * 0.9);
   return Math.abs(point.x - mark.position.x) <= halfW && Math.abs(point.y - mark.position.y) <= halfH;
 }

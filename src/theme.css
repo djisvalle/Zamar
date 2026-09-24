@@ -1,5 +1,14 @@
 @import url("https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@400;600;700&family=Bebas+Neue&display=swap");
 
+/* Bravura (SMuFL, SIL OFL 1.1 — see assets/fonts/Bravura-OFL.txt): the
+   engraving font Annotate's notation stamps draw from. Bundled rather than
+   fetched, since Zamar has to work offline on stage. */
+@font-face {
+  font-family: "Bravura";
+  src: url("./assets/fonts/Bravura.woff2") format("woff2");
+  font-display: block;
+}
+
 :root {
   --font-body: "Barlow", system-ui, sans-serif;
   --font-heading: "Barlow Condensed", system-ui, sans-serif;
