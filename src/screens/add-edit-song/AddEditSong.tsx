@@ -144,7 +144,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
           Cancel
         </button>
         <span className="hdr-title text-center">{existing ? "Edit song" : "New song"}</span>
-        <button className="hdr-action" onClick={save} style={{ opacity: titleValid && keyValid ? 1 : 0.4 }}>
+        <button className="hdr-action hdr-action--done" onClick={save} style={{ opacity: titleValid && keyValid ? 1 : 0.4 }}>
           Save
         </button>
       </div>
@@ -415,6 +415,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
       {versionSheetFor && (
         <Sheet onClose={() => setVersionSheetFor(null)}>
           <div className="sheet-title">{versionSheetFor.label}</div>
+          <div className="sheet-group">
           {attachments[versionSheetFor.kind]?.selectedVersionId !== versionSheetFor.id && (
             <button
               className="sheet-row"
@@ -438,9 +439,10 @@ export function AddEditSong({ songId }: { songId?: string }) {
           >
             <span>Rename version</span>
           </button>
+          </div>
+          <div className="sheet-group">
           <button
-            className="sheet-row"
-            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            className="sheet-row destructive"
             onClick={() => {
               const target = versionSheetFor;
               setVersionSheetFor(null);
@@ -449,6 +451,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
           >
             <span>Remove version</span>
           </button>
+          </div>
         </Sheet>
       )}
 
@@ -520,6 +523,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
       {importMethodOpen && (
         <Sheet onClose={() => setImportMethodOpen(false)}>
           <div className="sheet-title">Import a chart</div>
+          <div className="sheet-group">
           <button className="sheet-row" onClick={() => startImport("pdf")}>
             <span>Import a PDF</span>
           </button>
@@ -529,6 +533,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
           <button className="sheet-row" onClick={() => startImport("musicxml")}>
             <span>Import MusicXML</span>
           </button>
+          </div>
         </Sheet>
       )}
     </div>

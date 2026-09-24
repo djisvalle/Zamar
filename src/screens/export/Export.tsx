@@ -122,9 +122,9 @@ export function Export({ setlistId }: { setlistId: string }) {
   if (phase === "done") {
     return (
       <div className="screen">
-        <Header title="Export set" onBack={() => setPhase("options")} />
+        <Header title="Export set" onBack={() => setPhase("options")} backLabel="Export set" />
         <div style={{ flex: 1 }} />
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, background: "var(--surface)", borderRadius: "14px 14px 0 0", boxShadow: "0 -10px 30px rgba(29,31,32,.3)", padding: 14, display: "flex", flexDirection: "column", gap: 11 }}>
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 10, background: "var(--surface)", borderRadius: "14px 14px 0 0", boxShadow: "0 -10px 30px rgba(29,31,32,.3)", padding: 14, display: "flex", flexDirection: "column", gap: 11 }}>
           <div>
             <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 14 }}>
               {setlist.name.replace(/\s/g, "-")}.{format === "pdf" ? "pdf" : format === "chordpro" ? "cho" : "musicxml"}
@@ -151,7 +151,7 @@ export function Export({ setlistId }: { setlistId: string }) {
   return (
     <div className="screen">
       <Header title="Export set" onBack={nav.pop} />
-      <div className="flex-1 hidden-scroll" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
+      <div className="flex-1 hidden-scroll scroll-under-tabs" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
         <div className="muted" style={{ fontSize: 11 }}>
           {setlist.name} · {setlistSongCount(setlist)} songs
         </div>

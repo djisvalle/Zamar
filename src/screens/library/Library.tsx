@@ -201,7 +201,7 @@ export function Library() {
             )}
           </div>
           <div
-            className="flex-1 hidden-scroll"
+            className={"flex-1 hidden-scroll" + (selectMode ? "" : " scroll-under-tabs")}
             style={{ padding: "0 14px", paddingBottom: selectMode ? 0 : 150, display: "flex", flexDirection: "column", gap: 6 }}
             onClick={() => orderMenuOpen && setOrderMenuOpen(false)}
           >
@@ -287,7 +287,7 @@ export function Library() {
             Export
           </button>
           <button
-            style={{ background: "none", border: "none", color: "#8c3b3b", fontWeight: 600 }}
+            style={{ background: "none", border: "none", color: "var(--danger-fg)", fontWeight: 600 }}
             disabled={selected.size === 0}
             onClick={() => setConfirmDelete([...selected])}
           >
@@ -302,6 +302,7 @@ export function Library() {
           <div className="muted" style={{ fontSize: 10, marginTop: -6 }}>
             {sheetFor.artist} · {sheetFor.defaultKey}
           </div>
+          <div className="sheet-group">
           <button className="sheet-row" onClick={() => { openSong(sheetFor.id); setSheetFor(null); }}>
             <span>Load on stage</span>
           </button>
@@ -350,9 +351,10 @@ export function Library() {
           >
             <span>Duplicate song</span>
           </button>
+          </div>
+          <div className="sheet-group">
           <button
-            className="sheet-row"
-            style={{ color: "#8c3b3b", fontWeight: 600 }}
+            className="sheet-row destructive"
             onClick={() => {
               setConfirmDelete([sheetFor.id]);
               setSheetFor(null);
@@ -360,12 +362,14 @@ export function Library() {
           >
             <span>Delete song</span>
           </button>
+          </div>
         </Sheet>
       )}
 
       {addMenuOpen && (
         <Sheet onClose={() => setAddMenuOpen(false)}>
           <div className="sheet-title">Add to Library</div>
+          <div className="sheet-group">
           <button
             className="sheet-row"
             onClick={() => {
@@ -384,12 +388,14 @@ export function Library() {
           >
             <span>Import a chart</span>
           </button>
+          </div>
         </Sheet>
       )}
 
       {importSheetOpen && (
         <Sheet onClose={() => setImportSheetOpen(false)}>
           <div className="sheet-title">Import a chart</div>
+          <div className="sheet-group">
           <button
             className="sheet-row"
             onClick={() => {
@@ -428,6 +434,7 @@ export function Library() {
           >
             <span>Attach to an existing song…</span>
           </button>
+          </div>
         </Sheet>
       )}
 
@@ -442,7 +449,7 @@ export function Library() {
             onChange={(e) => setExistingQuery(e.target.value)}
             autoFocus
           />
-          <div style={{ maxHeight: 320, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+          <div className="sheet-group" style={{ maxHeight: 320, overflowY: "auto" }}>
             {state.songs
               .filter(
                 (s) => s.title.toLowerCase().includes(existingQuery.toLowerCase()) || s.artist.toLowerCase().includes(existingQuery.toLowerCase())
@@ -467,6 +474,7 @@ export function Library() {
       {attachMethodFor && (
         <Sheet onClose={() => setAttachMethodFor(null)}>
           <div className="sheet-title">Attach to {attachMethodFor.title}</div>
+          <div className="sheet-group">
           <button
             className="sheet-row"
             onClick={() => {
@@ -487,6 +495,7 @@ export function Library() {
           >
             <span>Attach a photo</span>
           </button>
+          </div>
         </Sheet>
       )}
 

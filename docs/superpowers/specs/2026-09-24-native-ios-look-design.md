@@ -118,3 +118,22 @@ The rest of this spec assumes option 1.
    Branched from PR #8, which rewrites the same toolbar.
 2. Tab bar, nav headers, sheets.
 3. Grouped lists and controls across Library, Setlists, Settings, Tuner, Add/Edit Song.
+
+## Part 2 notes (tab bar, nav headers, sheets)
+
+- The tab bar floats over content. `App.tsx` marks the device `has-tab-bar` while it
+  shows, which reserves `--tab-clear` at the bottom of every screen; a screen's main
+  scroll area opts into running under the glass with `.scroll-under-tabs`. Live Stage's
+  key bar floats just above it as its own glass capsule.
+- The tab bar hides while Annotate is open, since Annotate is a full-screen editing mode
+  whose own bars sit at the bottom edge.
+- The nav bar takes on the bar material and a hairline once the screen's content has
+  scrolled. Large titles don't collapse into the bar on scroll: that needs the title to
+  live inside each screen's scroll area, which fits better with part 3's list rework.
+- Dialogs become iOS alerts (centered text, hairline-divided buttons, destructive in
+  red). Sheets group their action rows into inset sections, with destructive actions in
+  their own section.
+- iPad: iPadOS 18+ puts the tab bar at the top of the screen. This pass keeps it as a
+  compact capsule at the bottom on iPad too, for one layout across sizes; moving it to
+  the top on iPad is a possible follow-up.
+

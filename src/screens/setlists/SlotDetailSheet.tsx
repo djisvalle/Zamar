@@ -62,7 +62,7 @@ export function SlotDetailSheet({
         />
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 1, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+      <div className="sheet-group">
         <button
           className="sheet-row"
           onClick={() => {
@@ -77,9 +77,10 @@ export function SlotDetailSheet({
             <span>Move to section</span>
           </button>
         )}
+      </div>
+      <div className="sheet-group">
         <button
-          className="sheet-row"
-          style={{ color: "#8c3b3b" }}
+          className="sheet-row destructive"
           onClick={() => {
             dispatch({ type: "REMOVE_ITEM", setlistId, itemId: item.id });
             onClose();
@@ -92,6 +93,7 @@ export function SlotDetailSheet({
       {moveOpen && (
         <Sheet onClose={() => setMoveOpen(false)}>
           <div className="sheet-title">Move to section</div>
+          <div className="sheet-group">
           {sections.map((sec) => {
             const isCurrent = sec.id === currentSectionId;
             return (
@@ -111,6 +113,7 @@ export function SlotDetailSheet({
               </button>
             );
           })}
+          </div>
         </Sheet>
       )}
     </Sheet>

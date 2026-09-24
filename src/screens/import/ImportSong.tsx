@@ -218,6 +218,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             if (timer.current) clearInterval(timer.current);
             setPhase("pick");
           }}
+          backLabel="Back"
         />
         <div className="empty">
           <div className="empty-title" style={{ fontSize: 16 }}>
@@ -243,7 +244,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   if (phase === "error") {
     return (
       <div className="screen">
-        <Header title={label} onBack={() => setPhase("pick")} />
+        <Header title={label} onBack={() => setPhase("pick")} backLabel="Back" />
         <div style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ background: "rgba(140,59,59,.09)", border: "1px solid #8c3b3b", borderRadius: 8, padding: 11, display: "flex", flexDirection: "column", gap: 7 }}>
             <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 13, color: "#8c3b3b" }}>Couldn't read this file</div>
@@ -277,7 +278,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             Cancel
           </button>
           <span className="hdr-title text-center">{isExisting ? "Attach file" : "Review import"}</span>
-          <button className="hdr-action" onClick={handlePrimarySave} style={{ opacity: canSave ? 1 : 0.4 }} disabled={!canSave}>
+          <button className="hdr-action hdr-action--done" onClick={handlePrimarySave} style={{ opacity: canSave ? 1 : 0.4 }} disabled={!canSave}>
             {isExisting ? "Attach" : isForm ? "Use this" : "Save"}
           </button>
         </div>
@@ -332,12 +333,12 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
           <Dialog>
             <div className="dialog-title">Discard this import?</div>
             <div className="dialog-body">{willAttach ? "The attached file won't be saved." : "The converted chart won't be saved."}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            <div className="btn-stack">
               <button className="btn btn-primary" onClick={() => setConfirmDiscard(false)}>
                 Keep reviewing
               </button>
               <button
-                className="btn"
+                className="btn btn-danger"
                 onClick={() => (isForm ? restoreDraft() : nav.pop())}
               >
                 Discard
@@ -354,6 +355,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       <Header
         title={label}
         onBack={() => (isForm ? restoreDraft() : nav.pop())}
+        backLabel={isForm ? (formDraft?.songId ? "Edit song" : "New song") : undefined}
       />
       <div className="empty">
         <div className="empty-title">{method === "pdf" ? "Choose a PDF" : method === "photo" ? "Choose a photo" : "Choose a MusicXML file"}</div>

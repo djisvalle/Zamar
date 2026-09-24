@@ -292,7 +292,7 @@ export function LiveStage() {
           viewport rather than taking space from it, so opening it changes
           nothing in here. */}
       <div
-        className="flex-1 hidden-scroll"
+        className="flex-1 hidden-scroll scroll-under-tabs no-tab-spacer"
         style={{ paddingBottom: 150, touchAction: "pan-y" }}
         onPointerDown={onChartPointerDown}
         onPointerUp={onChartPointerUp}

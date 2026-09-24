@@ -1,51 +1,100 @@
-import type { ReactNode } from "react";
-import { useNavigator } from "../navigation/Navigator";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useNavigator, type Frame } from "../navigation/Navigator";
+import { useStore, type AppState } from "../state/store";
 import { Icon } from "./Icon";
+
+const SCREEN_TITLES: Partial<Record<Frame["screen"], string>> = {
+  "live-stage": "Live Stage",
+  library: "Library",
+  setlists: "Setlists",
+  tuner: "Tuner",
+  settings: "Settings",
+  appearance: "Appearance",
+  export: "Export set",
+};
+
+/** iOS labels the back button with the previous screen's title, falling
+ * back to "Back" when that title is unknown or too long to fit. */
+function previousTitle(frame: Frame | undefined, state: AppState): string {
+  if (!frame) return "Back";
+  const title =
+    frame.screen === "setlist-detail"
+      ? state.setlists.find((s) => s.id === frame.params?.setlistId)?.name
+      : SCREEN_TITLES[frame.screen];
+  return title && title.length <= 14 ? title : "Back";
+}
 
 export function Header({
   title,
   tinted,
   right,
   onBack,
+  backLabel,
   large,
 }: {
   title: string;
   tinted?: boolean;
   right?: ReactNode;
   onBack?: () => void;
+  /** Overrides the back button's label, for a back that returns to an
+   * earlier step of the same screen rather than to the previous frame. */
+  backLabel?: string;
   /** iOS-style Large Title: the small bar carries only the back/action
    * controls, and `title` renders as a big bold line beneath it. */
   large?: boolean;
 }) {
   const nav = useNavigator();
+  const { state } = useStore();
+  const ref = useRef<HTMLDivElement>(null);
+  const scrolled = useScrolledUnder(ref);
   const showBack = Boolean(onBack) || nav.canPop;
+  const label = backLabel ?? previousTitle(nav.stack[nav.stack.length - 2], state);
   const backButton = showBack ? (
-    <button className="hdr-btn" onClick={onBack ?? nav.pop} aria-label="Back">
-      <Icon name="chevron-left" size={20} strokeWidth={2} />
+    <button className="hdr-back" onClick={onBack ?? nav.pop} aria-label={`Back to ${label}`}>
+      <Icon name="chevron-left" size={24} strokeWidth={2.4} />
+      <span>{label}</span>
     </button>
   ) : (
-    // Reserves the same box the back button would occupy, so tab-root
-    // screens (no back target) don't shift title/action alignment.
-    <div className="hdr-btn" aria-hidden="true" />
+    <span />
   );
+  const classes = (base: string) => base + (tinted ? " tinted" : "") + (scrolled ? " scrolled" : "");
 
   if (large) {
     return (
-      <div className={"hdr-large-wrap" + (tinted ? " tinted" : "")}>
+      <div ref={ref} className={classes("hdr-large-wrap")}>
         <div className="hdr">
           {backButton}
-          <div className="flex-1" />
-          {right}
+          <div className="hdr-right">{right}</div>
         </div>
         <div className="hdr-large-title">{title}</div>
       </div>
     );
   }
   return (
-    <div className={"hdr" + (tinted ? " tinted" : "")}>
+    <div ref={ref} className={classes("hdr")}>
       {backButton}
       <div className="hdr-title">{title}</div>
-      {right}
+      <div className="hdr-right">{right}</div>
     </div>
   );
+}
+
+/** True once any scroll area on the header's screen has scrolled away from
+ * the top, which is when iOS gives the nav bar its material and hairline.
+ * Scroll events don't bubble, so this listens in the capture phase. */
+function useScrolledUnder(ref: React.RefObject<HTMLElement>) {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const screen = ref.current?.closest(".screen");
+    if (!screen) return;
+    const onScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      // Only the screen's own scroll areas, not ones inside sheets/popovers.
+      if (!(target instanceof HTMLElement) || target.closest(".backdrop, .popover")) return;
+      setScrolled(target.scrollTop > 0);
+    };
+    screen.addEventListener("scroll", onScroll, true);
+    return () => screen.removeEventListener("scroll", onScroll, true);
+  }, [ref]);
+  return scrolled;
 }

@@ -607,6 +607,7 @@ export function AnnotateToolbar({ session, title }: { session: AnnotateSession; 
       {s.clearOpen && (
         <Sheet onClose={() => s.setClearOpen(false)}>
           <div className="sheet-title">Clear annotations</div>
+          <div className="sheet-group">
           <button
             className="sheet-row"
             onClick={() => {
@@ -617,28 +618,22 @@ export function AnnotateToolbar({ session, title }: { session: AnnotateSession; 
             <span>Clear this view</span>
           </button>
           <button
-            className="sheet-row"
-            style={{
-              color: "var(--danger-fg)",
-              fontWeight: 700,
-              justifyContent: "flex-start",
-              gap: 8,
-              padding: "9px 8px",
-              borderRadius: 8,
-              background: "color-mix(in srgb, var(--danger) 10%, transparent)",
-            }}
+            className="sheet-row destructive"
             onClick={() => {
               commit([]);
               s.setAllViewsCleared(true);
               s.setClearOpen(false);
             }}
           >
-            <Icon name="trash" size={15} strokeWidth={1.8} />
             <span>Clear all views on this song</span>
+            <Icon name="trash" size={17} strokeWidth={1.8} />
           </button>
-          <button className="sheet-row" onClick={() => s.setClearOpen(false)}>
-            <span>Cancel</span>
-          </button>
+          </div>
+          <div className="sheet-group">
+            <button className="sheet-row sheet-row--cancel" onClick={() => s.setClearOpen(false)}>
+              Cancel
+            </button>
+          </div>
         </Sheet>
       )}
     </>
