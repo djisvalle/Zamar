@@ -3,6 +3,7 @@ import type { AttachmentKind, Setlist, Song } from "../state/types";
 import { keySemitoneShift, parseChordPro, type ChordPosition, type ChordProLine } from "./chordpro";
 import { firstAvailableCategory, selectedVersion } from "./attachments";
 import { flattenSetlist } from "./setlistCalc";
+import bravuraUrl from "../assets/fonts/Bravura.woff2?url";
 
 /** Builds the files Export hands to the share sheet: a PDF songbook, a
  * multi-song ChordPro file, or the set's MusicXML scores. Everything runs
@@ -333,22 +334,52 @@ async function drawImagePages(ctx: PdfCtx, p: PlannedSong, jpegs: Uint8Array[]) 
  * printed page, and rasterizes each page for embedding. */
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** The spelled name of a pitch: letter plus accidental ("F#", "Bb"). */
+/** First codepoint of each SMuFL "note name noteheads" run (Bravura has
+ * them all). Each run goes A♭ A A♯ B♭ B B♯ … G♭ G G♯, three per letter. */
+const NAME_HEAD_BASE = { black: 0xe196, half: 0xe17f, whole: 0xe168 } as const;
+const LETTER_ORDER = ["A", "B", "C", "D", "E", "F", "G"];
+
+/** The SMuFL note-name notehead glyph for a pitch and duration — the same
+ * glyphs MuseScore's "note names" notehead scheme uses. Double sharps and
+ * flats have no glyph of their own and fall back to the plain letter. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function pitchName(Pitch: any, pitch: any): string {
+function nameHeadGlyph(Pitch: any, pitch: any, kind: keyof typeof NAME_HEAD_BASE): string {
   const letter: string = Pitch.getNoteEnumString(pitch.FundamentalNote);
   const shift: number = Pitch.HalfTonesFromAccidental(pitch.Accidental);
-  return letter + (shift >= 2 ? "x" : shift >= 1 ? "#" : shift <= -2 ? "bb" : shift <= -1 ? "b" : "");
+  const acc = shift === 1 ? 2 : shift === -1 ? 0 : 1;
+  return String.fromCodePoint(NAME_HEAD_BASE[kind] + LETTER_ORDER.indexOf(letter) * 3 + acc);
 }
 
-/** Writes each note's name on its notehead, as SVG drawn over the engraved
- * score: a white letter in a black disc for filled noteheads, a black
- * letter in an open disc for half and whole notes. Names follow the
- * transposed pitch, so they match the set key. OSMD has no built-in for
+let bravuraCss: Promise<string> | null = null;
+
+/** An @font-face rule carrying Bravura as a data URL. The score is
+ * rasterized by loading its SVG as an image, and an SVG image can't reach
+ * the page's fonts, so the font has to travel inside the SVG itself. */
+function bravuraFontFace(): Promise<string> {
+  bravuraCss ??= (async () => {
+    const bytes = await dataUrlBytes(bravuraUrl);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return `@font-face{font-family:"BravuraExport";src:url(data:font/woff2;base64,${btoa(bin)}) format("woff2");}`;
+  })();
+  return bravuraCss;
+}
+
+/** Swaps each notehead for a notehead with the note's name inside it, like
+ * MuseScore's "note names" notehead scheme: OSMD's own notehead is hidden
+ * and the matching SMuFL note-name glyph from Bravura is drawn in its place
+ * (black, half and whole shapes follow the note's duration). Names follow
+ * the transposed pitch, so they match the set key. OSMD has no built-in for
  * this; it reads the graphical notes and finds their notehead paths in the
  * rendered SVG. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function drawNoteNames(osmd: any, Pitch: any) {
+async function drawNoteNames(osmd: any, Pitch: any, host: HTMLElement) {
+  const css = await bravuraFontFace();
+  for (const svg of Array.from(host.querySelectorAll("svg"))) {
+    const style = document.createElementNS(SVG_NS, "style");
+    style.textContent = css;
+    svg.insertBefore(style, svg.firstChild);
+  }
   for (const row of osmd.GraphicSheet.MeasureList) {
     for (const measure of row) {
       if (!measure) continue;
@@ -364,12 +395,12 @@ function drawNoteNames(osmd: any, Pitch: any) {
           const svg = heads[0].ownerSVGElement;
           const ctm = svg?.getScreenCTM()?.inverse();
           if (!svg || !ctm) continue;
-          const boxes = heads
-            .map((h) => {
-              const r = h.getBoundingClientRect();
+          const placed = heads
+            .map((el) => {
+              const r = el.getBoundingClientRect();
               const a = new DOMPoint(r.left, r.top).matrixTransform(ctm);
               const b = new DOMPoint(r.right, r.bottom).matrixTransform(ctm);
-              return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+              return { el, x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
             })
             .sort((p, q) => q.y - p.y);
           const byPitch = [...notes].sort(
@@ -377,35 +408,23 @@ function drawNoteNames(osmd: any, Pitch: any) {
             (m: any, n: any) => (m.sourceNote.TransposedPitch ?? m.sourceNote.Pitch).getHalfTone() - (n.sourceNote.TransposedPitch ?? n.sourceNote.Pitch).getHalfTone()
           );
           byPitch.forEach((gNote, i) => {
-            const box = boxes[i];
-            if (!box || box.h <= 0) return;
+            const head = placed[i];
+            if (!head || head.h <= 0) return;
             const note = gNote.sourceNote;
-            const name = pitchName(Pitch, note.TransposedPitch ?? note.Pitch);
-            const hollow = note.Length.RealValue >= 0.5;
-            const cx = box.x + box.w / 2;
-            const cy = box.y + box.h / 2;
-            // A printed notehead is only ~2 mm tall, too small for a legible
-            // letter, so the name sits in a slightly larger disc drawn over
-            // it: filled for quarter notes and shorter, open for half and
-            // whole notes, so the duration still reads.
-            const disc = document.createElementNS(SVG_NS, "circle");
-            disc.setAttribute("cx", String(cx));
-            disc.setAttribute("cy", String(cy));
-            disc.setAttribute("r", String(box.h * 0.78));
-            disc.setAttribute("fill", hollow ? "#fff" : "#000");
-            disc.setAttribute("stroke", "#000");
-            disc.setAttribute("stroke-width", String(box.h * 0.12));
-            svg.appendChild(disc);
+            const len: number = note.Length.RealValue;
+            const kind = len >= 1 ? "whole" : len >= 0.5 ? "half" : "black";
+            // A regular notehead is one staff space tall, and SMuFL sets
+            // 1 em = 4 staff spaces, with the glyph's baseline on the
+            // note's own line or space.
             const text = document.createElementNS(SVG_NS, "text");
-            text.setAttribute("x", String(cx));
-            text.setAttribute("y", String(cy));
+            text.setAttribute("x", String(head.x + head.w / 2));
+            text.setAttribute("y", String(head.y + head.h / 2));
             text.setAttribute("text-anchor", "middle");
-            text.setAttribute("dominant-baseline", "central");
-            text.setAttribute("font-family", "Helvetica, Arial, sans-serif");
-            text.setAttribute("font-weight", "700");
-            text.setAttribute("font-size", String(box.h * (name.length > 1 ? 0.88 : 1.1)));
-            text.setAttribute("fill", hollow ? "#000" : "#fff");
-            text.textContent = name;
+            text.setAttribute("font-family", "BravuraExport");
+            text.setAttribute("font-size", String(head.h * 4));
+            text.setAttribute("fill", "#000");
+            text.textContent = nameHeadGlyph(Pitch, note.TransposedPitch ?? note.Pitch, kind);
+            head.el.style.visibility = "hidden";
             svg.appendChild(text);
           });
         }
@@ -437,7 +456,7 @@ async function renderScorePages(dataUrl: string, semitones: number, pageFormat: 
     // render() re-keys the key signature but leaves every note where it was.
     osmd.updateGraphic();
     osmd.render();
-    if (noteNames) drawNoteNames(osmd, Pitch);
+    if (noteNames) await drawNoteNames(osmd, Pitch, host);
     const out: Uint8Array[] = [];
     for (const svg of Array.from(host.querySelectorAll("svg"))) {
       const w = svg.width.baseVal.value || svg.getBoundingClientRect().width;

@@ -57,9 +57,10 @@ screen offers Try again, keeping the file as a PDF or photo, or choosing another
   lyric font, and long lines wrap at words, carrying their chords with them. "One song per
   page" is optional. PDF attachments are copied in page by page, photos get a page each,
   and scores are engraved by OSMD in the slot's key (paged, rasterized at 2400 px).
-  "Note names on noteheads" (PDF only, shown when the set has scores) draws each note's
-  transposed name over its notehead in a slightly larger disc: filled for quarter notes and
-  shorter, open for half and whole notes. The
+  "Note names on noteheads" (PDF only, shown when the set has scores) replaces each notehead
+  with Bravura's SMuFL note-name notehead for the transposed pitch (black, half or whole
+  shape by duration), the same glyphs MuseScore's note-name scheme uses. Bravura is embedded
+  in each page's SVG as a data URL, since an SVG loaded as an image can't reach page fonts. The
   footer shows the set name and page number. Paper is Letter in US/CA/MX/PH and a few other
   Letter locales, and A4 elsewhere.
 - **ChordPro:** metadata directives first, then the chart re-serialized to bracket
