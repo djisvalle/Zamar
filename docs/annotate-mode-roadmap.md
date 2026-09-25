@@ -1,10 +1,12 @@
 # Live Stage Annotate Mode — Improvement Roadmap
 
-Snapshot date: 2026-09-22. Branch: `claude/annotation-refinements-uuym7v`.
+Snapshot date: 2026-09-22; status re-checked against `main` on 2026-09-25.
 
 Captures where annotate mode stands after the initial build-out + Phase 1 UI
 pass, and a prioritized backlog for a future session to pick up. Nothing in
-this file has been implemented yet unless noted as "done" below.
+this file has been implemented yet unless noted as "done" below. As of 2026-09-25 every
+backlog item (1–11) is done; only the "Deferred from the reference-image discussion" items
+are still open.
 
 ## Done so far
 
@@ -74,7 +76,10 @@ forgotten:
 
 4. ~~Persist annotations per song.~~ Already implemented — see "Done so
    far" above.
-5. **Rotate/resize handles on shapes.** Without this, hairpins and arrows
+5. ~~**Rotate/resize handles on shapes.**~~ **Done.** Every shape has resize handles and
+   line-type shapes (slur, hairpins, arrow, line, bracket) also get a rotate handle
+   (`AnnotateCanvas.tsx`'s `ShapeHandles`, optional `width`/`rotation` on `ShapeMark`).
+   Original notes: Without this, hairpins and arrows
    only work pointing horizontally right — a diminuendo hairpin under a
    rising vocal line, or an arrow at an angle, isn't possible. Needs
    drag-handle math (resize + rotation transform) on top of the existing
@@ -118,6 +123,6 @@ All five are **done (2026-09-25)**. Design and decisions:
 
 ## Suggested sequencing for the next session
 
-Do items 1–3 together first (small, compound well, quick to verify). Then
-tackle 4 and 5 as their own separate passes — each is a meaningful chunk of
-work on its own and shouldn't be bundled with the quick wins.
+The backlog above is finished. What's left is the deferred pair: build the full notation
+symbol library first (currently 25 symbols in `src/utils/notation.ts`), then persisted
+favorites on top of it.

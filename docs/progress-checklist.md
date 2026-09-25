@@ -1,11 +1,28 @@
 # Zamar — Progress Checklist
 
-Snapshot date: 2026-09-20. Branch: `mockup-to-implementation`.
-Cross-check source: [review-findings.md](review-findings.md) (2026-09-12 senior review).
-Note: this was originally verified against the working tree as of commit `54be3a2`, but
-substantial work (including the whole song-notes-and-annotations feature) has landed since
-then — treat that verification as stale and re-check against current `main` before relying
-on it.
+Snapshot date: 2026-09-25. Re-checked against `main` at commit `259c6a3`.
+Cross-check sources: [review-findings.md](review-findings.md) (senior review, re-checked
+2026-09-25) and [annotate-mode-roadmap.md](annotate-mode-roadmap.md).
+
+## Still open at a glance
+
+Everything below is detailed further down; this is the short list.
+
+- **iOS native build** — scaffolded, never built in Xcode (see Shell & persistence).
+- **Tuner on a real device** — only tried in the browser so far.
+- **Capo** — cut; needs its own design pass against transpose/keys (see Nice-to-have).
+- **Pure respelling on scores** — C♯ → D♭ changes the chart but not a score, because OSMD
+  skips 0-semitone transposes (see Enharmonic keys).
+- **MusicXML export can't re-key scores**; **annotations aren't exported** in any format.
+- **Crash-restore onboarding** from the source design is unwired.
+- **OMR (PDF/photo → `.mxl`)** — R&D spike only.
+- **Annotate:** full notation symbol library (25 symbols today, target ~50–60) and
+  persisted symbol favorites; per-song stave spacing; reprojecting marks across an
+  engraving-zoom change. See the roadmap and the pins spec's "Future work / TODO".
+- **Inline styles** — about 235 `style={{...}}` objects left in `src/`; needs its own
+  spec/plan.
+- **Small UI copy** — some surrounding text is still set inline at 10–13px, below iOS's
+  ~13–17pt range.
 
 This app has moved past the original CLAUDE.md description of an in-memory mockup into a
 real Capacitor + SQLite app, with a few pieces still deliberately simulated. See notes on
@@ -23,11 +40,11 @@ working tree on 2026-09-19.
       `isChordLine`/`mergeChordAndLyricLine` for the over-lyrics format — and both feed the
       same real transpose math.
 - [x] **Music Sheet.** Songs can carry sheet music as `.mxl`, image, or PDF
-      (`Song.attachment`). Live Stage and the Add/Edit Song preview render it via
-      `MxlScore.tsx` (MusicXML), `<img>` (image), or `<embed type="application/pdf">` (PDF)
-      inside a `overflow-y: auto` / `touchAction: pan-y` container — a vertical scrolling
-      viewer, not a horizontal pager. Note: the PDF `<embed>` defers to the browser's native
-      PDF plugin for its internal scroll/zoom, which isn't itself under app control.
+      (`Song.attachments`, one versioned bucket per kind). Live Stage and the Add/Edit Song
+      preview render it via `MxlScore.tsx` (MusicXML), `<img>` (image), or `PdfPages.tsx`
+      (PDF, rendered page-by-page with pdf.js rather than the browser's native PDF plugin, so
+      pinch-zoom and pan are under app control) — a vertical scrolling viewer, not a
+      horizontal pager.
 - [x] **Transposition.** Chord letters transpose by real semitone distance
       (`chordpro.ts`'s `transposeChord`/`keySemitoneShift`). Sheet music transposes too, not
       just chords: `MxlScore.tsx` sets `osmd.TransposeCalculator` and `osmd.Sheet.Transpose`
@@ -149,7 +166,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] A song can persist a default Live Stage view (chords, or a specific attachment kind),
       set from Add/Edit Song
 - [x] Chord/Sheet toggle renders the real attached file — MusicXML via OpenSheetMusicDisplay,
-      or photo/PDF via `<img>`/`<embed>` — with real pinch-to-zoom and drag-to-pan
+      or photo/PDF via `<img>`/`PdfPages.tsx` (pdf.js) — with real pinch-to-zoom and drag-to-pan
 - [x] Setlist-mode next-song preview and progress bar in the stage header
 
 ### Library
@@ -253,7 +270,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       `setlistStatus()` to `setlistCalc.ts`, which derives "upcoming"/"past" from `date`
       (comparing to today, `"template"` still a manual override) instead of trusting the
       stored `status` field. `Setlists.tsx`'s tab filter uses it instead of `sl.status`.
-- [x] **Library FABs can cover the last list rows.** Fixed: the scrollable list in
+- [x] **Library FABs can cover the last list rows.** Superseded: the FABs are gone (see
+      UI/UX polish below), so the bottom padding described here no longer applies. Original
+      fix: the scrollable list in
       `Library.tsx` now reserves `paddingBottom: 150` (roughly the FAB stack's footprint)
       when not in select mode, so the last rows scroll clear of `.fab-stack`. Same issue
       existed in `Setlists.tsx` (single FAB over its list) — fixed there too with
@@ -277,7 +296,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       well-formed "H:MM AM/PM", so `startClockLabel`'s AM default can no longer fire on a real
       ambiguous value.
 - [ ] Heavy use of ad-hoc inline `style={{...}}` objects instead of shared CSS classes. Deferred:
-      373 occurrences across 28 files — real visual-regression risk across the whole app, so this
+      about 235 occurrences left in `src/` (down from 373 at first count) — real visual-regression risk across the whole app, so this
       needs its own dedicated spec/plan per the Feature workflow rather than a sweep bundled with
       the smaller fixes above.
 
@@ -299,3 +318,5 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       that render `ChordChart` (Live Stage, Add/Edit Song preview, the Appearance specimen)
       pick this up automatically; the existing zoom/text-scale sliders still scale from these
       new bases.
+- [ ] Some surrounding UI copy is still set inline at 10–13px, below iOS's ~13–17pt range
+      (the chart itself and the iOS-look lists/forms are already fixed).
