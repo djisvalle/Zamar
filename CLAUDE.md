@@ -155,3 +155,6 @@ npm run cap:sync     # vite build && npx cap sync
 npm run cap:android  # build + sync + run on Android (verified)
 npm run cap:ios      # build + sync + run on iOS (unverified)
 ```
+
+Device setup, signing, debugging and an on-device test checklist are in
+`docs/device-testing.md`.
