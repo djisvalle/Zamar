@@ -183,6 +183,12 @@ export interface Song {
    * setting. Set by the store when the first chords mark is saved, dropped
    * when they're all cleared; undefined when the chart has no marks. */
   chordsTextScale?: number;
+  /** The content width (CSS px) each view was marked at. Marks sit at pixel
+   * positions laid out for that width, so export uses it to place them on
+   * the printed page. Recorded when a view's first mark is saved (or when
+   * Live Stage first shows marks saved before this existed), dropped when
+   * that view's marks are cleared; undefined when nothing is marked. */
+  annotationWidths?: Partial<Record<AnnotationView, number>>;
 }
 
 export interface SetlistItem {
@@ -246,6 +252,9 @@ export interface Settings {
   /** Settings → Keys: keep every note of the key's scale when spelling
    * transposed chords (E#m in C#), instead of only the key's own name. */
   strictSpelling: boolean;
+  /** Notation symbol ids starred in Annotate's Notation popover, in the
+   * order they were starred. Shared by every song. */
+  notationFavorites: string[];
 }
 
 /** Up to `MAX_RECENTS` recently used styles per Annotate tool popover. */

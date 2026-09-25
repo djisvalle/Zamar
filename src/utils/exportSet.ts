@@ -1,11 +1,14 @@
 import type { PDFDocument, PDFFont, PDFPage, RGB } from "pdf-lib";
-import type { AttachmentKind, Setlist, Song } from "../state/types";
+import type { AnnotationObject, AnnotationView, AttachmentKind, Setlist, Song } from "../state/types";
 import { parseChordPro, type ChordPosition, type ChordProLine } from "./chordpro";
 import { activeKeyChange, keySemitoneShift, type KeyChange } from "./keys";
 import { KeyAwareTransposeCalculator } from "./scoreTranspose";
+import { transposeMusicXmlFile } from "./musicxmlTranspose";
 import { firstAvailableCategory, selectedVersion } from "./attachments";
 import { flattenSetlist } from "./setlistCalc";
 import bravuraUrl from "../assets/fonts/Bravura.woff2?url";
+import { DEFAULT_MARKED_WIDTH, objectBounds } from "./annotations";
+import { lightMarkColors, loadMarkFonts, paintAnnotations, type MarkColors, type PointMap } from "./annotationExport";
 
 /** Builds the files Export hands to the share sheet: a PDF songbook, a
  * multi-song ChordPro file, or the set's MusicXML scores. Everything runs
@@ -22,6 +25,9 @@ export interface ExportOptions {
   noteNames: boolean;
   /** Settings → Keys "Strict spelling", for transposed chords. */
   strictSpelling: boolean;
+  /** PDF only: print each song's Annotate marks over the view they were
+   * drawn on. */
+  annotations: boolean;
 }
 
 /** One song slot of the set and what it will export as. `view` is null when
@@ -41,9 +47,12 @@ export interface ExportedFile {
   bytes: Uint8Array;
   /** PDF only. */
   pages?: number;
-  /** MusicXML only: scores that were in a different set key, which can't be
-   * re-keyed in the file itself and so go out in their written key. */
+  /** MusicXML only: scores that needed a new key but couldn't be read to
+   * re-key (e.g. score-timewise files), so they go out in their written key. */
   untransposed?: string[];
+  /** PDF only: marked chord charts printed without their marks, because
+   * chords were left out (the marks sit over the chord rows' layout). */
+  unmarked?: string[];
 }
 
 export type ExportProgress = (label: string, fraction: number) => void;
@@ -150,8 +159,14 @@ export async function buildMusicXml(setlist: Setlist, plan: PlannedSong[], onPro
     const version = selectedVersion(p.song.attachments.musicxml!);
     const ext = version.name.match(/\.(mxl|musicxml|xml)$/i)?.[1].toLowerCase() ?? "musicxml";
     const safeTitle = p.song.title.replace(/[\\/:*?"<>|]+/g, "-");
-    files.push({ name: `${String(i + 1).padStart(2, "0")} ${safeTitle}.${ext}`, bytes: await dataUrlBytes(version.dataUrl) });
-    if (p.semitones % 12 !== 0) untransposed.push(p.song.title);
+    let bytes = await dataUrlBytes(version.dataUrl);
+    // Same test the PDF uses to engrave a score in the set key.
+    if (p.semitones !== 0 || p.key !== p.song.defaultKey) {
+      const rekeyed = await transposeMusicXmlFile(bytes, p.semitones, p.key).catch(() => null);
+      if (rekeyed) bytes = rekeyed;
+      else untransposed.push(p.song.title);
+    }
+    files.push({ name: `${String(i + 1).padStart(2, "0")} ${safeTitle}.${ext}`, bytes });
   }
   if (files.length === 1) {
     const f = files[0];
@@ -221,6 +236,9 @@ function ensureRoom(ctx: PdfCtx, needed: number) {
 function drawText(ctx: PdfCtx, text: string, x: number, size: number, font: PDFFont, color: [number, number, number]) {
   ctx.page!.drawText(safe(ctx, text), { x, y: ctx.y, size, font, color: ctx.rgb(...color) });
 }
+
+/** How far songHeader() moves down the page: title, meta line, spacing. */
+const SONG_HEADER_HEIGHT = 18 + 15 + 14;
 
 function songHeader(ctx: PdfCtx, p: PlannedSong) {
   ensureRoom(ctx, 60);
@@ -311,9 +329,70 @@ function drawChart(ctx: PdfCtx, p: PlannedSong, includeChords: boolean) {
   });
 }
 
+// ---------------------------------------------------------------- Marks
+
+/** Where Live Stage lays out an attachment inside the box marks are saved
+ * against (LiveStage.tsx's `content`): 14px side padding, and 16px top
+ * padding plus the attachment wrapper's 8px. */
+const STAGE_SIDE = 14;
+const STAGE_TOP = 24;
+/** The photo's 1px border on stage, inside its width. */
+const STAGE_IMAGE_BORDER = 1;
+/** Gap under each PDF page on stage (PdfPages.tsx). */
+const STAGE_PDF_GAP = 8;
+
+/** A song's marks on one view, and the content width they were made at. */
+interface StageMarks {
+  items: AnnotationObject[];
+  width: number;
+  colors: MarkColors;
+}
+
+function stageMarks(song: Song, view: AnnotationView, opts: ExportOptions, colors: MarkColors): StageMarks | null {
+  const items = opts.annotations ? song.annotations[view] ?? [] : [];
+  if (!items.length) return null;
+  return { items, width: song.annotationWidths?.[view] ?? DEFAULT_MARKED_WIDTH, colors };
+}
+
+function canvasBytes(canvas: HTMLCanvasElement, type: "image/jpeg" | "image/png"): Promise<Uint8Array> {
+  return new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), type, 0.9)).then(
+    async (blob) => new Uint8Array(await blob.arrayBuffer())
+  );
+}
+
+/** Prints marks over a copied PDF's pages. On stage the pages stack at the
+ * content width with a gap between them; each page gets a transparent
+ * overlay of the marks that fall on it. Rotated pages are skipped. */
+async function overlayPdfMarks(doc: PDFDocument, pages: PDFPage[], m: StageMarks) {
+  const shown = m.width - STAGE_SIDE * 2;
+  let top = STAGE_TOP;
+  for (const pg of pages) {
+    const box = pg.getCropBox();
+    const angle = ((pg.getRotation().angle % 360) + 360) % 360;
+    const h = shown * (angle % 180 ? box.width / box.height : box.height / box.width);
+    const pageTop = top;
+    top += h + STAGE_PDF_GAP;
+    if (angle !== 0) continue;
+    const onPage = m.items.filter((it) => {
+      const b = objectBounds(it);
+      return b.bottom >= pageTop - 24 && b.top <= pageTop + h + 24;
+    });
+    if (!onPage.length) continue;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(box.width * 2);
+    canvas.height = Math.round(box.height * 2);
+    const k = canvas.width / shown;
+    const map: PointMap = (p) => ({ x: (p.x - STAGE_SIDE) * k, y: (p.y - pageTop) * k });
+    paintAnnotations(canvas.getContext("2d")!, onPage, map, k, m.colors);
+    const png = await doc.embedPng(await canvasBytes(canvas, "image/png"));
+    pg.drawImage(png, { x: box.x, y: box.y, width: box.width, height: box.height });
+  }
+}
+
 /** Loads an image through an <img> (which applies EXIF rotation) and
- * re-encodes it as a JPEG no bigger than print needs. */
-async function imageToJpeg(dataUrl: string): Promise<Uint8Array> {
+ * re-encodes it as a JPEG no bigger than print needs, with any marks drawn
+ * over it where they sat on the photo on stage. */
+async function imageToJpeg(dataUrl: string, marks: StageMarks | null = null): Promise<Uint8Array> {
   const img = new Image();
   img.src = dataUrl;
   await img.decode();
@@ -325,8 +404,110 @@ async function imageToJpeg(dataUrl: string): Promise<Uint8Array> {
   g.fillStyle = "#fff";
   g.fillRect(0, 0, canvas.width, canvas.height);
   g.drawImage(img, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), "image/jpeg", 0.9));
-  return new Uint8Array(await blob.arrayBuffer());
+  if (marks) {
+    const inset = STAGE_SIDE + STAGE_IMAGE_BORDER;
+    const k = canvas.width / (marks.width - inset * 2);
+    const map: PointMap = (p) => ({ x: (p.x - inset) * k, y: (p.y - STAGE_TOP - STAGE_IMAGE_BORDER) * k });
+    paintAnnotations(g, marks.items, map, k, marks.colors);
+  }
+  return canvasBytes(canvas, "image/jpeg");
+}
+
+/** Renders a marked chord chart the way it looked on stage, marks and all,
+ * as JPEG slices at `pageWidth` points wide: the first fits `firstHeight`
+ * points (under the song header), the rest `restHeight`. The chart is laid out offscreen at the width it was marked at, with
+ * the same component and text size, then copied onto a canvas glyph by
+ * glyph, so every mark lands on the lyric it was drawn against. */
+async function renderMarkedChart(
+  p: PlannedSong,
+  marks: StageMarks,
+  pageWidth: number,
+  firstHeight: number,
+  restHeight: number
+): Promise<Uint8Array[]> {
+  const [{ createElement }, { flushSync }, { createRoot }, { ChordChart }] = await Promise.all([
+    import("react"),
+    import("react-dom"),
+    import("react-dom/client"),
+    import("../components/ChordChart"),
+  ]);
+  const host = document.createElement("div");
+  host.className = "device device--native";
+  host.setAttribute("data-theme", "light");
+  host.style.cssText = `position:fixed;left:-100000px;top:0;width:${marks.width}px;height:auto;display:block;border:none;border-radius:0;overflow:visible;background:#fff;color:#000`;
+  const inner = document.createElement("div");
+  // LiveStage.tsx's `content` box for the chords view.
+  inner.style.cssText = "padding:16px 14px;display:flex;flex-direction:column;gap:8px";
+  host.appendChild(inner);
+  document.body.appendChild(host);
+  const root = createRoot(inner);
+  try {
+    flushSync(() =>
+      root.render(createElement(ChordChart, { chordpro: p.song.chordpro, keyChange: p.keyChange, fontScale: (p.song.chordsTextScale ?? 100) / 100 }))
+    );
+    await document.fonts?.ready;
+    const origin = host.getBoundingClientRect();
+    const cssH = Math.ceil(host.scrollHeight);
+    const s = Math.min(3, 16000 / Math.max(cssH, 1));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(marks.width * s);
+    canvas.height = Math.round(cssH * s);
+    const g = canvas.getContext("2d")!;
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Backgrounds first (chord chips), then text on top.
+    for (const el of Array.from(host.querySelectorAll<HTMLElement>("*"))) {
+      const cs = getComputedStyle(el);
+      if (cs.backgroundColor === "transparent" || cs.backgroundColor === "rgba(0, 0, 0, 0)") continue;
+      const r = el.getBoundingClientRect();
+      g.fillStyle = cs.backgroundColor;
+      g.beginPath();
+      g.roundRect((r.left - origin.left) * s, (r.top - origin.top) * s, r.width * s, r.height * s, (parseFloat(cs.borderTopLeftRadius) || 0) * s);
+      g.fill();
+    }
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent ?? "";
+      const cs = getComputedStyle(node.parentElement!);
+      g.font = `${cs.fontStyle} ${cs.fontWeight} ${parseFloat(cs.fontSize) * s}px ${cs.fontFamily}`;
+      g.fillStyle = cs.color;
+      const descent = g.measureText("Hg").fontBoundingBoxDescent;
+      const upper = cs.textTransform === "uppercase";
+      for (let i = 0; i < text.length; i++) {
+        const ch = upper ? text[i].toUpperCase() : text[i];
+        if (!ch.trim()) continue;
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const r = range.getClientRects()[0];
+        if (!r || !r.width) continue;
+        g.fillText(ch, (r.left - origin.left) * s, (r.bottom - origin.top) * s - descent);
+      }
+    }
+    paintAnnotations(g, marks.items, (pt) => ({ x: pt.x * s, y: pt.y * s }), s, marks.colors);
+
+    // Cut between lines, never through one.
+    const cuts = Array.from(inner.children).map((c) => c.getBoundingClientRect().bottom - origin.top);
+    const ptPerPx = pageWidth / marks.width;
+    const slices: Uint8Array[] = [];
+    for (let start = 0; start < cssH - 1; ) {
+      const maxSlice = (slices.length ? restHeight : firstHeight) / ptPerPx;
+      const fits = cuts.filter((c) => c > start + 1 && c <= start + maxSlice);
+      let end = start + maxSlice >= cssH ? cssH : fits.length ? Math.max(...fits) + 4 : start + maxSlice;
+      end = Math.min(end, cssH);
+      const slice = document.createElement("canvas");
+      slice.width = canvas.width;
+      slice.height = Math.max(1, Math.round((end - start) * s));
+      slice.getContext("2d")!.drawImage(canvas, 0, -Math.round(start * s));
+      slices.push(await canvasBytes(slice, "image/jpeg"));
+      start = end;
+    }
+    return slices;
+  } finally {
+    root.unmount();
+    host.remove();
+  }
 }
 
 /** Places images one per page under the song header, scaled to fit.
@@ -548,10 +729,11 @@ async function renderScorePages(
   semitones: number,
   targetKey: string,
   area: { w: number; h: number },
-  noteNames: boolean
+  noteNames: boolean,
+  marks: StageMarks | null
 ): Promise<Uint8Array[]> {
   const osmdModule = await import("opensheetmusicdisplay");
-  const { OpenSheetMusicDisplay, Pitch } = osmdModule;
+  const { OpenSheetMusicDisplay, Pitch, unitInPixels } = osmdModule;
   const host = document.createElement("div");
   host.style.cssText = `position:fixed;left:-10000px;top:0;width:${SCORE_HOST_PX}px;background:#fff`;
   document.body.appendChild(host);
@@ -586,8 +768,12 @@ async function renderScorePages(
     osmd.updateGraphic();
     osmd.render();
     if (noteNames) await drawNoteNames(osmd, Pitch, host);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sheet = (osmd as any).GraphicSheet;
     const out: Uint8Array[] = [];
-    for (const svg of Array.from(host.querySelectorAll("svg"))) {
+    const svgs = Array.from(host.querySelectorAll("svg"));
+    for (let pageIndex = 0; pageIndex < svgs.length; pageIndex++) {
+      const svg = svgs[pageIndex];
       const w = svg.width.baseVal.value || svg.getBoundingClientRect().width;
       const h = svg.height.baseVal.value || svg.getBoundingClientRect().height;
       if (!svg.getAttribute("xmlns")) svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
@@ -604,6 +790,21 @@ async function renderScorePages(
         g.fillStyle = "#fff";
         g.fillRect(0, 0, canvas.width, canvas.height);
         g.drawImage(img, 0, 0, canvas.width, canvas.height);
+        if (marks) {
+          // Score marks follow their measure anchor, not a pixel position:
+          // the export engraves at its own size and line breaks. Unanchored
+          // marks (saved before anchoring) are left out. Mark sizes assume
+          // the score was marked at its default on-stage zoom.
+          const f = unitInPixels * osmd.Zoom * scale;
+          const map: PointMap = (_p, anchor) => {
+            const measure = anchor && sheet.MeasureList[anchor.measureIndex]?.[anchor.staffIndex];
+            if (!measure || sheet.MusicPages.indexOf(measure.ParentMusicSystem?.Parent) !== pageIndex) return null;
+            const pos = measure.PositionAndShape.AbsolutePosition;
+            const size = measure.PositionAndShape.Size;
+            return { x: (pos.x + anchor!.fx * size.width) * f, y: (pos.y + anchor!.fy * size.height) * f };
+          };
+          paintAnnotations(g, marks.items, map, osmd.Zoom * scale, marks.colors);
+        }
         const page = trimBottom(canvas);
         const blob = await new Promise<Blob>((res, rej) => page.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), "image/jpeg", 0.92));
         out.push(new Uint8Array(await blob.arrayBuffer()));
@@ -635,12 +836,23 @@ export async function buildPdf(setlist: Setlist, plan: PlannedSong[], opts: Expo
     charset: new Set([...regular.getCharacterSet(), 10]),
   };
   const letter = ctx.size[0] === 612;
+  const colors = lightMarkColors();
+  if (opts.annotations) await loadMarkFonts();
+  const unmarked: string[] = [];
 
   const songs = plan.filter((p) => p.view);
   for (let i = 0; i < songs.length; i++) {
     const p = songs[i];
     onProgress(`Adding ${p.song.title}`, i / songs.length);
-    if (p.view === "chords") {
+    const view = p.view ?? "chords";
+    const marks = p.view ? stageMarks(p.song, view, opts, colors) : null;
+    if (p.view === "chords" && marks && opts.includeChords) {
+      const pageWidth = ctx.size[0] - MARGIN * 2;
+      const pageHeight = ctx.size[1] - MARGIN * 2;
+      const slices = await renderMarkedChart(p, marks, pageWidth, pageHeight - SONG_HEADER_HEIGHT, pageHeight);
+      await drawImagePages(ctx, p, slices);
+    } else if (p.view === "chords") {
+      if (marks) unmarked.push(p.song.title);
       if (opts.onePerPage || !ctx.page) newPage(ctx);
       else {
         ctx.y -= 26;
@@ -652,12 +864,13 @@ export async function buildPdf(setlist: Setlist, plan: PlannedSong[], opts: Expo
       const src = await PDFDocument.load(await dataUrlBytes(selectedVersion(p.song.attachments.pdf!).dataUrl), { ignoreEncryption: true });
       const pages = await doc.copyPages(src, src.getPageIndices());
       pages.forEach((pg) => doc.addPage(pg));
+      if (marks) await overlayPdfMarks(doc, pages, marks);
       ctx.page = null;
     } else if (p.view === "image") {
-      await drawImagePages(ctx, p, [await imageToJpeg(selectedVersion(p.song.attachments.image!).dataUrl)]);
+      await drawImagePages(ctx, p, [await imageToJpeg(selectedVersion(p.song.attachments.image!).dataUrl, marks)]);
     } else if (p.view === "musicxml") {
       const area = { w: ctx.size[0] - SCORE_MARGIN * 2, h: ctx.size[1] - MARGIN * 2 };
-      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, p.key, area, opts.noteNames);
+      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, p.key, area, opts.noteNames, marks);
       await drawImagePages(ctx, p, pages, SCORE_MARGIN);
     }
   }
@@ -675,5 +888,5 @@ export async function buildPdf(setlist: Setlist, plan: PlannedSong[], opts: Expo
 
   onProgress("Finishing up", 1);
   const bytes = await doc.save();
-  return { name: `${exportFileBase(setlist)}.pdf`, mime: "application/pdf", bytes, pages: total };
+  return { name: `${exportFileBase(setlist)}.pdf`, mime: "application/pdf", bytes, pages: total, unmarked };
 }

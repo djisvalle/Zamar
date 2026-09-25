@@ -134,7 +134,7 @@ button {
   gap: 6px;
 }
 .controls .group-label {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #6b6b6f;
@@ -1854,7 +1854,7 @@ button.sheet-row:active:not(:disabled) {
 }
 .popover-row small {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 16px;
   color: var(--mut);
 }
@@ -1956,6 +1956,9 @@ button.sheet-row:active:not(:disabled) {
   box-shadow: 0 0 0 2.5px var(--surface), 0 0 0 5px var(--fg);
 }
 .glyph-cell {
+  position: relative;
+  -webkit-touch-callout: none;
+  user-select: none;
   height: 46px;
   border: none;
   border-radius: 12px;
@@ -1967,6 +1970,15 @@ button.sheet-row:active:not(:disabled) {
 }
 .glyph-cell.active {
   background: var(--fill);
+}
+/* Marks a starred notation symbol. */
+.glyph-cell .fav-star {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--acc);
 }
 
 /* ---- iOS slider: thin track filled to the thumb, round white thumb.

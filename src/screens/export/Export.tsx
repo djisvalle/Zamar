@@ -90,6 +90,7 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
   const [perSlotKeys, setPerSlotKeys] = useState(true);
   const [onePerPage, setOnePerPage] = useState(false);
   const [noteNames, setNoteNames] = useState(false);
+  const [annotations, setAnnotations] = useState(true);
   const [phase, setPhase] = useState<Phase>("options");
   const [progress, setProgress] = useState<{ label: string; fraction: number }>({ label: "", fraction: 0 });
   const [result, setResult] = useState<ExportedFile | null>(null);
@@ -101,7 +102,7 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
 
   // A single song always takes its export key from the slot.
   const strictSpelling = state.settings.strictSpelling;
-  const opts = { includeChords, perSlotKeys: song ? true : perSlotKeys, onePerPage, noteNames, strictSpelling };
+  const opts = { includeChords, perSlotKeys: song ? true : perSlotKeys, onePerPage, noteNames, strictSpelling, annotations };
   const plan = useMemo(
     () => {
       const planned = setlist ? planExport(setlist, state.songs, format, opts) : [];
@@ -113,6 +114,7 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
   const included = plan.filter((p) => p.view);
   const skipped = plan.length - included.length;
   const hasScores = included.some((p) => p.view === "musicxml");
+  const hasMarks = included.some((p) => p.song.annotations[p.view!]?.length);
 
   if (!setlist) {
     return (
@@ -222,7 +224,10 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
     const notes = [
       skipped ? `${skipped} song${skipped === 1 ? "" : "s"} left out. ${SKIP_REASON[format]}` : "",
       result.untransposed?.length
-        ? `${result.untransposed.join(", ")} ${result.untransposed.length === 1 ? "is" : "are"} in the score's written key. MusicXML files can't be re-keyed on export.`
+        ? `${result.untransposed.join(", ")} ${result.untransposed.length === 1 ? "is" : "are"} in the score's written key. ${result.untransposed.length === 1 ? "Its file" : "Their files"} couldn't be read to change the key.`
+        : "",
+      result.unmarked?.length
+        ? `${result.unmarked.join(", ")} ${result.unmarked.length === 1 ? "was" : "were"} printed without annotations. Marks on a chord chart need chords included.`
         : "",
     ].filter(Boolean);
     return (
@@ -243,7 +248,7 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
                 alignItems: "flex-end",
                 justifyContent: "center",
                 paddingBottom: 6,
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: 700,
                 color: "var(--acc-deep)",
                 textTransform: "uppercase",
@@ -301,25 +306,28 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
             onChange={setFormat}
           />
         </div>
-        <Section
-          footer={
-            format === "musicxml"
-              ? "Scores are exported as they were imported. Set keys can't be applied inside a MusicXML file."
-              : song
-              ? undefined
-              : perSlotKeys
-              ? "Slots export in each song's set key."
-              : "Songs export in their library key."
-          }
-        >
-          {format !== "musicxml" && <ExportToggle label="Include chords" on={includeChords} onChange={() => setIncludeChords((v) => !v)} />}
-          {format !== "musicxml" && !song && <ExportToggle label="Apply per-slot keys" on={perSlotKeys} onChange={() => setPerSlotKeys((v) => !v)} />}
-          {format === "pdf" && !song && <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />}
-          {format === "pdf" && hasScores && (
-            <ExportToggle label="Note names on noteheads" on={noteNames} onChange={() => setNoteNames((v) => !v)} />
-          )}
-        </Section>
-        {song && hasKey && format !== "musicxml" && (
+        {!(song && format === "musicxml") && (
+          <Section
+            footer={
+              song
+                ? undefined
+                : perSlotKeys
+                ? "Slots export in each song's set key."
+                : "Songs export in their library key."
+            }
+          >
+            {format !== "musicxml" && <ExportToggle label="Include chords" on={includeChords} onChange={() => setIncludeChords((v) => !v)} />}
+            {!song && <ExportToggle label="Apply per-slot keys" on={perSlotKeys} onChange={() => setPerSlotKeys((v) => !v)} />}
+            {format === "pdf" && !song && <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />}
+            {format === "pdf" && hasScores && (
+              <ExportToggle label="Note names on noteheads" on={noteNames} onChange={() => setNoteNames((v) => !v)} />
+            )}
+            {format === "pdf" && hasMarks && (
+              <ExportToggle label="Include annotations" on={annotations} onChange={() => setAnnotations((v) => !v)} />
+            )}
+          </Section>
+        )}
+        {song && hasKey && (
           <Section
             header="Key"
             footer={
@@ -331,7 +339,7 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
             <div style={{ padding: "8px 0" }}>
               <KeyChips active={exportKey} onSelect={setExportKey} offsetFrom={song.defaultKey} />
             </div>
-            {format === "pdf" && hasScores && exportKey !== song.defaultKey && (
+            {format !== "chordpro" && hasScores && exportKey !== song.defaultKey && (
               <div className="sheet-row">
                 <span>Move the score</span>
                 <div style={{ width: 180 }}>
@@ -358,7 +366,7 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
               <div key={`${p.song.id}-${i}`} className="sheet-row" style={{ opacity: p.view ? 1 : 0.5 }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {p.song.title}
-                  {p.view && p.view !== "musicxml" && p.key && p.key !== "—" ? <span className="row-detail"> · {p.key}</span> : null}
+                  {p.view && p.key && p.key !== "—" ? <span className="row-detail"> · {p.key}</span> : null}
                 </span>
                 <span className="row-detail">{viewLabel(p)}</span>
               </div>

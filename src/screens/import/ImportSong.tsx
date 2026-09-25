@@ -304,12 +304,12 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
         </div>
         <div className="flex-1 hidden-scroll" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
           {isExisting ? (
-            <div className="muted" style={{ fontSize: 11, lineHeight: 1.5 }}>
+            <div className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
               Attaching {file?.name} to <strong style={{ color: "var(--fg)" }}>{existingSong?.title}</strong> as{" "}
               {ATTACHMENT_LABEL[attachmentKind]} — its existing chart won't change.
             </div>
           ) : (
-            <div className="muted" style={{ fontSize: 11 }}>
+            <div className="muted" style={{ fontSize: 13 }}>
               {willAttach
                 ? `Attached from ${file?.name} — saved as-is, no chords detected.`
                 : converted?.fromOcr
@@ -440,7 +440,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             : "Pick a .mxl or .musicxml file exported from notation software."}
         </div>
         {file && (
-          <div style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 11px", display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+          <div style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 8, padding: "9px 11px", display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
             <span>{method === "pdf" ? "📄" : method === "photo" ? "🖼" : "🎼"}</span>
             <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</span>
           </div>
@@ -468,7 +468,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
                 onChange={setContentType}
               />
             </div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4 }}>
+            <div className="muted" style={{ fontSize: 13, marginTop: 6, lineHeight: 1.4 }}>
               {contentType === "chords"
                 ? "We'll detect chords and lyrics and turn this into an editable chart."
                 : `We'll keep the ${attachmentKind} as-is — sheet music isn't converted into chords.`}

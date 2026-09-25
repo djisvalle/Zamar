@@ -19,6 +19,5 @@ This list only carries what is still open or only partly fixed. Findings that ar
 
 Context for this pass: users are coming from OnSong on iOS; Zamar's differentiator is sheet-music flexibility. These are stylistic departures rather than bugs.
 
-2. **(Partial) Text sizes run small relative to iOS defaults.**
-   *Fixed:* the chord chart itself now renders at 17px lyrics / 14px chords at 100% (`ChordChart.tsx`), in line with iOS body text, and the iOS look rollout moved lists, controls and forms to iOS sizes.
-   *Still open:* some surrounding UI copy is still set inline at 10–13px, below iOS's ~13–17pt range.
+No open items: text sizes now follow iOS text styles (see
+`docs/superpowers/specs/2026-09-25-priority-2-design.md`).

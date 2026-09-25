@@ -206,12 +206,12 @@ export function PdfPages({ src, disableZoom = false }: { src: string; disableZoo
   return (
     <div style={{ width: "100%" }}>
       {status === "loading" && (
-        <div className="muted" style={{ fontSize: 12, padding: "20px 0", textAlign: "center" }}>
+        <div className="muted" style={{ fontSize: 13, padding: "20px 0", textAlign: "center" }}>
           Loading pages…
         </div>
       )}
       {status === "error" && (
-        <div className="muted" style={{ fontSize: 12, padding: "20px 0", textAlign: "center" }}>
+        <div className="muted" style={{ fontSize: 13, padding: "20px 0", textAlign: "center" }}>
           Couldn't read this PDF.
         </div>
       )}

@@ -35,7 +35,10 @@ export function SmuflGlyph({ glyph, size, color }: { glyph: string; size: number
   const w = box ? ((box.w + pad * 2) / 100) * size : size;
   const h = box ? ((box.h + pad * 2) / 100) * size : size;
   return (
-    <svg width={w} height={h} viewBox={vb} style={{ display: "block", overflow: "visible" }} aria-hidden>
+    // Ink outside the viewBox still paints (overflow: visible), so the svg
+    // takes no pointer events: a tap on a glyph belongs to its button or
+    // mark, never to a neighbouring glyph's overhang.
+    <svg width={w} height={h} viewBox={vb} style={{ display: "block", overflow: "visible", pointerEvents: "none" }} aria-hidden>
       <text ref={textRef} x={0} y={0} fontFamily="Bravura" fontSize={100} fill={color ?? "currentColor"}>
         {glyph}
       </text>

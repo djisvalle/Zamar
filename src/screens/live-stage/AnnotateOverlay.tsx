@@ -5,8 +5,8 @@ import { SmuflGlyph } from "../../components/SmuflGlyph";
 import { NOTATION_SYMBOLS, notationSymbol, type NotationSymbol } from "../../utils/notation";
 import { Toggle } from "../../components/Toggle";
 import { Sheet } from "../../components/Overlays";
-import { ShapeGlyph, type AnnotateTool, type ArmedSymbol } from "../../components/AnnotateCanvas";
-import { isMark, isStroke, PALETTE_PAGES, recordRecents, STROKE_WIDTH } from "../../utils/annotations";
+import { hapticTick, ShapeGlyph, type AnnotateTool, type ArmedSymbol } from "../../components/AnnotateCanvas";
+import { isMark, isStroke, PALETTE_PAGES, recordRecents, STROKE_WIDTH, syncAnnotationWidths } from "../../utils/annotations";
 import type {
   AnnotateRecents,
   AnnotationObject,
@@ -99,6 +99,7 @@ export function useAnnotateSession({
   open,
   annotationView,
   noAnnotationTarget,
+  contentWidth,
   onClose,
 }: {
   song: Song | null;
@@ -107,10 +108,13 @@ export function useAnnotateSession({
   /** True when there's no real chart to attribute marks to (sheet view with
    * nothing attached) — `done()` must not write to `annotations` then. */
   noAnnotationTarget: boolean;
+  /** The marked content's current width in CSS px, recorded with new marks
+   * (see Song.annotationWidths). */
+  contentWidth: () => number | null;
   onClose: () => void;
 }) {
   const { state, dispatch } = useStore();
-  const { annotateRecents: recents, annotateSnap: snapOn } = state.settings;
+  const { annotateRecents: recents, annotateSnap: snapOn, notationFavorites: favorites } = state.settings;
 
   const [mode, setMode] = useState<"draw" | "cues">("draw");
   const [tool, setTool] = useState<AnnotateTool>("select");
@@ -217,20 +221,18 @@ export function useAnnotateSession({
       onClose();
       return;
     }
-    dispatch({
-      type: "UPDATE_SONG",
-      song: {
-        ...song,
-        notes: cuesText,
-        annotations: allViewsCleared
-          ? noAnnotationTarget
-            ? {}
-            : { [annotationView]: annotations }
-          : noAnnotationTarget
-            ? song.annotations
-            : { ...song.annotations, [annotationView]: annotations },
-      },
-    });
+    const next: Song = {
+      ...song,
+      notes: cuesText,
+      annotations: allViewsCleared
+        ? noAnnotationTarget
+          ? {}
+          : { [annotationView]: annotations }
+        : noAnnotationTarget
+          ? song.annotations
+          : { ...song.annotations, [annotationView]: annotations },
+    };
+    dispatch({ type: "UPDATE_SONG", song: syncAnnotationWidths(next, contentWidth()) });
     onClose();
   };
 
@@ -294,6 +296,8 @@ export function useAnnotateSession({
     clearOpen,
     setClearOpen,
     recents,
+    favorites,
+    toggleFavorite: (symbolId: string) => dispatch({ type: "TOGGLE_NOTATION_FAVORITE", symbolId }),
     snapOn,
     setSnapOn: (value: boolean) => dispatch({ type: "SET_ANNOTATE_SNAP", value }),
     commit,
@@ -498,6 +502,8 @@ export function AnnotateToolbar({ session, title }: { session: AnnotateSession; 
                 armedShape={s.armedShape}
                 onArmShape={s.setArmedShape}
                 recents={s.recents}
+                favorites={s.favorites}
+                onToggleFavorite={s.toggleFavorite}
                 snapOn={s.snapOn}
                 onSnapChange={s.setSnapOn}
               />
@@ -681,6 +687,8 @@ function ToolSettings({
   armedShape,
   onArmShape,
   recents,
+  favorites,
+  onToggleFavorite,
   snapOn,
   onSnapChange,
 }: {
@@ -700,6 +708,8 @@ function ToolSettings({
   armedShape: ShapeId;
   onArmShape: (s: ShapeId) => void;
   recents: AnnotateRecents;
+  favorites: string[];
+  onToggleFavorite: (symbolId: string) => void;
   snapOn: boolean;
   onSnapChange: (v: boolean) => void;
 }) {
@@ -750,6 +760,34 @@ function ToolSettings({
               ];
             })}
           </RecentRow>
+        ) : null}
+        {tool === "notation" ? (
+          <div>
+            <div className="popover-label">Favorites</div>
+            {favorites.some((id) => notationSymbol(id)) ? (
+              <div className="recent-row">
+                {favorites.flatMap((id) => {
+                  const sym = notationSymbol(id);
+                  if (!sym) return [];
+                  return [
+                    <SymbolCell
+                      key={id}
+                      sym={sym}
+                      size={24}
+                      className="recent-cell"
+                      active={armedSymbol.id === sym.id}
+                      starred
+                      color={markStyle.color}
+                      onArm={onArmSymbol}
+                      onToggleFavorite={onToggleFavorite}
+                    />,
+                  ];
+                })}
+              </div>
+            ) : (
+              <div className="popover-hint recent-empty">Press and hold a symbol to star it.</div>
+            )}
+          </div>
         ) : (
           <RecentColors colors={recents.text} value={markStyle.color} onPick={(color) => onMarkStyleChange({ ...markStyle, color })} />
         )}
@@ -760,17 +798,16 @@ function ToolSettings({
             renderPage={(syms) => (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 4, alignContent: "start" }}>
                 {syms.map((sym) => (
-                  <button
+                  <SymbolCell
                     key={sym.id}
-                    className={"glyph-cell" + (armedSymbol.id === sym.id ? " active" : "")}
-                    onClick={() => onArmSymbol(sym)}
-                    aria-label={sym.label}
-                    aria-pressed={armedSymbol.id === sym.id}
-                    title={sym.label}
-                    style={{ color: markStyle.color }}
-                  >
-                    <SmuflGlyph glyph={sym.smufl} size={28} />
-                  </button>
+                    sym={sym}
+                    size={28}
+                    active={armedSymbol.id === sym.id}
+                    starred={favorites.includes(sym.id)}
+                    color={markStyle.color}
+                    onArm={onArmSymbol}
+                    onToggleFavorite={onToggleFavorite}
+                  />
                 ))}
               </div>
             )}
@@ -818,6 +855,70 @@ function ToolSettings({
     return <div className="popover-hint">Tap the chart to drop a pin.</div>;
   }
   return null;
+}
+
+/** How long a press on a notation symbol takes to star or unstar it. */
+const FAVORITE_PRESS_MS = 450;
+
+/** One notation symbol button: tap arms it, press and hold stars it. */
+function SymbolCell({
+  sym,
+  size,
+  className,
+  active,
+  starred,
+  color,
+  onArm,
+  onToggleFavorite,
+}: {
+  sym: NotationSymbol;
+  size: number;
+  className?: string;
+  active: boolean;
+  starred: boolean;
+  color: string;
+  onArm: (s: NotationSymbol) => void;
+  onToggleFavorite: (symbolId: string) => void;
+}) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when the hold fired, so the click that ends it doesn't also arm.
+  const held = useRef(false);
+  const cancel = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  return (
+    <button
+      className={"glyph-cell" + (className ? " " + className : "") + (active ? " active" : "")}
+      onPointerDown={() => {
+        held.current = false;
+        cancel();
+        timer.current = setTimeout(() => {
+          held.current = true;
+          hapticTick();
+          onToggleFavorite(sym.id);
+        }, FAVORITE_PRESS_MS);
+      }}
+      onPointerUp={cancel}
+      onPointerLeave={cancel}
+      onPointerCancel={cancel}
+      onContextMenu={(e) => e.preventDefault()}
+      onClick={() => {
+        if (held.current) {
+          held.current = false;
+          return;
+        }
+        onArm(sym);
+      }}
+      aria-label={sym.label + (starred ? ", favorite" : "")}
+      aria-pressed={active}
+      title={sym.label}
+      style={{ color }}
+    >
+      <SmuflGlyph glyph={sym.smufl} size={size} />
+      {starred && <span className="fav-star" aria-hidden>★</span>}
+    </button>
+  );
 }
 
 /** The "Recent" strip at the top of a tool popover. Shows a hint instead
