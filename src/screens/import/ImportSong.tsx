@@ -13,6 +13,10 @@ import { ATTACHMENT_LABEL, addVersion } from "../../utils/attachments";
 export type ImportMethod = "pdf" | "photo" | "musicxml";
 type Phase = "pick" | "converting" | "review" | "error";
 type ContentType = "chords" | "sheet";
+/** How a freshly-converted chart should combine with a chart the destination
+ * song already has — only reachable for the in-form target, since that's
+ * the only path that can silently clobber existing chords (see finishForm). */
+type MergeStrategy = "replace" | "append" | "review";
 
 /** Where the finished import goes: a brand-new song (Library's default),
  * an existing song's supplementary sheet-music/static-file view, or back
@@ -74,6 +78,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [contentType, setContentType] = useState<ContentType>("chords");
   const [versionLabel, setVersionLabel] = useState("");
+  const [mergeStrategy, setMergeStrategy] = useState<MergeStrategy>("replace");
   const [progress, setProgress] = useState(0);
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -90,6 +95,12 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   // music — treat it the same as an explicit "Sheet music" declaration.
   const isSheetContent = contentType === "sheet" || !canDeclareContent;
   const willAttach = skipContentDeclaration || (isSheetContent && !!file);
+  /** True only when converting chords back into a draft that already has a
+   * non-empty chart — the one case where a plain "Use this" would silently
+   * discard the person's existing chords, so it needs a Replace/Append/
+   * Review choice instead of the unconditional overwrite in finishForm. */
+  const hasExistingChart = isForm && !willAttach && Boolean(formDraft?.chordpro?.trim());
+  const mergedChordpro = hasExistingChart && mergeStrategy === "append" ? `${formDraft!.chordpro.trimEnd()}\n\n${MOCK_CHORDPRO}` : MOCK_CHORDPRO;
 
   const buildVersion = (): AttachmentVersion => ({
     id: `att-${Date.now()}`,
@@ -171,7 +182,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
     // clears prior attachments, and attaching a file only adds a version to
     // its own category, never disturbing the others.
     const attachments = willAttach ? addVersion(formDraft?.attachments ?? {}, attachmentKind, buildVersion()) : formDraft?.attachments ?? {};
-    const chordpro = willAttach ? formDraft?.chordpro ?? "" : MOCK_CHORDPRO;
+    const chordpro = willAttach ? formDraft?.chordpro ?? "" : mergedChordpro;
     const chartFormat = willAttach ? formDraft?.chartFormat ?? "chords-over-lyrics" : ("chordpro" as ChartFormat);
     nav.replace("add-edit-song", {
       songId: formDraft?.songId,
@@ -270,7 +281,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   }
 
   if (phase === "review") {
-    const canSave = isExisting || isForm ? true : title.trim().length > 0;
+    const canSave = isExisting || isForm ? !(hasExistingChart && mergeStrategy === "review") : title.trim().length > 0;
     return (
       <div className="screen">
         <div className="hdr">
@@ -319,6 +330,49 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
                 <PdfPages src={file!.dataUrl} />
               </div>
             )
+          ) : hasExistingChart ? (
+            <>
+              <div>
+                <div className="list-section-header" style={{ padding: "0 2px 6px" }}>This song already has a chart</div>
+                <Segmented
+                  options={[
+                    { value: "replace", label: "Replace" },
+                    { value: "append", label: "Append" },
+                    { value: "review", label: "Compare" },
+                  ]}
+                  value={mergeStrategy}
+                  onChange={setMergeStrategy}
+                />
+              </div>
+              {mergeStrategy === "review" ? (
+                <>
+                  <div>
+                    <div className="list-section-header" style={{ padding: "0 2px 6px" }}>Current chart</div>
+                    <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
+                      <ChordChart chordpro={formDraft?.chordpro ?? ""} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="list-section-header" style={{ padding: "0 2px 6px" }}>Imported chart</div>
+                    <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
+                      <ChordChart chordpro={MOCK_CHORDPRO} />
+                    </div>
+                  </div>
+                  <div className="list-section-footer" style={{ padding: "0 2px" }}>Choose Replace or Append to continue.</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
+                    <ChordChart chordpro={mergedChordpro} />
+                  </div>
+                  <div className="list-section-footer" style={{ padding: "0 2px" }}>
+                    {mergeStrategy === "append"
+                      ? "The imported chart is added after your current one."
+                      : "Your current chart is replaced by the imported one."}
+                  </div>
+                </>
+              )}
+            </>
           ) : (
             <>
               <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
