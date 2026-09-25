@@ -31,6 +31,10 @@ the tension rather than silently picking one.
 - **Preserve existing comments when they're still correct.**
 - **Never add Claude as a commit co-author.** No `Co-Authored-By: Claude ...` or any
   Claude/Anthropic trailer in commit messages. This overrides default attribution behavior.
+- **Never commit as Claude.** Author and committer are always
+  `Israel Valle <israelvalle48@gmail.com>`, never `Claude <noreply@anthropic.com>`. Check
+  `git config user.name`/`user.email` first; if the environment is set to Claude, commit with
+  `git -c user.name="Israel Valle" -c user.email="israelvalle48@gmail.com" commit ...`.
 - **Never mention Claude, Anthropic, or AI authorship in code comments.**
 - **Never reference Claude, Anthropic, or AI authorship in PR descriptions** (no
   "Generated with Claude Code" footer, session links, or model names).
