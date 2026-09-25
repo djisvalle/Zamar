@@ -66,5 +66,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Zamar listens to the note you play so the Tuner can show whether it's in tune. Audio is analysed on this device and never recorded or uploaded.</string>
 </dict>
 </plist>
