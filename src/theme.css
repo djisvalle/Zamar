@@ -511,15 +511,6 @@ button {
   padding: 0 4px;
   border-radius: 999px;
 }
-/* iPad keeps the capsule compact and centered rather than stretched across
-   the whole width. */
-[data-viewport="ipadAir11"] .tab-bar,
-[data-viewport="ipadAir13"] .tab-bar {
-  left: 50%;
-  right: auto;
-  width: 520px;
-  margin-left: -260px;
-}
 .tab-bar-item {
   flex: 1;
   min-width: 0;
@@ -545,6 +536,40 @@ button {
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
+}
+
+/* iPad (iPadOS 18+): a compact, text-only capsule centered at the top, in
+   a strip every non-modal screen reserves (`.tabs-top`, set by App.tsx). */
+.device.tabs-top {
+  --tab-top: calc(var(--status-h) + 6px);
+  --tab-top-clear: 56px;
+}
+.device--native.tabs-top {
+  --tab-top: calc(env(safe-area-inset-top, 0px) + 6px);
+}
+.device.tabs-top .screen {
+  padding-top: var(--tab-top-clear);
+}
+.device.tabs-top .tab-bar {
+  top: var(--tab-top);
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  height: 44px;
+  padding: 0 4px;
+}
+.device.tabs-top .tab-bar-item {
+  flex: none;
+  height: 36px;
+  padding: 0 16px;
+}
+.device.tabs-top .tab-bar-label {
+  font-size: 15px;
+  font-weight: 500;
+}
+.device.tabs-top .tab-bar-item.active .tab-bar-label {
+  font-weight: 600;
 }
 
 /* ---- grouped inset lists ----
