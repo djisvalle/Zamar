@@ -81,7 +81,7 @@ const SECTION_LABEL_RE =
 /** A "chords over lyrics" chord line: every whitespace-separated token
  * looks like a chord symbol (e.g. "G       D       Em"), as opposed to a
  * bracketed ChordPro line or a plain lyric line. */
-function isChordLine(line: string): boolean {
+export function isChordLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
   return trimmed.split(/\s+/).every((tok) => CHORD_TOKEN_RE.test(tok));

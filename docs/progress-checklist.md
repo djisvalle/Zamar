@@ -105,7 +105,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       imported PDF or photo of sheet music into real `.mxl`/MusicXML (so it could then get
       genuine transposition/re-engraving via `MxlScore.tsx`, instead of staying a static
       image/PDF attachment). Note this is a different problem from `import/`'s existing
-      "Chords & lyrics" conversion path, which is already a simulated/canned conversion for
+      "Chords & lyrics" conversion path, which reads text (pdf.js text layer or OCR) from
       text charts — OMR would mean actually recognizing musical notation from a raster/PDF
       source, which is a much harder, open-ended problem (accuracy on real-world scans,
       licensing/bundling an OMR engine or model, on-device feasibility offline). **Action:**
@@ -165,10 +165,24 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Real file picker (PDF, photo, MusicXML) with genuine `FileReader` upload
 - [x] "Sheet music" declaration path is fully real end-to-end (file stored and rendered later
       on Live Stage, no simulation involved)
+- [x] "Chords & lyrics" conversion is real (`utils/chartImport.ts`): pdf.js reads a PDF's text
+      layer; photos and scanned PDFs go through bundled, offline Tesseract OCR, with chord rows
+      re-read using a chord-only character set. Header fills title/artist/key/tempo/time.
+      No-text files get a real error with "keep it as a PDF/photo". Sheet-vs-chords is still
+      declared by the user, not detected.
 
 ### Tuner
 - [x] Instrument presets (Chromatic/Guitar/Bass/Ukulele/Violin/Viola/Cello) with real standard
       tuning reference frequencies; readout computed relative to selected preset
+- [x] Real mic input (`getUserMedia`) with McLeod pitch detection (`utils/pitch.ts`,
+      `screens/tuner/useMicPitch.ts`); Auto string follow or tap-to-lock; denied/unavailable mic
+      states. Not yet tried on a real iOS or Android device.
+
+### Export
+- [x] Real files (`utils/exportSet.ts`): PDF via pdf-lib (charts, copied PDF attachments,
+      photos, OSMD-engraved scores in the set key), multi-song ChordPro, MusicXML scores as-is
+      (zipped when several). Shared through the OS share sheet (`utils/shareFile.ts`,
+      Capacitor Share + Filesystem) or downloaded in the browser. Annotations aren't exported.
 
 ### Settings & visual polish
 - [x] Appearance sub-screen (Light/Stage Dark/Auto), type-`ERASE`-to-confirm reset
@@ -183,10 +197,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ## Working as designed (intentionally simulated, not bugs)
 
-- [ ] Tuner readings are toggled by a "Simulate" button — no real mic/pitch detection
-- [ ] Import's "Chords & lyrics" conversion is a timer-driven fake — always produces the same
-      canned ChordPro sample regardless of actual file content
-- [ ] Export's PDF generation is a timer-driven progress simulation — no real PDF output
+- [x] ~~Tuner readings are simulated~~ — real since the tuner/import/export change
+- [x] ~~Import's "Chords & lyrics" conversion is a canned sample~~ — real, see Import above
+- [x] ~~Export's PDF generation is simulated~~ — real, see Export above
 
 ## To-do — confirmed still open (verified against current working tree)
 

@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useNavigator } from "../../navigation/Navigator";
+import { Capacitor } from "@capacitor/core";
 import { useStore } from "../../state/store";
 import { Header } from "../../components/Header";
 import { MicPermissionSheet } from "./MicPermissionSheet";
 import { LargeTitle, Section } from "../../components/List";
 import { Segmented } from "../../components/Toggle";
+import { centsBetween, nearestNote } from "../../utils/pitch";
+import { useMicPitch } from "./useMicPitch";
 
-type Reading = "flat" | "in-tune";
 type InstrumentId = "chromatic" | "guitar" | "bass" | "ukulele" | "violin" | "viola" | "cello";
 
 interface StringPreset {
@@ -86,63 +87,122 @@ const INSTRUMENTS: InstrumentPreset[] = [
   },
 ];
 
-const FLAT_CENTS = -18;
+/** Within this many cents of the target counts as in tune — about what a
+ * good clip-on tuner treats as "green". */
+const IN_TUNE_CENTS = 5;
 
 export function Tuner() {
-  const nav = useNavigator();
   const { state } = useStore();
   const [micOn, setMicOn] = useState(true);
-  const [reading, setReading] = useState<Reading>("flat");
   const [permissionResolved, setPermissionResolved] = useState(state.settings.micPermissionAsked);
   const [instrumentId, setInstrumentId] = useState<InstrumentId>("chromatic");
-  const [stringIndex, setStringIndex] = useState(0);
+  /** A string the person tapped to tune against, or null to follow whichever
+   * string is nearest the note being played. */
+  const [lockedString, setLockedString] = useState<number | null>(null);
+  const mic = useMicPitch(permissionResolved && micOn);
 
   if (!permissionResolved) {
     return (
       <div className="screen">
         <Header title="Tuner" />
         <div style={{ flex: 1 }} />
-        <MicPermissionSheet onDone={() => setPermissionResolved(true)} />
+        <MicPermissionSheet
+          onDone={(allowed) => {
+            setMicOn(allowed);
+            setPermissionResolved(true);
+          }}
+        />
       </div>
     );
   }
 
-  if (!micOn) {
+  if (!micOn || mic.status === "denied" || mic.status === "unavailable") {
+    const denied = mic.status === "denied";
+    const platform = Capacitor.getPlatform();
     return (
       <div className="screen">
         <Header title="Tuner" />
         <div className="empty">
-          <div className="empty-title">Microphone is off</div>
-          <div className="empty-body">Zamar needs the mic to hear a note. Nothing is recorded or sent anywhere.</div>
-          <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={() => setMicOn(true)}>
-            Open settings
-          </button>
-          <div className="muted" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.5 }}>
-            Silence for 4 s shows this same board reading "Listening for a note…".
+          <div className="empty-title">{mic.status === "unavailable" ? "No microphone found" : "Microphone is off"}</div>
+          <div className="empty-body">
+            {denied
+              ? platform === "android"
+                ? "Allow microphone access for Zamar in Settings › Apps › Zamar › Permissions, then try again."
+                : platform === "ios"
+                ? "Allow microphone access in Settings › Zamar › Microphone, then try again."
+                : "Allow microphone access for this page in your browser, then try again."
+              : mic.status === "unavailable"
+              ? "Zamar couldn't open a microphone on this device."
+              : "Zamar needs the mic to hear a note. Nothing is recorded or sent anywhere."}
           </div>
+          <button
+            className="btn btn-primary"
+            style={{ marginTop: 4 }}
+            onClick={() => {
+              setMicOn(true);
+              mic.retry();
+            }}
+          >
+            {micOn ? "Try again" : "Turn on microphone"}
+          </button>
         </div>
       </div>
     );
   }
 
   const instrument = INSTRUMENTS.find((i) => i.id === instrumentId)!;
-  const current: StringPreset = instrument.strings ? instrument.strings[stringIndex] : { name: "A4", freq: 440.0 };
-  const noteLetter = current.name.replace(/\d+$/, "");
+  const heard = mic.freq;
 
-  const inTune = reading === "in-tune";
-  const needlePct = inTune ? 50 : 31;
-  const displayFreq = inTune ? current.freq : current.freq * Math.pow(2, FLAT_CENTS / 1200);
+  // What the needle measures against: the nearest chromatic note, or on an
+  // instrument preset the locked string / the string nearest to what's heard.
+  let targetName = "–";
+  let targetFreq: number | null = null;
+  let activeString: number | null = lockedString;
+  if (heard) {
+    if (instrument.strings) {
+      if (activeString === null) {
+        let best = 0;
+        instrument.strings.forEach((st, idx) => {
+          if (Math.abs(centsBetween(heard, st.freq)) < Math.abs(centsBetween(heard, instrument.strings![best].freq))) best = idx;
+        });
+        activeString = best;
+      }
+      const st = instrument.strings[activeString];
+      targetName = st.name.replace(/\d+$/, "");
+      targetFreq = st.freq;
+    } else {
+      const n = nearestNote(heard);
+      targetName = n.name;
+      targetFreq = n.freq;
+    }
+  } else if (instrument.strings && lockedString !== null) {
+    targetName = instrument.strings[lockedString].name.replace(/\d+$/, "");
+  }
+
+  const cents = heard && targetFreq ? centsBetween(heard, targetFreq) : null;
+  const inTune = cents !== null && Math.abs(cents) <= IN_TUNE_CENTS;
+  const needlePct = cents === null ? 50 : 50 + Math.max(-50, Math.min(50, cents));
+  const verdict =
+    cents === null
+      ? mic.status === "listening"
+        ? "Listening for a note…"
+        : "Starting microphone…"
+      : inTune
+      ? "In tune"
+      : cents < 0
+      ? instrument.strings
+        ? "Flat — tighten"
+        : "Flat"
+      : instrument.strings
+      ? "Sharp — loosen"
+      : "Sharp";
 
   const selectInstrument = (id: InstrumentId) => {
     setInstrumentId(id);
-    setStringIndex(0);
-    setReading("flat");
+    setLockedString(null);
   };
 
-  const selectString = (idx: number) => {
-    setStringIndex(idx);
-    setReading("flat");
-  };
+  const referenceString = instrument.strings ? instrument.strings[activeString ?? 0] : null;
 
   return (
     <div className="screen screen--grouped">
@@ -160,9 +220,9 @@ export function Tuner() {
         {instrument.strings && (
           <div style={{ marginTop: 12 }}>
             <Segmented
-              options={instrument.strings.map((st, idx) => ({ value: String(idx), label: st.name }))}
-              value={String(stringIndex)}
-              onChange={(v) => selectString(Number(v))}
+              options={[{ value: "auto", label: "Auto" }, ...instrument.strings.map((st, idx) => ({ value: String(idx), label: st.name }))]}
+              value={lockedString === null ? "auto" : String(lockedString)}
+              onChange={(v) => setLockedString(v === "auto" ? null : Number(v))}
             />
           </div>
         )}
@@ -188,14 +248,14 @@ export function Tuner() {
               fontWeight: 700,
               fontSize: 96,
               lineHeight: 1,
-              color: inTune ? "var(--switch-on)" : "var(--fg)",
+              color: inTune ? "var(--switch-on)" : heard ? "var(--fg)" : "var(--tertiary)",
               transition: "color 0.3s ease",
             }}
           >
-            {noteLetter}
+            {targetName}
           </div>
           <div className="row-sub" style={{ fontVariantNumeric: "tabular-nums" }}>
-            {inTune ? `${displayFreq.toFixed(1)} Hz · 0 cents` : `${displayFreq.toFixed(1)} Hz · ${FLAT_CENTS} cents`}
+            {heard && cents !== null ? `${heard.toFixed(1)} Hz · ${cents > 0 ? "+" : ""}${Math.round(cents)} cents` : "\u00a0"}
           </div>
           <div style={{ width: "100%", height: 56, position: "relative", marginTop: 6 }} aria-hidden>
             {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((p) => (
@@ -222,24 +282,21 @@ export function Tuner() {
                 height: 56,
                 marginLeft: -3,
                 borderRadius: 3,
-                background: inTune ? "var(--switch-on)" : "var(--acc)",
+                background: inTune ? "var(--switch-on)" : heard ? "var(--acc)" : "var(--tertiary)",
                 boxShadow: "0 1px 4px rgba(0, 0, 0, 0.2)",
-                transition: "left 0.4s ease, background 0.3s ease",
+                transition: "left 0.12s linear, background 0.3s ease",
               }}
             />
           </div>
-          <div style={{ fontWeight: 600, fontSize: 17, color: inTune ? "var(--switch-on)" : "var(--acc-deep)" }}>
-            {inTune ? "In tune" : "Flat — tighten"}
+          <div style={{ fontWeight: 600, fontSize: 17, color: inTune ? "var(--switch-on)" : heard ? "var(--acc-deep)" : "var(--mut)" }}>
+            {verdict}
           </div>
-          <button className="btn btn-tinted btn-sm" onClick={() => setReading(inTune ? "flat" : "in-tune")}>
-            Simulate: tap to {inTune ? "go flat" : "tune up"}
-          </button>
         </div>
 
         <Section>
           <div className="sheet-row">
             <span>
-              {current.name} = {current.freq.toFixed(2)} Hz
+              {referenceString ? `${referenceString.name} = ${referenceString.freq.toFixed(2)} Hz` : "A4 = 440.00 Hz"}
             </span>
             <span className="row-detail">{instrument.label}</span>
           </div>
