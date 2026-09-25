@@ -255,6 +255,16 @@ export function Library() {
           >
             <span>Duplicate song</span>
           </button>
+          <button
+            className="sheet-row"
+            onClick={() => {
+              const id = sheetFor.id;
+              setSheetFor(null);
+              nav.push("export", { songId: id });
+            }}
+          >
+            <span>Export…</span>
+          </button>
           </div>
           <div className="sheet-group">
           <button

@@ -101,7 +101,7 @@ the tension rather than silently picking one.
 | `import/` | Library import FAB / empty state / Add/Edit Song "Import" | real file picker (PDF, photo, MusicXML) in three modes: new song, attach to existing song (PDF/photo only), and in-form (returns to the draft) |
 | `tuner/` | tab | one-time mic-permission pre-prompt, live mic pitch detection (`utils/pitch.ts`), instrument presets with Auto string follow |
 | `settings/` | tab | stave spacing, Appearance sub-screen (Light/Stage Dark/Auto, text size), type-`ERASE` reset |
-| `export/` | a setlist's ⋯ menu | format tabs, options, per-song "In this export" list, real PDF/ChordPro/MusicXML files (`utils/exportSet.ts`) handed to the OS share sheet (`utils/shareFile.ts`) |
+| `export/` | a setlist's ⋯ menu / Library row sheet (one song) | format tabs, options, per-song "In this export" list, real PDF/ChordPro/MusicXML files (`utils/exportSet.ts`) handed to the OS share sheet (`utils/shareFile.ts`) |
 
 Shared primitives are in `src/components/`.
 

@@ -183,6 +183,8 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       photos, OSMD-engraved scores in the set key, optional note names on noteheads), multi-song ChordPro, MusicXML scores as-is
       (zipped when several). Shared through the OS share sheet (`utils/shareFile.ts`,
       Capacitor Share + Filesystem) or downloaded in the browser. Annotations aren't exported.
+- [x] Single-song export from the Library row sheet ("Export…"): the same screen and
+      formats, in the song's library key.
 
 ### Settings & visual polish
 - [x] Appearance sub-screen (Light/Stage Dark/Auto), type-`ERASE`-to-confirm reset

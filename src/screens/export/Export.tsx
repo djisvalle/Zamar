@@ -8,6 +8,7 @@ import { Sheet } from "../../components/Overlays";
 import { Section } from "../../components/List";
 import { Icon } from "../../components/Icon";
 import { setlistSongCount } from "../../utils/setlistCalc";
+import type { Setlist } from "../../state/types";
 import { ATTACHMENT_LABEL } from "../../utils/attachments";
 import {
   buildChordPro,
@@ -42,10 +43,29 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function Export({ setlistId }: { setlistId: string }) {
+/** A one-song export (from a Library row) runs through the same pipeline as
+ * a set, as a one-slot setlist named after the song. */
+function singleSongSet(songId: string, title: string): Setlist {
+  return {
+    id: `song-${songId}`,
+    name: title,
+    date: "",
+    time: "",
+    description: "",
+    status: "upcoming",
+    sections: [{ id: "s", label: "", items: [{ id: "i", kind: "song", songId }] }],
+  };
+}
+
+export function Export({ setlistId, songId }: { setlistId?: string; songId?: string }) {
   const { state } = useStore();
   const nav = useNavigator();
-  const setlist = state.setlists.find((sl) => sl.id === setlistId);
+  const song = songId ? state.songs.find((s) => s.id === songId) : undefined;
+  const setlist = useMemo(
+    () => (song ? singleSongSet(song.id, song.title) : state.setlists.find((sl) => sl.id === setlistId)),
+    [song, state.setlists, setlistId]
+  );
+  const title = song ? "Export song" : "Export set";
   const [format, setFormat] = useState<ExportFormat>("pdf");
   const [includeChords, setIncludeChords] = useState(true);
   const [perSlotKeys, setPerSlotKeys] = useState(true);
@@ -73,9 +93,9 @@ export function Export({ setlistId }: { setlistId: string }) {
   if (!setlist) {
     return (
       <div className="screen">
-        <Header title="Export set" onBack={nav.pop} />
+        <Header title={title} onBack={nav.pop} />
         <div className="empty">
-          <div className="empty-title">Setlist not found</div>
+          <div className="empty-title">{songId ? "Song not found" : "Setlist not found"}</div>
         </div>
       </div>
     );
@@ -123,7 +143,7 @@ export function Export({ setlistId }: { setlistId: string }) {
   if (phase === "progress") {
     return (
       <div className="screen">
-        <Header title="Export set" onBack={nav.pop} />
+        <Header title={title} onBack={nav.pop} />
         <div className="empty">
           <div className="empty-title">{progress.label}…</div>
           <div style={{ width: "100%", height: 4, background: "var(--fill)", borderRadius: 99, overflow: "hidden" }}>
@@ -149,7 +169,7 @@ export function Export({ setlistId }: { setlistId: string }) {
   if (phase === "error") {
     return (
       <div className="screen screen--grouped">
-        <Header title="Export set" onBack={() => setPhase("options")} backLabel="Export set" />
+        <Header title={title} onBack={() => setPhase("options")} backLabel={title} />
         <div className="ios-list">
           <div className="error-banner" style={{ marginTop: 12 }}>
             <div className="error-banner-title">Couldn't create the {FORMAT_LABEL[format]}</div>
@@ -183,7 +203,7 @@ export function Export({ setlistId }: { setlistId: string }) {
     ].filter(Boolean);
     return (
       <div className="screen screen--grouped">
-        <Header title="Export set" onBack={() => setPhase("options")} backLabel="Export set" />
+        <Header title={title} onBack={() => setPhase("options")} backLabel={title} />
         <div style={{ flex: 1 }} />
         <Sheet onClose={() => setPhase("options")}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -245,10 +265,10 @@ export function Export({ setlistId }: { setlistId: string }) {
   const canExport = included.length > 0;
   return (
     <div className="screen screen--grouped">
-      <Header title="Export set" onBack={nav.pop} />
+      <Header title={title} onBack={nav.pop} />
       <div className="ios-list scroll-under-tabs">
         <div className="row-sub" style={{ padding: "0 16px" }}>
-          {setlist.name} · {setlistSongCount(setlist)} songs
+          {song ? [song.artist, song.defaultKey].filter((v) => v && v !== "—").join(" · ") : `${setlist.name} · ${setlistSongCount(setlist)} songs`}
         </div>
         <div style={{ marginTop: 12 }}>
           <Segmented<ExportFormat>
@@ -261,14 +281,16 @@ export function Export({ setlistId }: { setlistId: string }) {
           footer={
             format === "musicxml"
               ? "Scores are exported as they were imported. Set keys can't be applied inside a MusicXML file."
+              : song
+              ? "The song exports in its library key."
               : perSlotKeys
               ? "Slots export in each song's set key."
               : "Songs export in their library key."
           }
         >
           {format !== "musicxml" && <ExportToggle label="Include chords" on={includeChords} onChange={() => setIncludeChords((v) => !v)} />}
-          {format !== "musicxml" && <ExportToggle label="Apply per-slot keys" on={perSlotKeys} onChange={() => setPerSlotKeys((v) => !v)} />}
-          {format === "pdf" && <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />}
+          {format !== "musicxml" && !song && <ExportToggle label="Apply per-slot keys" on={perSlotKeys} onChange={() => setPerSlotKeys((v) => !v)} />}
+          {format === "pdf" && !song && <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />}
           {format === "pdf" && hasScores && (
             <ExportToggle label="Note names on noteheads" on={noteNames} onChange={() => setNoteNames((v) => !v)} />
           )}

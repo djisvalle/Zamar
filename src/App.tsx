@@ -55,7 +55,7 @@ function ScreenHost() {
     case "appearance":
       return <Appearance />;
     case "export":
-      return <Export setlistId={nav.top.params?.setlistId as string} />;
+      return <Export setlistId={nav.top.params?.setlistId as string | undefined} songId={nav.top.params?.songId as string | undefined} />;
     default:
       return null;
   }
