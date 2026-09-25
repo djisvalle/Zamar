@@ -56,7 +56,10 @@ screen offers Try again, keeping the file as a PDF or photo, or choosing another
   replaced by `?`. Chords are drawn in the accent blue over lyric columns measured in the
   lyric font, and long lines wrap at words, carrying their chords with them. "One song per
   page" is optional. PDF attachments are copied in page by page, photos get a page each,
-  and scores are engraved by OSMD in the slot's key (paged, rasterized at 2400 px). The
+  and scores are engraved by OSMD in the slot's key (paged, rasterized at 2400 px).
+  "Note names on noteheads" (PDF only, shown when the set has scores) draws each note's
+  transposed name over its notehead in a slightly larger disc: filled for quarter notes and
+  shorter, open for half and whole notes. The
   footer shows the set name and page number. Paper is Letter in US/CA/MX/PH and a few other
   Letter locales, and A4 elsewhere.
 - **ChordPro:** metadata directives first, then the chart re-serialized to bracket

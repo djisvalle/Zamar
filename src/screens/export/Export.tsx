@@ -50,6 +50,7 @@ export function Export({ setlistId }: { setlistId: string }) {
   const [includeChords, setIncludeChords] = useState(true);
   const [perSlotKeys, setPerSlotKeys] = useState(true);
   const [onePerPage, setOnePerPage] = useState(false);
+  const [noteNames, setNoteNames] = useState(false);
   const [phase, setPhase] = useState<Phase>("options");
   const [progress, setProgress] = useState<{ label: string; fraction: number }>({ label: "", fraction: 0 });
   const [result, setResult] = useState<ExportedFile | null>(null);
@@ -59,14 +60,15 @@ export function Export({ setlistId }: { setlistId: string }) {
 
   useEffect(() => () => { run.current++; }, []);
 
-  const opts = { includeChords, perSlotKeys, onePerPage };
+  const opts = { includeChords, perSlotKeys, onePerPage, noteNames };
   const plan = useMemo(
     () => (setlist ? planExport(setlist, state.songs, format, opts) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage]
+    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage, noteNames]
   );
   const included = plan.filter((p) => p.view);
   const skipped = plan.length - included.length;
+  const hasScores = included.some((p) => p.view === "musicxml");
 
   if (!setlist) {
     return (
@@ -267,6 +269,9 @@ export function Export({ setlistId }: { setlistId: string }) {
           {format !== "musicxml" && <ExportToggle label="Include chords" on={includeChords} onChange={() => setIncludeChords((v) => !v)} />}
           {format !== "musicxml" && <ExportToggle label="Apply per-slot keys" on={perSlotKeys} onChange={() => setPerSlotKeys((v) => !v)} />}
           {format === "pdf" && <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />}
+          {format === "pdf" && hasScores && (
+            <ExportToggle label="Note names on noteheads" on={noteNames} onChange={() => setNoteNames((v) => !v)} />
+          )}
         </Section>
         <Section header="In this export" footer={skipped ? SKIP_REASON[format] : undefined}>
           {plan.length === 0 ? (

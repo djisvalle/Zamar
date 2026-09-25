@@ -14,6 +14,9 @@ export interface ExportOptions {
   includeChords: boolean;
   perSlotKeys: boolean;
   onePerPage: boolean;
+  /** PDF only: print each note's letter name inside its notehead on
+   * engraved MusicXML scores. */
+  noteNames: boolean;
 }
 
 /** One song slot of the set and what it will export as. `view` is null when
@@ -328,8 +331,91 @@ async function drawImagePages(ctx: PdfCtx, p: PlannedSong, jpegs: Uint8Array[]) 
 
 /** Engraves a MusicXML score with OSMD in the slot's key, one SVG per
  * printed page, and rasterizes each page for embedding. */
-async function renderScorePages(dataUrl: string, semitones: number, pageFormat: string): Promise<Uint8Array[]> {
-  const { OpenSheetMusicDisplay, TransposeCalculator } = await import("opensheetmusicdisplay");
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** The spelled name of a pitch: letter plus accidental ("F#", "Bb"). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pitchName(Pitch: any, pitch: any): string {
+  const letter: string = Pitch.getNoteEnumString(pitch.FundamentalNote);
+  const shift: number = Pitch.HalfTonesFromAccidental(pitch.Accidental);
+  return letter + (shift >= 2 ? "x" : shift >= 1 ? "#" : shift <= -2 ? "bb" : shift <= -1 ? "b" : "");
+}
+
+/** Writes each note's name on its notehead, as SVG drawn over the engraved
+ * score: a white letter in a black disc for filled noteheads, a black
+ * letter in an open disc for half and whole notes. Names follow the
+ * transposed pitch, so they match the set key. OSMD has no built-in for
+ * this; it reads the graphical notes and finds their notehead paths in the
+ * rendered SVG. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawNoteNames(osmd: any, Pitch: any) {
+  for (const row of osmd.GraphicSheet.MeasureList) {
+    for (const measure of row) {
+      if (!measure) continue;
+      for (const entry of measure.staffEntries) {
+        for (const gve of entry.graphicalVoiceEntries) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const notes = gve.notes.filter((n: any) => !n.sourceNote.isRest() && (n.sourceNote.TransposedPitch ?? n.sourceNote.Pitch));
+          if (!notes.length) continue;
+          // One VexFlow note carries every notehead of a chord, so heads
+          // and notes are paired up by pitch order: lowest note, lowest head.
+          const heads: SVGGraphicsElement[] = notes[0].getNoteheadSVGs?.() ?? [];
+          if (heads.length !== notes.length) continue;
+          const svg = heads[0].ownerSVGElement;
+          const ctm = svg?.getScreenCTM()?.inverse();
+          if (!svg || !ctm) continue;
+          const boxes = heads
+            .map((h) => {
+              const r = h.getBoundingClientRect();
+              const a = new DOMPoint(r.left, r.top).matrixTransform(ctm);
+              const b = new DOMPoint(r.right, r.bottom).matrixTransform(ctm);
+              return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+            })
+            .sort((p, q) => q.y - p.y);
+          const byPitch = [...notes].sort(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (m: any, n: any) => (m.sourceNote.TransposedPitch ?? m.sourceNote.Pitch).getHalfTone() - (n.sourceNote.TransposedPitch ?? n.sourceNote.Pitch).getHalfTone()
+          );
+          byPitch.forEach((gNote, i) => {
+            const box = boxes[i];
+            if (!box || box.h <= 0) return;
+            const note = gNote.sourceNote;
+            const name = pitchName(Pitch, note.TransposedPitch ?? note.Pitch);
+            const hollow = note.Length.RealValue >= 0.5;
+            const cx = box.x + box.w / 2;
+            const cy = box.y + box.h / 2;
+            // A printed notehead is only ~2 mm tall, too small for a legible
+            // letter, so the name sits in a slightly larger disc drawn over
+            // it: filled for quarter notes and shorter, open for half and
+            // whole notes, so the duration still reads.
+            const disc = document.createElementNS(SVG_NS, "circle");
+            disc.setAttribute("cx", String(cx));
+            disc.setAttribute("cy", String(cy));
+            disc.setAttribute("r", String(box.h * 0.78));
+            disc.setAttribute("fill", hollow ? "#fff" : "#000");
+            disc.setAttribute("stroke", "#000");
+            disc.setAttribute("stroke-width", String(box.h * 0.12));
+            svg.appendChild(disc);
+            const text = document.createElementNS(SVG_NS, "text");
+            text.setAttribute("x", String(cx));
+            text.setAttribute("y", String(cy));
+            text.setAttribute("text-anchor", "middle");
+            text.setAttribute("dominant-baseline", "central");
+            text.setAttribute("font-family", "Helvetica, Arial, sans-serif");
+            text.setAttribute("font-weight", "700");
+            text.setAttribute("font-size", String(box.h * (name.length > 1 ? 0.88 : 1.1)));
+            text.setAttribute("fill", hollow ? "#000" : "#fff");
+            text.textContent = name;
+            svg.appendChild(text);
+          });
+        }
+      }
+    }
+  }
+}
+
+async function renderScorePages(dataUrl: string, semitones: number, pageFormat: string, noteNames: boolean): Promise<Uint8Array[]> {
+  const { OpenSheetMusicDisplay, TransposeCalculator, Pitch } = await import("opensheetmusicdisplay");
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;background:#fff";
   document.body.appendChild(host);
@@ -347,7 +433,11 @@ async function renderScorePages(dataUrl: string, semitones: number, pageFormat: 
     osmd.TransposeCalculator = new TransposeCalculator();
     await osmd.load(await (await fetch(dataUrl)).blob());
     osmd.Sheet.Transpose = semitones;
+    // A new Transpose only reaches the notes through updateGraphic(); a bare
+    // render() re-keys the key signature but leaves every note where it was.
+    osmd.updateGraphic();
     osmd.render();
+    if (noteNames) drawNoteNames(osmd, Pitch);
     const out: Uint8Array[] = [];
     for (const svg of Array.from(host.querySelectorAll("svg"))) {
       const w = svg.width.baseVal.value || svg.getBoundingClientRect().width;
@@ -417,7 +507,7 @@ export async function buildPdf(setlist: Setlist, plan: PlannedSong[], opts: Expo
     } else if (p.view === "image") {
       await drawImagePages(ctx, p, [await imageToJpeg(selectedVersion(p.song.attachments.image!).dataUrl)]);
     } else if (p.view === "musicxml") {
-      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, letter ? "Letter_P" : "A4_P");
+      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, letter ? "Letter_P" : "A4_P", opts.noteNames);
       await drawImagePages(ctx, p, pages);
     }
   }
