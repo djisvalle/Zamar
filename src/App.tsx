@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar as CapacitorStatusBar, Style } from "@capacitor/status-bar";
 import { useStore } from "./state/store";
@@ -17,6 +17,7 @@ import { Tuner } from "./screens/tuner/Tuner";
 import { Settings } from "./screens/settings/Settings";
 import { Appearance } from "./screens/settings/Appearance";
 import { Export } from "./screens/export/Export";
+import { Dialog } from "./components/Overlays";
 
 const VIEWPORT_VARS = {
   phone: { fw: "402px", fh: "874px", statusH: "48px" },
@@ -60,6 +61,34 @@ function ScreenHost() {
   }
 }
 
+/** Tells the person when their edits aren't being saved: once when the boot read failed (the
+ * app is running in memory only), and again whenever a save attempt fails. Without this the
+ * only trace is a console warning and a whole session of edits can vanish on relaunch. */
+function StorageAlert() {
+  const { storageProblem } = useStore();
+  const nav = useNavigator();
+  const [dismissed, setDismissed] = useState<typeof storageProblem>(null);
+  useEffect(() => {
+    if (storageProblem === null) setDismissed(null);
+  }, [storageProblem]);
+  if (!nav.booted || storageProblem === null || dismissed === storageProblem) return null;
+  return (
+    <Dialog>
+      <div className="dialog-title">{storageProblem === "load" ? "Storage Unavailable" : "Couldn't Save Changes"}</div>
+      <div className="dialog-body">
+        {storageProblem === "load"
+          ? "Zamar couldn't open its library on this device. You can keep using the app, but changes you make now won't be saved. Close and reopen Zamar to try again."
+          : "Your latest changes couldn't be written to this device. Zamar will keep trying as you edit, but anything unsaved will be lost if you close the app."}
+      </div>
+      <div className="btn-row">
+        <button className="btn" onClick={() => setDismissed(storageProblem)}>
+          OK
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
 export default function App() {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
@@ -81,6 +110,7 @@ export default function App() {
       >
         {nav.booted ? <ScreenHost /> : <Splash />}
         <TabBar />
+        <StorageAlert />
       </div>
     );
   }
@@ -148,6 +178,7 @@ export default function App() {
           <StatusBar />
           {nav.booted ? <ScreenHost /> : <Splash />}
           <TabBar />
+          <StorageAlert />
           <DeviceNotch viewport={state.viewport} />
         </div>
       </div>

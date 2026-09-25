@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useReducer, useRef, type Dispatch, type ReactNode, createElement } from "react";
+import { createContext, useContext, useEffect, useReducer, useRef, useState, type Dispatch, type ReactNode, createElement } from "react";
 import type { Setlist, SetlistItem, Settings, Song, StageState, StaveSpacing, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
 import * as songsRepo from "../data/songsRepo";
@@ -331,9 +331,14 @@ export function reducer(state: AppState, action: Action): AppState {
   }
 }
 
+/** Why changes aren't reaching disk, if they aren't: `load` when the boot read failed and
+ * persistence was switched off for the session, `write` when a save attempt threw. */
+export type StorageProblem = "load" | "write" | null;
+
 interface StoreContextValue {
   state: AppState;
   dispatch: Dispatch<Action>;
+  storageProblem: StorageProblem;
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -352,6 +357,7 @@ export function StoreProvider({
   persistEnabled?: boolean;
 }) {
   const [state, dispatch] = useReducer(reducer, initial);
+  const [storageProblem, setStorageProblem] = useState<StorageProblem>(persistEnabled ? null : "load");
 
   const firstRun = useRef(true);
   const persistGen = useRef(0);
@@ -394,19 +400,23 @@ export function StoreProvider({
           ]);
         } catch (err) {
           console.warn("Zamar: failed to persist songs/setlists/settings", err);
+          if (persistGen.current === mine) setStorageProblem("write");
+          return;
         }
         if (persistGen.current !== mine) return;
         try {
           await persist();
+          setStorageProblem((p) => (p === "write" ? null : p));
         } catch (err) {
           console.warn("Zamar: failed to flush persisted state to web store", err);
+          if (persistGen.current === mine) setStorageProblem("write");
         }
       })();
     }, 250);
     return () => clearTimeout(t);
   }, [state.songs, state.setlists, state.settings, persistEnabled]);
 
-  return createElement(StoreContext.Provider, { value: { state, dispatch } }, children);
+  return createElement(StoreContext.Provider, { value: { state, dispatch, storageProblem } }, children);
 }
 
 export function useStore(): StoreContextValue {

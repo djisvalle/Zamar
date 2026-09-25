@@ -9,7 +9,7 @@ import { MxlScore } from "../../components/MxlScore";
 import { Icon } from "../../components/Icon";
 import { Section } from "../../components/List";
 import { PullDown } from "../../components/PullDown";
-import { extractBracketChords, extractChordLineChords } from "../../utils/chordpro";
+import { extractBracketChords, extractChordLineChords, findChordProIssues } from "../../utils/chordpro";
 import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, removeVersion, renameVersion, selectVersion, selectedVersion } from "../../utils/attachments";
 import type { ImportMethod } from "../import/ImportSong";
 import type { AttachmentKind, Attachments, ChartFormat, Song, SongSource } from "../../state/types";
@@ -76,6 +76,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
     const m = chordpro.match(KEY_DIRECTIVE_RE);
     return m ? m[1].trim() : null;
   }, [chordpro]);
+
+  const chordProIssues = useMemo(() => findChordProIssues(chordpro), [chordpro]);
 
   const effectiveKey = detectedKey ?? manualKey;
   const keyValid = !effectiveKey || KEY_RE.test(effectiveKey);
@@ -284,6 +286,17 @@ export function AddEditSong({ songId }: { songId?: string }) {
               </button>
             ))}
           </div>
+          {chordProIssues.length > 0 && (
+            <div className="error-banner" role="status" style={{ flex: "none" }}>
+              <div className="error-banner-title">
+                {chordProIssues.length === 1 ? "1 possible chart problem" : `${chordProIssues.length} possible chart problems`}
+              </div>
+              <div>
+                Line {chordProIssues[0].line}: {chordProIssues[0].message}
+                {chordProIssues.length > 1 && ` (and ${chordProIssues.length - 1} more)`}
+              </div>
+            </div>
+          )}
           <textarea
             ref={chartRef}
             className="form-textarea"
