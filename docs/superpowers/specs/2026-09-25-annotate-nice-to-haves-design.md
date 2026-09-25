@@ -37,11 +37,11 @@ Shapes popovers list colors. The Notation popover lists symbol and color pairs, 
 tap re-arms both. Using an item moves it to the front, and duplicates are collapsed.
 
 **Storage:** one global list per popover, shared by every song, kept in `settings` as a
-new `annotateRecents` JSON column (schema v5 migration, default `{}`). Global rather than
+new `annotateRecents` JSON column (schema v7 migration, default `{}`). Global rather than
 per-song because the point is repeating what you just did, and people stamp the same
 dynamics song after song.
 
-**Decided (2026-09-25):** recents persist across launches (schema v5).
+**Decided (2026-09-25):** recents persist across launches (schema v7).
 
 ## 2. Snap to lyric line
 
@@ -60,7 +60,7 @@ phone.
 
 **Toggle (decided 2026-09-25):** a "Snap to lyrics" switch, on by default, in the
 Text and Notation popovers (where marks are placed), saved in `settings` as
-`annotateSnap` (same schema v5 migration as recents). While off, marks place exactly where
+`annotateSnap` (same schema v7 migration as recents). While off, marks place exactly where
 the finger lifts, with no guide or haptic.
 
 ## 3. Multi-select
@@ -123,7 +123,7 @@ viewport in both themes, with touch emulation for the gesture items.
 
 ## Decisions (2026-09-25, Israel)
 
-1. Recents persist across launches (schema v5).
+1. Recents persist across launches (schema v7).
 2. Long-press starts multi-select; a repeated tap cycles overlapping marks.
 3. Snap to lyric line has an on/off switch, on by default.
 4. Add `@capacitor/haptics` for the snap tick.

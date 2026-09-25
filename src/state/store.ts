@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useReducer, useRef, useState, type Dispatch, type ReactNode, createElement } from "react";
-import type { Setlist, SetlistItem, Settings, Song, StageState, StaveSpacing, ThemeMode, Viewport } from "./types";
+import type { AnnotateRecents, Setlist, SetlistItem, Settings, Song, StageState, StaveSpacing, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
 import * as songsRepo from "../data/songsRepo";
 import * as setlistsRepo from "../data/setlistsRepo";
@@ -58,6 +58,10 @@ const DEFAULT_TEXT_SCALE = 100;
 export const MIN_TEXT_SCALE = 70;
 export const MAX_TEXT_SCALE = 160;
 
+export function emptyRecents(): AnnotateRecents {
+  return { pen: [], highlighter: [], text: [], shapes: [], notation: [] };
+}
+
 function clampTextScale(value: number): number {
   return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, value));
 }
@@ -72,6 +76,8 @@ export function initialState(): AppState {
       hasSeeded: false,
       micPermissionAsked: false,
       staveSpacing: "default",
+      annotateRecents: emptyRecents(),
+      annotateSnap: true,
     },
     stage: makeEmptyStage(),
     viewport: "ipadAir13",
@@ -87,6 +93,8 @@ export type Action =
   | { type: "SET_THEME"; theme: ThemeMode }
   | { type: "SET_VIEWPORT"; viewport: Viewport }
   | { type: "SET_TEXT_SCALE"; value: number }
+  | { type: "SET_ANNOTATE_RECENTS"; recents: AnnotateRecents }
+  | { type: "SET_ANNOTATE_SNAP"; value: boolean }
   | { type: "SET_MIC_ASKED" }
   | { type: "SET_STAVE_SPACING"; spacing: StaveSpacing }
   | { type: "TOGGLE_FAVOURITE"; songId: string }
@@ -130,6 +138,10 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, viewport: action.viewport };
     case "SET_TEXT_SCALE":
       return { ...state, settings: { ...state.settings, textScale: clampTextScale(action.value) } };
+    case "SET_ANNOTATE_RECENTS":
+      return { ...state, settings: { ...state.settings, annotateRecents: action.recents } };
+    case "SET_ANNOTATE_SNAP":
+      return { ...state, settings: { ...state.settings, annotateSnap: action.value } };
     case "SET_MIC_ASKED":
       return { ...state, settings: { ...state.settings, micPermissionAsked: true } };
     case "SET_STAVE_SPACING":

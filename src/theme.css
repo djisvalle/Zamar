@@ -1793,6 +1793,51 @@ button.sheet-row:active:not(:disabled) {
   color: var(--mut);
   line-height: 1.4;
 }
+/* Small caps-style section label inside a popover (e.g. "Recent"). */
+.popover-label {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--mut);
+  margin-bottom: 6px;
+}
+/* Annotate's Recent strip: one row, most recent first, scrolls sideways if
+   it outgrows the popover. */
+.recent-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  overflow-x: auto;
+  padding: 4px 4px 2px;
+  scrollbar-width: none;
+}
+.recent-row::-webkit-scrollbar {
+  display: none;
+}
+.recent-row .swatch {
+  flex: none;
+}
+.recent-row .recent-cell {
+  flex: none;
+  width: 46px;
+}
+.recent-empty {
+  font-size: 13px;
+  line-height: 30px;
+}
+/* A labeled switch row inside a popover (iOS list-row layout). */
+.popover-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 15px;
+}
+.popover-row small {
+  display: block;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--mut);
+}
 
 /* ---- pull-down menu (iOS context menu look) ---- */
 .ios-menu {
@@ -1995,4 +2040,52 @@ button.sheet-row:active:not(:disabled) {
 }
 .drag-row.drop-after::after {
   bottom: 0;
+}
+
+/* ---- Annotate Select tool: snap guide, box selection, edit menu ---- */
+/* Dashed tint line shown while a text/notation mark is snapped to a lyric line. */
+.snap-guide {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 0;
+  border-top: 1.5px dashed var(--acc);
+  pointer-events: none;
+}
+.select-box {
+  position: absolute;
+  border: 1px solid var(--acc);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--acc) 12%, transparent);
+  pointer-events: none;
+}
+/* iOS edit menu: a dark capsule of text buttons with hairline dividers, the
+   same in both themes (as on iOS). */
+.edit-menu {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(30, 30, 32, 0.94);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.edit-menu button {
+  border: none;
+  background: none;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  padding: 9px 14px;
+}
+.edit-menu button + button {
+  border-left: 0.5px solid rgba(255, 255, 255, 0.25);
+}
+.edit-menu button:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+.edit-menu button.destructive {
+  color: #ff6961;
 }
