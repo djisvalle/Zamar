@@ -1000,7 +1000,7 @@ button {
   line-height: 18px;
 }
 
-/* ---- chromatic key row: fixed-width buttons, scrolls on narrow
+/* ---- key row (all 15 key-signature keys): fixed-width buttons, scrolls on narrow
    frames instead of squeezing — scrollbar hidden across engines ---- */
 .key-row {
   display: flex;
@@ -1014,28 +1014,48 @@ button {
 }
 .key-row-btn {
   flex: none;
-  width: 44px;
-  padding: 10px 0;
+  width: 46px;
+  padding: 5px 0;
   border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   text-align: center;
   background: var(--fill);
   color: var(--fg);
   border: none;
 }
-/* Both iPad Air sizes have room for all 12 without scrolling — fill the
-   row exactly instead of the phone's fixed-width scrolling buttons. */
+.key-row-key {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.key-row-offset,
+.key-row-minor {
+  font-size: 11px;
+  line-height: 13px;
+  color: var(--mut);
+  font-variant-numeric: tabular-nums;
+}
+/* Both iPad Air sizes stretch the chips to fill a wide row, but never
+   below the phone width, so narrower rows (a sheet) still scroll. */
 [data-viewport="ipadAir11"] .key-row-btn,
 [data-viewport="ipadAir13"] .key-row-btn {
-  flex: 1;
+  flex: 1 0 46px;
   width: auto;
-  min-width: 0;
 }
 .key-row-btn.active {
   background: var(--acc);
   color: var(--onacc);
+}
+.key-row-btn.active .key-row-key {
   font-weight: 700;
+}
+.key-row-btn.active .key-row-offset,
+.key-row-btn.active .key-row-minor {
+  color: inherit;
+  opacity: 0.85;
 }
 .key-row-btn:disabled {
   opacity: 0.4;

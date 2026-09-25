@@ -39,7 +39,7 @@ export function SlotDetailSheet({
 
       <div>
         <div className="list-section-header">Key for this set</div>
-        <KeyChips active={item.keyOverride ?? song.defaultKey} onSelect={(k) => patch({ keyOverride: k })} />
+        <KeyChips active={item.keyOverride ?? song.defaultKey} onSelect={(k) => patch({ keyOverride: k })} offsetFrom={song.defaultKey} />
         <div className="list-section-footer">Changes this slot only — the library copy stays in {song.defaultKey}.</div>
       </div>
 

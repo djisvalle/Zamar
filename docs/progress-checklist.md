@@ -34,6 +34,17 @@ working tree on 2026-09-19.
       and re-renders whenever the `transpose` prop changes, driven by the same semitone value
       `LiveStage.tsx` computes from the selected key — genuine OSMD re-engraving in the new
       key (e.g. C → Eb), not a cosmetic shift.
+- [x] **Enharmonic keys.** The key chips list all 15 key-signature keys (C♯ and D♭, F♯ and
+      G♭, B and C♭), each with its relative minor, and the chip picked sets the spelling.
+      Chords keep the right letter (`utils/keys.ts`: F in G → C is B♭, not A♯), and odd
+      spellings (E♯, B♯, F♭, C♭, doubles) are simplified unless they name the key, or with
+      Settings → Keys "Strict spelling", unless they're in its scale. Key moves go the
+      nearest way (−5…+6). Scores use `utils/scoreTranspose.ts` in place of OSMD's
+      calculator, so the key signature follows the chip and notes match it. Old `A#`/`D#`/`G#`
+      keys load as B♭/E♭/A♭. Offsets on the chips are off by default (Settings → Keys).
+      Spec: `docs/superpowers/specs/2026-09-25-enharmonic-key-picker-design.md`. Known limit:
+      OSMD skips transposing at 0 semitones, so a pure respelling (C♯ → D♭) changes the
+      chart but leaves a score as written.
 - [x] **Song & Set Library.** Song CRUD is complete (`ADD_SONG`/`UPDATE_SONG`/
       `DUPLICATE_SONG`/`DELETE_SONGS` in `store.ts`, wired from `Library.tsx`). Setlist CRUD
       is now complete too: sections and items within a setlist have full
@@ -189,6 +200,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ### Settings & visual polish
 - [x] Appearance sub-screen (Light/Stage Dark/Auto), type-`ERASE`-to-confirm reset
+- [x] Keys section: "Show key offsets" and "Strict spelling" toggles
 - [x] Real hand-drawn SVG icon set (`Icon.tsx`) replacing raw Unicode glyphs
 - [x] Toggle-switch knob fixed to a neutral color regardless of on/off state
 - [x] Backdrop blur added to sheets/dialogs/drawers

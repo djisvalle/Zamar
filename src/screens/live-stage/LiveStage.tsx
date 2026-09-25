@@ -5,7 +5,7 @@ import { ChordChart } from "../../components/ChordChart";
 import { MxlScore, type MxlScoreHandle, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
 import { AnnotateCanvas } from "../../components/AnnotateCanvas";
-import { keySemitoneShift } from "../../utils/chordpro";
+import { activeKeyChange, keySemitoneShift } from "../../utils/keys";
 import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
 import type { AnnotationObject, AnnotationView, AttachmentKind } from "../../state/types";
 import { AddSongSheet } from "./AddSongSheet";
@@ -133,7 +133,9 @@ export function LiveStage() {
     );
   }
 
-  const semitones = keySemitoneShift(song.defaultKey, stage.dispKey ?? song.defaultKey);
+  const displayKey = stage.dispKey ?? song.defaultKey;
+  const semitones = keySemitoneShift(song.defaultKey, displayKey);
+  const keyChange = activeKeyChange(song.defaultKey, displayKey, state.settings.strictSpelling);
   const songIndex = setlistSongIds.indexOf(song.id);
   const availableKinds = CATEGORY_PRIORITY.filter((k) => song.attachments[k]);
   const activeBucket = activeKind ? song.attachments[activeKind] : undefined;
@@ -215,7 +217,7 @@ export function LiveStage() {
       {stage.view === "chords" ? (
         <ChordChart
           chordpro={song.chordpro}
-          semitones={semitones}
+          keyChange={keyChange}
           fontScale={chordsTextScale / 100}
           hideChords={stage.lyricsOnly}
         />
@@ -232,6 +234,7 @@ export function LiveStage() {
               ref={mxlScoreRef}
               src={activeVersion.dataUrl}
               transpose={semitones}
+              targetKey={displayKey}
               hiddenParts={hiddenParts}
               onInstrumentsChange={setScoreInstruments}
               disableZoom={musicxmlAnnotated || dockOpen}

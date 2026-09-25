@@ -5,6 +5,7 @@ import * as songsRepo from "../data/songsRepo";
 import * as setlistsRepo from "../data/setlistsRepo";
 import * as settingsRepo from "../data/settingsRepo";
 import { getDb, persist } from "../data/db";
+import { canonicalKey } from "../utils/keys";
 
 export interface AppState {
   songs: Song[];
@@ -78,6 +79,8 @@ export function initialState(): AppState {
       staveSpacing: "default",
       annotateRecents: emptyRecents(),
       annotateSnap: true,
+      showKeyOffsets: false,
+      strictSpelling: false,
     },
     stage: makeEmptyStage(),
     viewport: "ipadAir13",
@@ -100,8 +103,17 @@ function lockChordsTextScale(song: Song, textScale: number): Song {
 export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
   // Charts marked before the lock existed have no recorded size; the saved
   // text size is what they're on screen at now, so they're pinned to that.
-  const locked = songs.map((s) => lockChordsTextScale(s, settings.textScale));
-  return { songs: locked, setlists, settings, stage: makeEmptyStage(locked), viewport: "ipadAir13" };
+  // Keys saved before the enharmonic picker may be sharps with no chip
+  // (A#, D#, G#); they load as the chip for the same pitch (Bb, Eb, Ab).
+  const locked = songs.map((s) => lockChordsTextScale({ ...s, defaultKey: canonicalKey(s.defaultKey) }, settings.textScale));
+  const keyed = setlists.map((sl) => ({
+    ...sl,
+    sections: sl.sections.map((sec) => ({
+      ...sec,
+      items: sec.items.map((it) => ("keyOverride" in it && it.keyOverride ? { ...it, keyOverride: canonicalKey(it.keyOverride) } : it)),
+    })),
+  }));
+  return { songs: locked, setlists: keyed, settings, stage: makeEmptyStage(locked), viewport: "ipadAir13" };
 }
 
 export type Action =
@@ -111,6 +123,8 @@ export type Action =
   | { type: "SET_TEXT_SCALE"; value: number }
   | { type: "SET_ANNOTATE_RECENTS"; recents: AnnotateRecents }
   | { type: "SET_ANNOTATE_SNAP"; value: boolean }
+  | { type: "SET_SHOW_KEY_OFFSETS"; value: boolean }
+  | { type: "SET_STRICT_SPELLING"; value: boolean }
   | { type: "SET_MIC_ASKED" }
   | { type: "SET_STAVE_SPACING"; spacing: StaveSpacing }
   | { type: "TOGGLE_FAVOURITE"; songId: string }
@@ -158,6 +172,10 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, settings: { ...state.settings, annotateRecents: action.recents } };
     case "SET_ANNOTATE_SNAP":
       return { ...state, settings: { ...state.settings, annotateSnap: action.value } };
+    case "SET_SHOW_KEY_OFFSETS":
+      return { ...state, settings: { ...state.settings, showKeyOffsets: action.value } };
+    case "SET_STRICT_SPELLING":
+      return { ...state, settings: { ...state.settings, strictSpelling: action.value } };
     case "SET_MIC_ASKED":
       return { ...state, settings: { ...state.settings, micPermissionAsked: true } };
     case "SET_STAVE_SPACING":

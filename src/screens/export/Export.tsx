@@ -100,14 +100,15 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
   useEffect(() => () => { run.current++; }, []);
 
   // A single song always takes its export key from the slot.
-  const opts = { includeChords, perSlotKeys: song ? true : perSlotKeys, onePerPage, noteNames };
+  const strictSpelling = state.settings.strictSpelling;
+  const opts = { includeChords, perSlotKeys: song ? true : perSlotKeys, onePerPage, noteNames, strictSpelling };
   const plan = useMemo(
     () => {
       const planned = setlist ? planExport(setlist, state.songs, format, opts) : [];
       return song && direction ? planned.map((p) => ({ ...p, semitones: towards(p.semitones, direction) })) : planned;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage, noteNames, song, direction]
+    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage, noteNames, strictSpelling, song, direction]
   );
   const included = plan.filter((p) => p.view);
   const skipped = plan.length - included.length;
@@ -328,7 +329,7 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
             }
           >
             <div style={{ padding: "8px 0" }}>
-              <KeyChips active={exportKey} onSelect={setExportKey} />
+              <KeyChips active={exportKey} onSelect={setExportKey} offsetFrom={song.defaultKey} />
             </div>
             {format === "pdf" && hasScores && exportKey !== song.defaultKey && (
               <div className="sheet-row">

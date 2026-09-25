@@ -9,6 +9,8 @@ interface SettingsRow {
   staveSpacing: string;
   annotateRecents_json: string;
   annotateSnap: number;
+  showKeyOffsets: number;
+  strictSpelling: number;
 }
 
 /** Reads the stored recents defensively: a missing or partial object (a row
@@ -43,13 +45,15 @@ export async function loadAll(): Promise<Settings | null> {
     staveSpacing: row.staveSpacing as Settings["staveSpacing"],
     annotateRecents: parseRecents(row.annotateRecents_json),
     annotateSnap: row.annotateSnap !== 0,
+    showKeyOffsets: row.showKeyOffsets === 1,
+    strictSpelling: row.strictSpelling === 1,
   };
 }
 
 export function buildUpsertStatement(settings: Settings): { statement: string; values: unknown[] } {
   return {
-    statement: `INSERT INTO settings (id, theme, textScale, hasSeeded, micPermissionAsked, staveSpacing, annotateRecents_json, annotateSnap)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+    statement: `INSERT INTO settings (id, theme, textScale, hasSeeded, micPermissionAsked, staveSpacing, annotateRecents_json, annotateSnap, showKeyOffsets, strictSpelling)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        theme = excluded.theme,
        textScale = excluded.textScale,
@@ -57,7 +61,9 @@ export function buildUpsertStatement(settings: Settings): { statement: string; v
        micPermissionAsked = excluded.micPermissionAsked,
        staveSpacing = excluded.staveSpacing,
        annotateRecents_json = excluded.annotateRecents_json,
-       annotateSnap = excluded.annotateSnap`,
+       annotateSnap = excluded.annotateSnap,
+       showKeyOffsets = excluded.showKeyOffsets,
+       strictSpelling = excluded.strictSpelling`,
     values: [
       settings.theme,
       settings.textScale,
@@ -66,6 +72,8 @@ export function buildUpsertStatement(settings: Settings): { statement: string; v
       settings.staveSpacing,
       JSON.stringify(settings.annotateRecents),
       settings.annotateSnap ? 1 : 0,
+      settings.showKeyOffsets ? 1 : 0,
+      settings.strictSpelling ? 1 : 0,
     ],
   };
 }
