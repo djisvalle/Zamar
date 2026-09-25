@@ -338,6 +338,11 @@ const SVG_NS = "http://www.w3.org/2000/svg";
  * them all). Each run goes A♭ A A♯ B♭ B B♯ … G♭ G G♯, three per letter. */
 const NAME_HEAD_BASE = { black: 0xe196, half: 0xe17f, whole: 0xe168 } as const;
 const LETTER_ORDER = ["A", "B", "C", "D", "E", "F", "G"];
+/** Ink width of Bravura's note-name heads, as a fraction of the font size
+ * (measured from the font; every letter of a shape is the same width).
+ * Fixed numbers, so stem placement doesn't depend on when the font has
+ * loaded or on a platform's text measurement. */
+const NAME_HEAD_WIDTH = { black: 0.36, half: 0.375, whole: 0.5 } as const;
 
 /** The SMuFL note-name notehead glyph for a pitch and duration — the same
  * glyphs MuseScore's "note names" notehead scheme uses. Double sharps and
@@ -421,23 +426,27 @@ async function drawNoteNames(osmd: any, Pitch: any, host: HTMLElement) {
             // A regular notehead is one staff space tall, and SMuFL sets
             // 1 em = 4 staff spaces, with the glyph's baseline on the
             // note's own line or space.
+            // Placed by its known ink width rather than text-anchor, which
+            // centres on the advance width and so depends on the font.
+            const size = head.h * 4;
+            const width = NAME_HEAD_WIDTH[kind] * size;
+            const left = head.x + head.w / 2 - width / 2;
             const text = document.createElementNS(SVG_NS, "text");
-            text.setAttribute("x", String(head.x + head.w / 2));
+            text.setAttribute("x", String(left));
             text.setAttribute("y", String(head.y + head.h / 2));
-            text.setAttribute("text-anchor", "middle");
             text.setAttribute("font-family", "BravuraExport");
-            text.setAttribute("font-size", String(head.h * 4));
+            text.setAttribute("font-size", String(size));
             text.setAttribute("fill", "#000");
             text.textContent = nameHeadGlyph(Pitch, note.TransposedPitch ?? note.Pitch, kind);
             head.el.style.visibility = "hidden";
             svg.appendChild(text);
-            group.glyphs.push(text);
+            group.glyphs.push({ left, right: left + width });
           });
         }
       }
     }
   }
-  await reattachStems(groups);
+  reattachStems(groups);
 }
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -446,27 +455,21 @@ interface StemGroup {
   stemBox?: Box;
   attached: Element[];
   heads: (Box & { el: SVGGraphicsElement })[];
-  glyphs: SVGTextElement[];
+  glyphs: { left: number; right: number }[];
 }
 
 /** Note-name heads are wider than the noteheads OSMD spaced the stems for,
  * so each stem is slid sideways onto the new heads' edge: the right edge
  * for an up-stem, the left edge for a down-stem, the way a stem meets a
  * regular notehead. Without this a stem runs through the middle of an open
- * (half-note) head. The glyphs are measured once Bravura has loaded, since
- * their width comes from the font. */
-async function reattachStems(groups: StemGroup[]) {
-  const sample = groups.find((g) => g.glyphs.length);
-  if (!sample) return;
-  const size = sample.glyphs[0].getAttribute("font-size") ?? "40";
-  await document.fonts.load(`${size}px BravuraExport`, sample.glyphs[0].textContent ?? "").catch(() => {});
+ * (half-note) head. */
+function reattachStems(groups: StemGroup[]) {
   for (const g of groups) {
     if (!g.stem || !g.stemBox || !g.glyphs.length) continue;
-    const boxes = g.glyphs.map((t) => t.getBBox());
     const oldLeft = Math.min(...g.heads.map((h) => h.x));
     const oldRight = Math.max(...g.heads.map((h) => h.x + h.w));
-    const newLeft = Math.min(...boxes.map((b) => b.x));
-    const newRight = Math.max(...boxes.map((b) => b.x + b.width));
+    const newLeft = Math.min(...g.glyphs.map((b) => b.left));
+    const newRight = Math.max(...g.glyphs.map((b) => b.right));
     // An up-stem rises from the heads; a down-stem hangs below them.
     const headsMidY = g.heads.reduce((sum, h) => sum + h.y + h.h / 2, 0) / g.heads.length;
     const stemUp = g.stemBox.y + g.stemBox.h / 2 < headsMidY;
