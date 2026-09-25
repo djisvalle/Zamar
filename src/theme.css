@@ -1968,3 +1968,31 @@ button.sheet-row:active:not(:disabled) {
 .device:has(.screen--grouped) .status-bar {
   background: var(--grouped);
 }
+
+/* ---- drag-to-reorder rows (components/useDragReorder.ts): the picked-up
+   row dims in place (grouped lists clip their rows, so it can't float over
+   its neighbors) and a tint line marks where it will land ---- */
+.drag-row {
+  position: relative;
+}
+.drag-row.is-dragging {
+  opacity: 0.45;
+}
+/* ::after, since grouped rows already use ::before for their hairline. */
+.drag-row.drop-before::after,
+.drag-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--acc);
+  pointer-events: none;
+}
+.drag-row.drop-before::after {
+  top: 0;
+}
+.drag-row.drop-after::after {
+  bottom: 0;
+}

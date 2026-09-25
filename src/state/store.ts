@@ -101,7 +101,9 @@ export type Action =
   | { type: "REMOVE_ITEM"; setlistId: string; itemId: string }
   | { type: "UPDATE_ITEM"; setlistId: string; itemId: string; patch: Partial<SetlistItem> }
   | { type: "DUPLICATE_ITEM"; setlistId: string; itemId: string }
-  | { type: "MOVE_ITEM"; setlistId: string; itemId: string; toSectionId: string }
+  /** Moves an item to another section (appended) or, with `toIndex`, to that
+   * position in `toSectionId` counted without the item itself — drag-to-reorder. */
+  | { type: "MOVE_ITEM"; setlistId: string; itemId: string; toSectionId: string; toIndex?: number }
   | { type: "STAGE_LOAD"; songId: string; setlistId?: string | null; setlistIndex?: number }
   | { type: "STAGE_SET_VIEW"; view: StageState["view"] }
   | { type: "STAGE_SET_KEY"; key: string }
@@ -253,24 +255,35 @@ export function reducer(state: AppState, action: Action): AppState {
         }),
       };
     case "MOVE_ITEM": {
-      return {
-        ...state,
-        setlists: state.setlists.map((sl) => {
-          if (sl.id !== action.setlistId) return sl;
-          let moved: SetlistItem | undefined;
-          const withoutItem = sl.sections.map((sec) => {
-            const idx = sec.items.findIndex((i) => i.id === action.itemId);
-            if (idx === -1) return sec;
-            moved = sec.items[idx];
-            return { ...sec, items: sec.items.filter((i) => i.id !== action.itemId) };
-          });
-          if (!moved) return sl;
-          return {
-            ...sl,
-            sections: withoutItem.map((sec) => (sec.id === action.toSectionId ? { ...sec, items: [...sec.items, moved!] } : sec)),
-          };
+      const setlist = state.setlists.find((sl) => sl.id === action.setlistId);
+      if (!setlist) return state;
+      let moved: SetlistItem | undefined;
+      const withoutItem = setlist.sections.map((sec) => {
+        const idx = sec.items.findIndex((i) => i.id === action.itemId);
+        if (idx === -1) return sec;
+        moved = sec.items[idx];
+        return { ...sec, items: sec.items.filter((i) => i.id !== action.itemId) };
+      });
+      if (!moved) return state;
+      const next: Setlist = {
+        ...setlist,
+        sections: withoutItem.map((sec) => {
+          if (sec.id !== action.toSectionId) return sec;
+          const items = [...sec.items];
+          items.splice(Math.max(0, Math.min(action.toIndex ?? items.length, items.length)), 0, moved!);
+          return { ...sec, items };
         }),
       };
+      // If this set is live on stage, keep the stage on the same slot rather
+      // than whatever slot now sits at the old position.
+      let stage = state.stage;
+      if (stage.setlistId === setlist.id) {
+        const songSlots = (sl: Setlist) => sl.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song"));
+        const current = songSlots(setlist)[stage.setlistIndex];
+        const newIndex = current ? songSlots(next).findIndex((i) => i.id === current.id) : -1;
+        if (newIndex >= 0) stage = { ...stage, setlistIndex: newIndex };
+      }
+      return { ...state, stage, setlists: state.setlists.map((sl) => (sl.id === setlist.id ? next : sl)) };
     }
     case "STAGE_LOAD": {
       const setlist = action.setlistId ? state.setlists.find((sl) => sl.id === action.setlistId) : null;

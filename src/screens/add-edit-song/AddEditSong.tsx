@@ -9,8 +9,9 @@ import { MxlScore } from "../../components/MxlScore";
 import { Icon } from "../../components/Icon";
 import { Section } from "../../components/List";
 import { PullDown } from "../../components/PullDown";
+import { useDragReorder } from "../../components/useDragReorder";
 import { extractBracketChords, extractChordLineChords, findChordProIssues } from "../../utils/chordpro";
-import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, removeVersion, renameVersion, selectVersion, selectedVersion } from "../../utils/attachments";
+import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, moveVersion, removeVersion, renameVersion, selectVersion, selectedVersion } from "../../utils/attachments";
 import type { ImportMethod } from "../import/ImportSong";
 import type { AttachmentKind, Attachments, ChartFormat, Song, SongSource } from "../../state/types";
 
@@ -76,6 +77,10 @@ export function AddEditSong({ songId }: { songId?: string }) {
     const m = chordpro.match(KEY_DIRECTIVE_RE);
     return m ? m[1].trim() : null;
   }, [chordpro]);
+
+  const versionDrag = useDragReorder((versionId, to) =>
+    setAttachments((prev) => moveVersion(prev, to.group as AttachmentKind, versionId, to.index))
+  );
 
   const chordProIssues = useMemo(() => findChordProIssues(chordpro), [chordpro]);
 
@@ -364,8 +369,10 @@ export function AddEditSong({ songId }: { songId?: string }) {
 
           {activeBucket.versions.length > 1 && (
             <Section header="Versions" tight>
-              {activeBucket.versions.map((v) => (
-                <button key={v.id} className="sheet-row" onClick={() => setVersionSheetFor({ kind: activeKind, id: v.id, label: v.label })}>
+              {activeBucket.versions.map((v, i) => {
+                const dp = versionDrag.rowProps(v.id, activeKind, i, activeBucket.versions.length);
+                return (
+                <button key={v.id} {...dp} className={"sheet-row " + dp.className} onClick={() => setVersionSheetFor({ kind: activeKind, id: v.id, label: v.label })}>
                   <div className="row-main">
                     <div className="row-title">
                       <span>{v.label}</span>
@@ -377,8 +384,12 @@ export function AddEditSong({ songId }: { songId?: string }) {
                       <Icon name="check" size={18} strokeWidth={2.4} />
                     </span>
                   )}
+                  <span {...versionDrag.handleProps(v.id)} style={{ ...versionDrag.handleProps(v.id).style, display: "flex", color: "var(--tertiary)" }} aria-label={`Reorder ${v.label}`}>
+                    <Icon name="grip" size={18} strokeWidth={1.8} />
+                  </span>
                 </button>
-              ))}
+                );
+              })}
             </Section>
           )}
 
