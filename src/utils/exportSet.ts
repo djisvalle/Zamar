@@ -164,6 +164,14 @@ export async function buildMusicXml(setlist: Setlist, plan: PlannedSong[], onPro
 // ---------------------------------------------------------------- PDF
 
 const MARGIN = 54;
+/** Scores use narrower side margins than chart text, since notation needs
+ * the width more than the text does. */
+const SCORE_MARGIN = 30;
+/** How much larger than OSMD's default size scores are engraved. Larger
+ * notation means fewer measures per line. */
+const SCORE_ZOOM = 1.2;
+/** Width of the offscreen OSMD host, in CSS px. */
+const SCORE_HOST_PX = 900;
 const INK: [number, number, number] = [0.11, 0.11, 0.12];
 const MUTED: [number, number, number] = [0.45, 0.45, 0.48];
 /** The app's steel-blue accent, so printed chords match what's on stage. */
@@ -314,18 +322,19 @@ async function imageToJpeg(dataUrl: string): Promise<Uint8Array> {
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-/** Places images one per page under the song header, scaled to fit. */
-async function drawImagePages(ctx: PdfCtx, p: PlannedSong, jpegs: Uint8Array[]) {
+/** Places images one per page under the song header, scaled to fit.
+ * `sideMargin` lets scores run wider than the chart text. */
+async function drawImagePages(ctx: PdfCtx, p: PlannedSong, jpegs: Uint8Array[], sideMargin = MARGIN) {
   for (let i = 0; i < jpegs.length; i++) {
     newPage(ctx);
     if (i === 0) songHeader(ctx, p);
     const img = await ctx.doc.embedJpg(jpegs[i]);
-    const maxW = ctx.size[0] - MARGIN * 2;
+    const maxW = ctx.size[0] - sideMargin * 2;
     const maxH = ctx.y - MARGIN;
     const s = Math.min(maxW / img.width, maxH / img.height, 1.5);
     const w = img.width * s;
     const h = img.height * s;
-    ctx.page!.drawImage(img, { x: MARGIN + (maxW - w) / 2, y: ctx.y - h, width: w, height: h });
+    ctx.page!.drawImage(img, { x: sideMargin + (maxW - w) / 2, y: ctx.y - h, width: w, height: h });
   }
   ctx.page = null; // the next song starts on a fresh page
 }
@@ -479,16 +488,37 @@ function reattachStems(groups: StemGroup[]) {
   }
 }
 
-async function renderScorePages(dataUrl: string, semitones: number, pageFormat: string, noteNames: boolean): Promise<Uint8Array[]> {
+/** Crops the blank space below the last system, so a page with room to
+ * spare (the first, under the song header, or the last) isn't shrunk to
+ * fit its empty bottom. */
+function trimBottom(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const { width, height } = canvas;
+  const data = canvas.getContext("2d")!.getImageData(0, 0, width, height).data;
+  let last = height - 1;
+  rows: for (; last > 0; last--) {
+    for (let x = 0, i = last * width * 4; x < width; x++, i += 4) if (data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200) break rows;
+  }
+  const h = Math.min(height, last + Math.round(width * 0.02));
+  if (h >= height - 1) return canvas;
+  const out = document.createElement("canvas");
+  out.width = width;
+  out.height = h;
+  out.getContext("2d")!.drawImage(canvas, 0, 0);
+  return out;
+}
+
+/** Engraves a score as JPEG pages. `area` is the PDF space a page of score
+ * fills (points); OSMD's pages take its proportions, and OSMD's own page
+ * margins are kept small since the PDF page already has margins. */
+async function renderScorePages(dataUrl: string, semitones: number, area: { w: number; h: number }, noteNames: boolean): Promise<Uint8Array[]> {
   const { OpenSheetMusicDisplay, TransposeCalculator, Pitch } = await import("opensheetmusicdisplay");
   const host = document.createElement("div");
-  host.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;background:#fff";
+  host.style.cssText = `position:fixed;left:-10000px;top:0;width:${SCORE_HOST_PX}px;background:#fff`;
   document.body.appendChild(host);
   try {
     const osmd = new OpenSheetMusicDisplay(host, {
       backend: "svg",
       autoResize: false,
-      pageFormat,
       pageBackgroundColor: "#FFFFFF",
       // The song header above the score already carries the title.
       drawTitle: false,
@@ -496,7 +526,18 @@ async function renderScorePages(dataUrl: string, semitones: number, pageFormat: 
       disableCursor: true,
     });
     osmd.TransposeCalculator = new TransposeCalculator();
+    osmd.setCustomPageFormat(area.w, area.h);
+    const rules = osmd.EngravingRules;
+    rules.PageLeftMargin = 2;
+    rules.PageRightMargin = 2;
+    rules.PageTopMargin = 4;
+    rules.PageBottomMargin = 4;
+    // Tighter system spacing than OSMD's default, so the larger notation
+    // still fits a typical song on one page.
+    rules.MinimumDistanceBetweenSystems = 4;
+    rules.MinSkyBottomDistBetweenSystems = 3;
     await osmd.load(await (await fetch(dataUrl)).blob());
+    osmd.Zoom = SCORE_ZOOM;
     osmd.Sheet.Transpose = semitones;
     // A new Transpose only reaches the notes through updateGraphic(); a bare
     // render() re-keys the key signature but leaves every note where it was.
@@ -521,7 +562,8 @@ async function renderScorePages(dataUrl: string, semitones: number, pageFormat: 
         g.fillStyle = "#fff";
         g.fillRect(0, 0, canvas.width, canvas.height);
         g.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), "image/jpeg", 0.92));
+        const page = trimBottom(canvas);
+        const blob = await new Promise<Blob>((res, rej) => page.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), "image/jpeg", 0.92));
         out.push(new Uint8Array(await blob.arrayBuffer()));
       } finally {
         URL.revokeObjectURL(url);
@@ -572,8 +614,9 @@ export async function buildPdf(setlist: Setlist, plan: PlannedSong[], opts: Expo
     } else if (p.view === "image") {
       await drawImagePages(ctx, p, [await imageToJpeg(selectedVersion(p.song.attachments.image!).dataUrl)]);
     } else if (p.view === "musicxml") {
-      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, letter ? "Letter_P" : "A4_P", opts.noteNames);
-      await drawImagePages(ctx, p, pages);
+      const area = { w: ctx.size[0] - SCORE_MARGIN * 2, h: ctx.size[1] - MARGIN * 2 };
+      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, area, opts.noteNames);
+      await drawImagePages(ctx, p, pages, SCORE_MARGIN);
     }
   }
   if (!doc.getPageCount()) newPage(ctx);

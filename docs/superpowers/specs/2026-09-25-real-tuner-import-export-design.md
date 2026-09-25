@@ -56,7 +56,10 @@ screen offers Try again, keeping the file as a PDF or photo, or choosing another
   replaced by `?`. Chords are drawn in the accent blue over lyric columns measured in the
   lyric font, and long lines wrap at words, carrying their chords with them. "One song per
   page" is optional. PDF attachments are copied in page by page, photos get a page each,
-  and scores are engraved by OSMD in the slot's key (paged, rasterized at 2400 px).
+  and scores are engraved by OSMD in the slot's key (paged, rasterized at 2400 px). Score
+  pages use narrower side margins than chart text (30 pt), OSMD's own page margins are kept
+  small, notation is engraved at 1.2× with tighter system spacing, and blank space below the
+  last system is trimmed.
   "Note names on noteheads" (PDF only, shown when the set has scores) replaces each notehead
   with Bravura's SMuFL note-name notehead for the transposed pitch (black, half or whole
   shape by duration), the same glyphs MuseScore's note-name scheme uses. Bravura is embedded
