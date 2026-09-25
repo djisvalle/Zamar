@@ -44,6 +44,16 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+type Direction = "up" | "down";
+
+/** The same key change, moved up or down: +7 and −5 both land a fifth
+ * higher in name, an octave apart in pitch. */
+function towards(semitones: number, direction: Direction): number {
+  const up = ((semitones % 12) + 12) % 12;
+  if (up === 0) return 0;
+  return direction === "up" ? up : up - 12;
+}
+
 /** A one-song export (from a Library row) runs through the same pipeline as
  * a set, as a one-slot setlist named after the song. The export key rides
  * on the slot as a key override, so the song's saved key is untouched. */
@@ -66,6 +76,9 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
   /** Single-song export only: the key this file is made in. Starts at the
    * saved key and is never written back to the song. */
   const [exportKey, setExportKey] = useState(song?.defaultKey ?? "");
+  /** Which way a score moves to reach the export key; null keeps the
+   * default shift. Chords sound the same either way. */
+  const [direction, setDirection] = useState<Direction | null>(null);
   const setlist = useMemo(
     () => (song ? singleSongSet(song.id, song.title, exportKey) : state.setlists.find((sl) => sl.id === setlistId)),
     [song, state.setlists, setlistId, exportKey]
@@ -89,9 +102,12 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
   // A single song always takes its export key from the slot.
   const opts = { includeChords, perSlotKeys: song ? true : perSlotKeys, onePerPage, noteNames };
   const plan = useMemo(
-    () => (setlist ? planExport(setlist, state.songs, format, opts) : []),
+    () => {
+      const planned = setlist ? planExport(setlist, state.songs, format, opts) : [];
+      return song && direction ? planned.map((p) => ({ ...p, semitones: towards(p.semitones, direction) })) : planned;
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage, noteNames, song]
+    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage, noteNames, song, direction]
   );
   const included = plan.filter((p) => p.view);
   const skipped = plan.length - included.length;
@@ -314,6 +330,21 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
             <div style={{ padding: "8px 0" }}>
               <KeyChips active={exportKey} onSelect={setExportKey} />
             </div>
+            {format === "pdf" && hasScores && exportKey !== song.defaultKey && (
+              <div className="sheet-row">
+                <span>Move the score</span>
+                <div style={{ width: 180 }}>
+                  <Segmented<Direction>
+                    options={[
+                      { value: "up", label: "Up" },
+                      { value: "down", label: "Down" },
+                    ]}
+                    value={direction ?? ((plan[0]?.semitones ?? 0) < 0 ? "down" : "up")}
+                    onChange={setDirection}
+                  />
+                </div>
+              </div>
+            )}
           </Section>
         )}
         <Section header="In this export" footer={skipped ? SKIP_REASON[format] : undefined}>
