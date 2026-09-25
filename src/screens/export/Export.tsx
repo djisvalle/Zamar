@@ -7,6 +7,7 @@ import { Toggle, Segmented } from "../../components/Toggle";
 import { Sheet } from "../../components/Overlays";
 import { Section } from "../../components/List";
 import { Icon } from "../../components/Icon";
+import { KeyChips } from "../../components/KeyChips";
 import { setlistSongCount } from "../../utils/setlistCalc";
 import type { Setlist } from "../../state/types";
 import { ATTACHMENT_LABEL } from "../../utils/attachments";
@@ -44,8 +45,9 @@ function formatSize(bytes: number): string {
 }
 
 /** A one-song export (from a Library row) runs through the same pipeline as
- * a set, as a one-slot setlist named after the song. */
-function singleSongSet(songId: string, title: string): Setlist {
+ * a set, as a one-slot setlist named after the song. The export key rides
+ * on the slot as a key override, so the song's saved key is untouched. */
+function singleSongSet(songId: string, title: string, key: string): Setlist {
   return {
     id: `song-${songId}`,
     name: title,
@@ -53,7 +55,7 @@ function singleSongSet(songId: string, title: string): Setlist {
     time: "",
     description: "",
     status: "upcoming",
-    sections: [{ id: "s", label: "", items: [{ id: "i", kind: "song", songId }] }],
+    sections: [{ id: "s", label: "", items: [{ id: "i", kind: "song", songId, keyOverride: key }] }],
   };
 }
 
@@ -61,10 +63,14 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
   const { state } = useStore();
   const nav = useNavigator();
   const song = songId ? state.songs.find((s) => s.id === songId) : undefined;
+  /** Single-song export only: the key this file is made in. Starts at the
+   * saved key and is never written back to the song. */
+  const [exportKey, setExportKey] = useState(song?.defaultKey ?? "");
   const setlist = useMemo(
-    () => (song ? singleSongSet(song.id, song.title) : state.setlists.find((sl) => sl.id === setlistId)),
-    [song, state.setlists, setlistId]
+    () => (song ? singleSongSet(song.id, song.title, exportKey) : state.setlists.find((sl) => sl.id === setlistId)),
+    [song, state.setlists, setlistId, exportKey]
   );
+  const hasKey = !!song && !!song.defaultKey && song.defaultKey !== "—";
   const title = song ? "Export song" : "Export set";
   const [format, setFormat] = useState<ExportFormat>("pdf");
   const [includeChords, setIncludeChords] = useState(true);
@@ -80,11 +86,12 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
 
   useEffect(() => () => { run.current++; }, []);
 
-  const opts = { includeChords, perSlotKeys, onePerPage, noteNames };
+  // A single song always takes its export key from the slot.
+  const opts = { includeChords, perSlotKeys: song ? true : perSlotKeys, onePerPage, noteNames };
   const plan = useMemo(
     () => (setlist ? planExport(setlist, state.songs, format, opts) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage, noteNames]
+    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage, noteNames, song]
   );
   const included = plan.filter((p) => p.view);
   const skipped = plan.length - included.length;
@@ -282,7 +289,7 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
             format === "musicxml"
               ? "Scores are exported as they were imported. Set keys can't be applied inside a MusicXML file."
               : song
-              ? "The song exports in its library key."
+              ? undefined
               : perSlotKeys
               ? "Slots export in each song's set key."
               : "Songs export in their library key."
@@ -295,6 +302,20 @@ export function Export({ setlistId, songId }: { setlistId?: string; songId?: str
             <ExportToggle label="Note names on noteheads" on={noteNames} onChange={() => setNoteNames((v) => !v)} />
           )}
         </Section>
+        {song && hasKey && format !== "musicxml" && (
+          <Section
+            header="Key"
+            footer={
+              exportKey === song.defaultKey
+                ? "Exports in the song's saved key."
+                : `This export only. The song stays in ${song.defaultKey}.`
+            }
+          >
+            <div style={{ padding: "8px 0" }}>
+              <KeyChips active={exportKey} onSelect={setExportKey} />
+            </div>
+          </Section>
+        )}
         <Section header="In this export" footer={skipped ? SKIP_REASON[format] : undefined}>
           {plan.length === 0 ? (
             <div className="sheet-row">
