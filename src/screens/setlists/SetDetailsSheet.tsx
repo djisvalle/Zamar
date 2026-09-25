@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sheet } from "../../components/Overlays";
+import { Sheet, SheetNav } from "../../components/Overlays";
 import { useStore } from "../../state/store";
 import type { Setlist } from "../../state/types";
 
@@ -18,43 +18,63 @@ export function SetDetailsSheet({ setlist, onClose }: { setlist: Setlist; onClos
   const duplicate = state.setlists.some((sl) => sl.id !== setlist.id && sl.name.trim() === name.trim() && name.trim() !== "");
   const timeInvalid = time.trim() !== "" && !TIME_PATTERN.test(time.trim());
 
+  const canSave = !duplicate && Boolean(name.trim()) && !timeInvalid;
+
   return (
     <Sheet onClose={onClose}>
-      <div className="sheet-title">Set details</div>
-      <div className={"field" + (duplicate ? " invalid" : "")}>
-        <label>Name</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      {duplicate && <div className="field-error">A setlist with this name already exists.</div>}
-      <div style={{ display: "flex", gap: 9 }}>
-        <div className="field" style={{ flex: 1 }}>
-          <label>Date</label>
-          <input value={date} onChange={(e) => setDate(e.target.value)} placeholder="Sun, Aug 23 2026" />
+      <SheetNav
+        title="Set details"
+        left={
+          <button className="hdr-action" onClick={onClose}>
+            Cancel
+          </button>
+        }
+        right={
+          <button
+            className="hdr-action hdr-action--done"
+            disabled={!canSave}
+            onClick={() => {
+              dispatch({ type: "UPDATE_SETLIST_META", setlistId: setlist.id, patch: { name, date, time, description } });
+              onClose();
+            }}
+          >
+            Save
+          </button>
+        }
+      />
+      <div>
+        <div className="list-group">
+          <div className="form-row">
+            <div className={"form-cell" + (duplicate ? " invalid" : "")}>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" aria-label="Name" />
+            </div>
+          </div>
         </div>
-        <div className={"field" + (timeInvalid ? " invalid" : "")} style={{ width: "38%" }}>
-          <label>Time</label>
-          <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="9:00 AM" />
+        {duplicate && <div className="list-section-footer error">A setlist with this name already exists.</div>}
+      </div>
+      <div>
+        <div className="list-group">
+          <div className="form-row">
+            <label className="form-cell form-cell--value">
+              <span className="form-label">Date</span>
+              <input value={date} onChange={(e) => setDate(e.target.value)} placeholder="Sun, Aug 23 2026" />
+            </label>
+          </div>
+          <div className="form-row">
+            <label className={"form-cell form-cell--value" + (timeInvalid ? " invalid" : "")}>
+              <span className="form-label">Time</span>
+              <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="9:00 AM" />
+            </label>
+          </div>
         </div>
+        {timeInvalid && <div className="list-section-footer error">Enter a time like "9:00 AM", or leave it blank.</div>}
       </div>
-      {timeInvalid && <div className="field-error">Enter a time like "9:00 AM", or leave it blank.</div>}
-      <div className="field">
-        <label>Description</label>
-        <input value={description} onChange={(e) => setDescription(e.target.value)} />
-      </div>
-      <div className="btn-row">
-        <button className="btn" onClick={onClose}>
-          Cancel
-        </button>
-        <button
-          className={"btn btn-primary" + (duplicate || !name.trim() || timeInvalid ? " is-disabled" : "")}
-          disabled={duplicate || !name.trim() || timeInvalid}
-          onClick={() => {
-            dispatch({ type: "UPDATE_SETLIST_META", setlistId: setlist.id, patch: { name, date, time, description } });
-            onClose();
-          }}
-        >
-          Save
-        </button>
+      <div className="list-group">
+        <div className="form-row">
+          <div className="form-cell">
+            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" aria-label="Description" />
+          </div>
+        </div>
       </div>
     </Sheet>
   );

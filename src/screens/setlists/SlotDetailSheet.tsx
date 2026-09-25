@@ -31,34 +31,34 @@ export function SlotDetailSheet({
   return (
     <Sheet onClose={onClose}>
       <div>
-        <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16 }}>{song.title}</div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+        <div className="sheet-title">{song.title}</div>
+        <div className="sheet-sub" style={{ marginTop: 2 }}>
           Slot {slotIndex + 1} · {song.artist} · library key {song.defaultKey}
         </div>
       </div>
 
       <div>
-        <div style={{ fontSize: 10, letterSpacing: "0.1em", color: "var(--mut)", marginBottom: 5 }}>KEY FOR THIS SET</div>
+        <div className="list-section-header">Key for this set</div>
         <KeyChips active={item.keyOverride ?? song.defaultKey} onSelect={(k) => patch({ keyOverride: k })} />
-        <div className="muted" style={{ fontSize: 10.5, marginTop: 6 }}>
-          Changes this slot only — the library copy stays in {song.defaultKey}.
+        <div className="list-section-footer">Changes this slot only — the library copy stays in {song.defaultKey}.</div>
+      </div>
+
+      <div className="list-group">
+        <div className="sheet-row">
+          <span>Duration</span>
+          <span className="row-detail">{formatDuration(song.durationSec)}</span>
         </div>
       </div>
 
       <div>
-        <div style={{ fontSize: 10, letterSpacing: "0.1em", color: "var(--mut)", marginBottom: 5 }}>DURATION</div>
-        <div style={{ height: 34, border: "1px solid var(--line)", borderRadius: 6, display: "flex", alignItems: "center", padding: "0 10px", fontSize: 12 }}>
-          {formatDuration(song.durationSec)}
-        </div>
-      </div>
-
-      <div className="field">
-        <label>Note for the band</label>
+        <div className="list-section-header">Note for the band</div>
         <textarea
+          className="form-textarea"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           onBlur={() => patch({ note })}
           rows={2}
+          aria-label="Note for the band"
         />
       </div>
 

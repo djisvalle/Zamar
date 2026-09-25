@@ -5,10 +5,11 @@ import { Header } from "../../components/Header";
 import { Sheet, Dialog } from "../../components/Overlays";
 import { KeyChips } from "../../components/KeyChips";
 import { Icon } from "../../components/Icon";
+import { LargeTitle, Section, SearchField } from "../../components/List";
+import { OrderByMenu, groupSongs, type SortBy } from "../../components/SongPickerSheet";
 import type { Song } from "../../state/types";
 
 type Filter = "all" | "favourites" | "recent";
-type SortBy = "title" | "artist";
 
 export function Library() {
   const { state, dispatch } = useStore();
@@ -16,7 +17,6 @@ export function Library() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("title");
-  const [orderMenuOpen, setOrderMenuOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sheetFor, setSheetFor] = useState<Song | null>(null);
@@ -41,17 +41,7 @@ export function Library() {
     return list;
   }, [state.songs, query, filter]);
 
-  const groups = useMemo(() => {
-    const byLetter = new Map<string, Song[]>();
-    [...filtered]
-      .sort((a, b) => (sortBy === "title" ? a.title.localeCompare(b.title) : a.artist.localeCompare(b.artist)))
-      .forEach((s) => {
-        const letter = (sortBy === "title" ? s.title : s.artist)[0]?.toUpperCase() ?? "#";
-        if (!byLetter.has(letter)) byLetter.set(letter, []);
-        byLetter.get(letter)!.push(s);
-      });
-    return [...byLetter.entries()];
-  }, [filtered, sortBy]);
+  const groups = useMemo(() => groupSongs(filtered, sortBy), [filtered, sortBy]);
 
   const toggleSelected = (id: string) => {
     setSelected((prev) => {
@@ -72,7 +62,7 @@ export function Library() {
   };
 
   return (
-    <div className="screen">
+    <div className="screen screen--grouped">
       <Header
         title={selectMode ? `${selected.size} selected` : "Library"}
         large={!selectMode}
@@ -93,204 +83,118 @@ export function Library() {
           )
         }
       />
-      <div style={{ padding: "10px 14px 8px" }}>
-        <div className={"search-bar" + (query ? " active" : "")}>
-          <span style={{ display: "flex" }}>
-            <Icon name="search" size={15} strokeWidth={2} />
-          </span>
-          <input placeholder="Search songs" value={query} onChange={(e) => setQuery(e.target.value)} />
-          {query && (
-            <button className="muted" style={{ background: "none", border: "none", display: "flex" }} onClick={() => setQuery("")}>
-              <Icon name="close" size={14} strokeWidth={2.1} />
-            </button>
-          )}
-        </div>
-      </div>
+      <div className={"ios-list" + (selectMode ? "" : " scroll-under-tabs")}>
+        <LargeTitle>Library</LargeTitle>
+        <SearchField value={query} onChange={setQuery} placeholder="Search songs" />
 
-      {!query && (
-        <div style={{ display: "flex", gap: 6, padding: "0 14px 8px" }}>
-          {(["all", "favourites", "recent"] as Filter[]).map((f) => (
-            <button key={f} className={"chip" + (filter === f ? " active" : "")} onClick={() => setFilter(f)}>
-              {f === "all" ? "All" : f === "favourites" ? "Favourites" : "Recent"}
-            </button>
-          ))}
-        </div>
-      )}
-      {query && (
-        <div className="muted" style={{ fontSize: 11, padding: "0 14px 8px" }}>
-          {filtered.length} of {state.songs.length} · titles, artists and lyrics
-        </div>
-      )}
+        {!query && (
+          <div className="chip-row" style={{ marginTop: 12 }}>
+            {(["all", "favourites", "recent"] as Filter[]).map((f) => (
+              <button key={f} className={"chip" + (filter === f ? " active" : "")} onClick={() => setFilter(f)}>
+                {f === "all" ? "All" : f === "favourites" ? "Favourites" : "Recent"}
+              </button>
+            ))}
+          </div>
+        )}
+        {query && (
+          <div className="list-section-footer" style={{ paddingTop: 10 }}>
+            {filtered.length} of {state.songs.length} · titles, artists and lyrics
+          </div>
+        )}
 
-      {state.songs.length === 0 ? (
-        <div className="empty">
-          <div className="empty-title">No songs yet</div>
-          <div className="empty-body">Type a chart, paste ChordPro, or convert a PDF or photo of a sheet.</div>
-          <div className="btn-row" style={{ width: "100%" }}>
-            <button className="btn btn-primary" onClick={() => nav.push("add-edit-song")}>
-              Add a song
-            </button>
-            <button className="btn" onClick={() => setImportSheetOpen(true)}>
-              Import a chart
-            </button>
+        {state.songs.length === 0 ? (
+          <div className="empty" style={{ paddingTop: 48 }}>
+            <div className="empty-title">No songs yet</div>
+            <div className="empty-body">Type a chart, paste ChordPro, or convert a PDF or photo of a sheet.</div>
+            <div className="btn-row" style={{ width: "100%" }}>
+              <button className="btn btn-primary" onClick={() => nav.push("add-edit-song")}>
+                Add a song
+              </button>
+              <button className="btn" onClick={() => setImportSheetOpen(true)}>
+                Import a chart
+              </button>
+            </div>
           </div>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="empty">
-          <div className="empty-title">No match for "{query}"</div>
-          <div className="empty-body">Searched titles, artists and lyrics across {state.songs.length} songs.</div>
-          <div className="btn-row" style={{ width: "100%" }}>
-            <button className="btn" onClick={() => setQuery("")}>
-              Clear
-            </button>
-            <button className="btn btn-primary" onClick={() => nav.push("add-edit-song", { prefillTitle: query })}>
-              Add it
-            </button>
+        ) : filtered.length === 0 ? (
+          <div className="empty" style={{ paddingTop: 48 }}>
+            <div className="empty-title">No match for "{query}"</div>
+            <div className="empty-body">Searched titles, artists and lyrics across {state.songs.length} songs.</div>
+            <div className="btn-row" style={{ width: "100%" }}>
+              <button className="btn" onClick={() => setQuery("")}>
+                Clear
+              </button>
+              <button className="btn btn-primary" onClick={() => nav.push("add-edit-song", { prefillTitle: query })}>
+                Add it
+              </button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <>
-          <div style={{ position: "relative", borderBottom: "1px solid var(--line)", margin: "0 14px" }}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setOrderMenuOpen((o) => !o);
-              }}
-              style={{ background: "none", border: "none", padding: "0 0 8px", fontSize: 12, color: "var(--mut)" }}
-            >
-              Order By: <span className="accent-deep" style={{ fontWeight: 700 }}>{sortBy === "title" ? "Title" : "Artist"}</span>{" "}
-              <span style={{ fontSize: 9 }}>▾</span>
-            </button>
-            {orderMenuOpen && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  background: "var(--surface)",
-                  border: "1px solid var(--line)",
-                  borderRadius: 8,
-                  boxShadow: "0 4px 14px rgba(29, 31, 32, 0.2)",
-                  zIndex: 10,
-                  overflow: "hidden",
-                }}
-              >
-                {(["title", "artist"] as const).map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => {
-                      setSortBy(opt);
-                      setOrderMenuOpen(false);
-                    }}
-                    style={{
-                      display: "block",
-                      width: 120,
-                      textAlign: "left",
-                      padding: "9px 14px",
-                      background: sortBy === opt ? "var(--tint)" : "none",
-                      border: "none",
-                      fontSize: 12,
-                      fontWeight: sortBy === opt ? 700 : 500,
-                      color: sortBy === opt ? "var(--acc-deep)" : "var(--fg)",
-                    }}
-                  >
-                    {opt === "title" ? "Title" : "Artist"}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div
-            className={"flex-1 hidden-scroll" + (selectMode ? "" : " scroll-under-tabs")}
-            style={{ padding: "0 14px", paddingBottom: selectMode ? 0 : 150, display: "flex", flexDirection: "column", gap: 6 }}
-            onClick={() => orderMenuOpen && setOrderMenuOpen(false)}
-          >
-          {groups.map(([letter, list]) => (
-            <div key={letter}>
-              <div className="list-header">{letter}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+        ) : (
+          <>
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "12px 4px 0" }}>
+              <OrderByMenu value={sortBy} onChange={setSortBy} />
+            </div>
+            {groups.map(([letter, list], gi) => (
+              <Section key={letter} header={letter} tight={gi === 0}>
                 {list.map((s) => {
                   const isSel = selected.has(s.id);
                   return (
                     <button
                       key={s.id}
-                      className="list-row"
-                      style={selectMode && isSel ? { background: "var(--tint)", borderColor: "var(--acc-deep)" } : undefined}
+                      className="sheet-row sheet-row--lead"
+                      aria-pressed={selectMode ? isSel : undefined}
                       onClick={() => (selectMode ? toggleSelected(s.id) : openSong(s.id))}
-                      onContextMenu={(e) => { e.preventDefault(); if (!selectMode) setSheetFor(s); }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (!selectMode) setSheetFor(s);
+                      }}
                     >
                       {selectMode ? (
-                        <span
-                          style={{
-                            width: 17,
-                            height: 17,
-                            borderRadius: 4,
-                            flex: "none",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 11,
-                            background: isSel ? "var(--acc)" : "none",
-                            color: isSel ? "var(--onacc)" : "none",
-                            border: isSel ? "none" : "1px solid var(--line)",
-                          }}
-                        >
-                          {isSel && <Icon name="check" size={11} strokeWidth={2.6} />}
+                        <span className={"select-circle" + (isSel ? " on" : "")}>
+                          {isSel && <Icon name="check" size={14} strokeWidth={3} />}
                         </span>
                       ) : (
-                        <span
-                          className="accent-deep"
-                          style={{ display: "flex", flex: "none", opacity: s.favourite ? 1 : 0.25 }}
-                        >
-                          <Icon name="star" size={14} strokeWidth={1.8} filled={s.favourite} />
+                        <span className="row-lead" style={{ opacity: s.favourite ? 1 : 0.25 }}>
+                          <Icon name="star" size={17} strokeWidth={1.8} filled={s.favourite} />
                         </span>
                       )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 500 }}>{s.title}</span>
+                      <div className="row-main">
+                        <div className="row-title">
+                          <span>{s.title}</span>
                           <span className="key-chip">{s.defaultKey}</span>
                         </div>
-                        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                          {s.artist}
-                        </div>
+                        <div className="row-sub">{s.artist}</div>
                       </div>
                       {!selectMode && (
                         <span
                           role="button"
-                          aria-label="More"
+                          aria-label={`More for ${s.title}`}
+                          className="row-more"
                           onClick={(e) => {
                             e.stopPropagation();
                             setSheetFor(s);
                           }}
-                          className="muted"
-                          style={{ display: "flex", padding: "0 2px" }}
                         >
-                          <Icon name="more" size={15} />
+                          <Icon name="more" size={20} strokeWidth={2} />
                         </span>
                       )}
                     </button>
                   );
                 })}
-              </div>
-            </div>
-          ))}
-          </div>
-        </>
-      )}
+              </Section>
+            ))}
+          </>
+        )}
+      </div>
 
       {selectMode && (
-        <div style={{ background: "var(--surface)", borderTop: "1px solid var(--line)", padding: "11px 14px", display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-          <button className="accent-deep" style={{ background: "none", border: "none", fontWeight: 600 }} disabled={selected.size === 0}>
+        <div className="toolbar">
+          <button className="toolbar-btn" disabled={selected.size === 0}>
             Add to setlist
           </button>
-          <button className="accent-deep" style={{ background: "none", border: "none" }} disabled={selected.size === 0}>
+          <button className="toolbar-btn" disabled={selected.size === 0}>
             Export
           </button>
-          <button
-            style={{ background: "none", border: "none", color: "var(--danger-fg)", fontWeight: 600 }}
-            disabled={selected.size === 0}
-            onClick={() => setConfirmDelete([...selected])}
-          >
+          <button className="toolbar-btn destructive" disabled={selected.size === 0} onClick={() => setConfirmDelete([...selected])}>
             Delete
           </button>
         </div>
@@ -299,7 +203,7 @@ export function Library() {
       {sheetFor && (
         <Sheet onClose={() => setSheetFor(null)}>
           <div className="sheet-title">{sheetFor.title}</div>
-          <div className="muted" style={{ fontSize: 10, marginTop: -6 }}>
+          <div className="sheet-sub">
             {sheetFor.artist} · {sheetFor.defaultKey}
           </div>
           <div className="sheet-group">
@@ -441,14 +345,7 @@ export function Library() {
       {existingPickerOpen && (
         <Sheet onClose={() => setExistingPickerOpen(false)}>
           <div className="sheet-title">Attach to which song?</div>
-          <input
-            className="search-bar"
-            style={{ width: "100%" }}
-            placeholder="Search songs"
-            value={existingQuery}
-            onChange={(e) => setExistingQuery(e.target.value)}
-            autoFocus
-          />
+          <SearchField value={existingQuery} onChange={setExistingQuery} placeholder="Search songs" autoFocus />
           <div className="sheet-group" style={{ maxHeight: 320, overflowY: "auto" }}>
             {state.songs
               .filter(
@@ -502,9 +399,7 @@ export function Library() {
       {keySheetFor && (
         <Sheet onClose={() => setKeySheetFor(null)}>
           <div className="sheet-title">{keySheetFor.title}</div>
-          <div className="muted" style={{ fontSize: 10, marginTop: -6 }}>
-            Default key · applies wherever this song doesn't have a setlist key override
-          </div>
+          <div className="sheet-sub">Default key · applies wherever this song doesn't have a setlist key override</div>
           <KeyChips
             active={keySheetFor.defaultKey}
             onSelect={(k) => {

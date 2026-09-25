@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Icon } from "./Icon";
 
 export function Dialog({ children }: { children: ReactNode }) {
   return (
@@ -9,10 +8,27 @@ export function Dialog({ children }: { children: ReactNode }) {
   );
 }
 
-export function Sheet({ children, onClose }: { children: ReactNode; onClose?: () => void }) {
+export function Sheet({
+  children,
+  onClose,
+  large,
+  transparentBackdrop,
+}: {
+  children: ReactNode;
+  onClose?: () => void;
+  /** Nearly full height, for a list to work in. Pair with `<SheetNav>` and a
+   * `.sheet-body` holding the scroll area. */
+  large?: boolean;
+  /** Leaves what's behind the sheet undimmed (Quick edit over the stage). */
+  transparentBackdrop?: boolean;
+}) {
   return (
-    <div className="backdrop align-bottom" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="backdrop align-bottom"
+      style={transparentBackdrop ? { background: "transparent" } : undefined}
+      onClick={onClose}
+    >
+      <div className={"sheet" + (large ? " sheet--large" : "")} onClick={(e) => e.stopPropagation()}>
         <span className="sheet-grip" />
         {children}
       </div>
@@ -20,35 +36,14 @@ export function Sheet({ children, onClose }: { children: ReactNode; onClose?: ()
   );
 }
 
-export function SideDrawer({
-  title,
-  onClose,
-  children,
-  side = "right",
-}: {
-  /** Omit for a drawer that supplies its own header in `children` (e.g. the
-   * nav drawer's profile block) instead of the generic title+close bar. */
-  title?: string;
-  onClose: () => void;
-  children: ReactNode;
-  /** Contextual action panels (add-to-setlist, add-song) match the source
-   * spec's right-side slide-in. A hamburger-triggered nav drawer opens from
-   * the same side as its trigger icon (top-left menu icon) — pass "left" for those. */
-  side?: "left" | "right";
-}) {
+/** A sheet's navigation bar: a leading and trailing text button around a
+ * centered title (Cancel / Title / Save). */
+export function SheetNav({ title, left, right }: { title: string; left?: ReactNode; right?: ReactNode }) {
   return (
-    <div className={`backdrop align-${side}`} onClick={onClose}>
-      <div className={`drawer drawer-${side}`} onClick={(e) => e.stopPropagation()}>
-        {title && (
-          <div className="drawer-hdr">
-            <span>{title}</span>
-            <button onClick={onClose} aria-label="Close">
-              <Icon name="close" size={16} strokeWidth={2} />
-            </button>
-          </div>
-        )}
-        {children}
-      </div>
+    <div className="sheet-nav">
+      {left ?? <span />}
+      <div className="sheet-nav-title">{title}</div>
+      {right ?? <span />}
     </div>
   );
 }

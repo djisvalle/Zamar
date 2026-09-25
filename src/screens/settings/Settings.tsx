@@ -4,7 +4,7 @@ import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Dialog } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
-import { Icon } from "../../components/Icon";
+import { LargeTitle, Section, Chevron } from "../../components/List";
 import type { StaveSpacing } from "../../state/types";
 
 export function Settings() {
@@ -14,65 +14,51 @@ export function Settings() {
   const [eraseText, setEraseText] = useState("");
 
   return (
-    <div className="screen">
+    <div className="screen screen--grouped">
       <Header title="Settings" large />
-      <div className="flex-1 hidden-scroll scroll-under-tabs" style={{ padding: "8px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
-        <SectionLabel>Appearance</SectionLabel>
-        <button className="list-row" onClick={() => nav.push("appearance")}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>Stage Dark</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
-              One theme for the whole device, applied everywhere at once.
-            </div>
-          </div>
-          <span className="accent-deep" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 2 }}>
-            {state.settings.theme === "dark" ? "On" : "Off"}
-            <Icon name="chevron-right" size={14} strokeWidth={2} />
-          </span>
-        </button>
+      <div className="ios-list scroll-under-tabs">
+        <LargeTitle>Settings</LargeTitle>
 
-        <SectionLabel>Notation</SectionLabel>
-        <div className="list-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>Stave spacing</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
-              Room between staves in rendered sheet music — extra space for writing bowings, chord names, or cues by hand.
-            </div>
-          </div>
-          <Segmented<StaveSpacing>
-            options={[
-              { value: "compact", label: "Compact" },
-              { value: "default", label: "Default" },
-              { value: "roomy", label: "Roomy" },
-            ]}
-            value={state.settings.staveSpacing}
-            onChange={(spacing) => dispatch({ type: "SET_STAVE_SPACING", spacing })}
-          />
-        </div>
+        <Section header="Appearance" footer="One theme for the whole device, applied everywhere at once." tight>
+          <button className="sheet-row" onClick={() => nav.push("appearance")}>
+            <span>Stage Dark</span>
+            <span className="row-detail">
+              {state.settings.theme === "dark" ? "On" : "Off"}
+              <Chevron />
+            </span>
+          </button>
+        </Section>
 
-        <SectionLabel>Data</SectionLabel>
-        <div className="list-row">
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>Export all songs</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
-              {state.songs.length} songs and {state.setlists.length} setlists as a .zip.
-            </div>
+        <Section
+          header="Notation"
+          footer="Room between staves in rendered sheet music — extra space for writing bowings, chord names, or cues by hand."
+        >
+          <div className="sheet-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10, paddingBottom: 12 }}>
+            <span>Stave spacing</span>
+            <Segmented<StaveSpacing>
+              options={[
+                { value: "compact", label: "Compact" },
+                { value: "default", label: "Default" },
+                { value: "roomy", label: "Roomy" },
+              ]}
+              value={state.settings.staveSpacing}
+              onChange={(spacing) => dispatch({ type: "SET_STAVE_SPACING", spacing })}
+            />
           </div>
-          <span className="muted" style={{ display: "flex" }}>
-            <Icon name="chevron-right" size={14} strokeWidth={2} />
-          </span>
-        </div>
-        <button className="list-row" onClick={() => setErasing(true)}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>Reset app data</div>
+        </Section>
+
+        <Section header="Data" footer={`${state.songs.length} songs and ${state.setlists.length} setlists as a .zip.`}>
+          <div className="sheet-row">
+            <span>Export all songs</span>
+            <Chevron />
           </div>
-          <span style={{ color: "#8c3b3b", fontWeight: 600, display: "flex" }}>
-          <Icon name="chevron-right" size={14} strokeWidth={2} />
-        </span>
-        </button>
-        <div className="muted text-center" style={{ fontSize: 11, marginTop: "auto", padding: "10px 0" }}>
-          Zamar 2.0 · everything stored on this device
-        </div>
+        </Section>
+
+        <Section footer="Zamar 2.0 · everything stored on this device">
+          <button className="sheet-row destructive" onClick={() => setErasing(true)}>
+            <span>Reset app data</span>
+          </button>
+        </Section>
       </div>
 
       {erasing && (
@@ -82,11 +68,12 @@ export function Settings() {
           </div>
           <div className="dialog-body">Everything is stored on this device only — there is no cloud copy. Export first if you need one.</div>
           <input
-            className="field"
-            style={{ height: 36, borderRadius: 8, border: "1px solid var(--line)", padding: "0 10px", fontSize: 13, background: "var(--surface)", color: "var(--fg)" }}
+            className="alert-input"
             placeholder="Type ERASE to confirm"
+            aria-label="Type ERASE to confirm"
             value={eraseText}
             onChange={(e) => setEraseText(e.target.value)}
+            autoCapitalize="characters"
           />
           <div className="btn-row">
             <button
@@ -112,14 +99,6 @@ export function Settings() {
           </div>
         </Dialog>
       )}
-    </div>
-  );
-}
-
-function SectionLabel({ children }: { children: string }) {
-  return (
-    <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--mut)", padding: "6px 2px 0" }}>
-      {children}
     </div>
   );
 }

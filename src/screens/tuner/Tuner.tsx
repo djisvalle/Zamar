@@ -3,6 +3,8 @@ import { useNavigator } from "../../navigation/Navigator";
 import { useStore } from "../../state/store";
 import { Header } from "../../components/Header";
 import { MicPermissionSheet } from "./MicPermissionSheet";
+import { LargeTitle, Section } from "../../components/List";
+import { Segmented } from "../../components/Toggle";
 
 type Reading = "flat" | "in-tune";
 type InstrumentId = "chromatic" | "guitar" | "bass" | "ukulele" | "violin" | "viola" | "cello";
@@ -98,7 +100,7 @@ export function Tuner() {
   if (!permissionResolved) {
     return (
       <div className="screen">
-        <Header title="Tuner" tinted />
+        <Header title="Tuner" />
         <div style={{ flex: 1 }} />
         <MicPermissionSheet onDone={() => setPermissionResolved(true)} />
       </div>
@@ -108,7 +110,7 @@ export function Tuner() {
   if (!micOn) {
     return (
       <div className="screen">
-        <Header title="Tuner" tinted />
+        <Header title="Tuner" />
         <div className="empty">
           <div className="empty-title">Microphone is off</div>
           <div className="empty-body">Zamar needs the mic to hear a note. Nothing is recorded or sent anywhere.</div>
@@ -143,73 +145,105 @@ export function Tuner() {
   };
 
   return (
-    <div className="screen">
-      <Header title="Tuner" tinted />
-
-      <div style={{ padding: "10px 14px 0", display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {INSTRUMENTS.map((i) => (
-          <button key={i.id} className={"chip" + (i.id === instrumentId ? " active" : "")} onClick={() => selectInstrument(i.id)}>
-            {i.label}
-          </button>
-        ))}
-      </div>
-
-      {instrument.strings && (
-        <div style={{ padding: "8px 14px 0", display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {instrument.strings.map((s, idx) => (
-            <button key={s.name} className={"chip" + (idx === stringIndex ? " active" : "")} onClick={() => selectString(idx)}>
-              {s.name}
+    <div className="screen screen--grouped">
+      <Header title="Tuner" large />
+      <div className="ios-list scroll-under-tabs">
+        <LargeTitle>Tuner</LargeTitle>
+        <div className="chip-row">
+          {INSTRUMENTS.map((i) => (
+            <button key={i.id} className={"chip" + (i.id === instrumentId ? " active" : "")} onClick={() => selectInstrument(i.id)}>
+              {i.label}
             </button>
           ))}
         </div>
-      )}
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: "0 20px" }}>
-        <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 64, lineHeight: 1, color: inTune ? "var(--acc)" : "var(--fg)" }}>
-          {noteLetter}
-        </div>
-        <div className="muted" style={{ fontSize: 12 }}>
-          {inTune ? `${displayFreq.toFixed(1)} Hz · 0 cents` : `${displayFreq.toFixed(1)} Hz · ${FLAT_CENTS} cents`}
-        </div>
+        {instrument.strings && (
+          <div style={{ marginTop: 12 }}>
+            <Segmented
+              options={instrument.strings.map((st, idx) => ({ value: String(idx), label: st.name }))}
+              value={String(stringIndex)}
+              onChange={(v) => selectString(Number(v))}
+            />
+          </div>
+        )}
+
         <div
           style={{
-            width: "100%",
-            height: 44,
-            borderRadius: 8,
-            border: `1px solid ${inTune ? "var(--acc)" : "var(--line)"}`,
-            background: inTune ? "var(--tint)" : "transparent",
-            position: "relative",
+            flex: 1,
+            minHeight: 320,
+            marginTop: 24,
+            borderRadius: 26,
+            background: "var(--list-cell)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 14,
+            padding: "28px 20px",
           }}
         >
-          <span style={{ position: "absolute", left: "50%", top: 6, width: 1, height: 32, background: "var(--line)" }} />
-          {[10, 30, 70, 90].map((p) => (
-            <span key={p} style={{ position: "absolute", left: `${p}%`, top: 16, width: 1, height: 12, background: "var(--line)" }} />
-          ))}
-          <span
+          <div
             style={{
-              position: "absolute",
-              left: `${needlePct}%`,
-              top: 4,
-              width: 4,
-              height: 36,
-              borderRadius: 2,
-              background: "var(--acc)",
-              transition: "left 0.4s ease",
+              fontFamily: "var(--font-heading)",
+              fontWeight: 700,
+              fontSize: 96,
+              lineHeight: 1,
+              color: inTune ? "var(--switch-on)" : "var(--fg)",
+              transition: "color 0.3s ease",
             }}
-          />
+          >
+            {noteLetter}
+          </div>
+          <div className="row-sub" style={{ fontVariantNumeric: "tabular-nums" }}>
+            {inTune ? `${displayFreq.toFixed(1)} Hz · 0 cents` : `${displayFreq.toFixed(1)} Hz · ${FLAT_CENTS} cents`}
+          </div>
+          <div style={{ width: "100%", height: 56, position: "relative", marginTop: 6 }} aria-hidden>
+            {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((p) => (
+              <span
+                key={p}
+                style={{
+                  position: "absolute",
+                  left: `${p}%`,
+                  top: p === 50 ? 4 : p % 20 === 10 ? 20 : 14,
+                  width: 2,
+                  marginLeft: -1,
+                  height: p === 50 ? 48 : p % 20 === 10 ? 16 : 28,
+                  borderRadius: 1,
+                  background: p === 50 ? "var(--mut)" : "var(--tertiary)",
+                }}
+              />
+            ))}
+            <span
+              style={{
+                position: "absolute",
+                left: `${needlePct}%`,
+                top: 0,
+                width: 6,
+                height: 56,
+                marginLeft: -3,
+                borderRadius: 3,
+                background: inTune ? "var(--switch-on)" : "var(--acc)",
+                boxShadow: "0 1px 4px rgba(0, 0, 0, 0.2)",
+                transition: "left 0.4s ease, background 0.3s ease",
+              }}
+            />
+          </div>
+          <div style={{ fontWeight: 600, fontSize: 17, color: inTune ? "var(--switch-on)" : "var(--acc-deep)" }}>
+            {inTune ? "In tune" : "Flat — tighten"}
+          </div>
+          <button className="btn btn-tinted btn-sm" onClick={() => setReading(inTune ? "flat" : "in-tune")}>
+            Simulate: tap to {inTune ? "go flat" : "tune up"}
+          </button>
         </div>
-        <div style={{ fontFamily: "var(--font-heading)", fontWeight: 600, fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--acc)" }}>
-          {inTune ? "In tune" : "Flat — tighten"}
-        </div>
-        <button className="chip" onClick={() => setReading(inTune ? "flat" : "in-tune")}>
-          Simulate: tap to {inTune ? "go flat" : "tune up"}
-        </button>
-      </div>
-      <div style={{ borderTop: "1px solid var(--line)", padding: "12px 14px", display: "flex", justifyContent: "space-between", fontSize: 12 }} className="muted">
-        <span>
-          {current.name} = {current.freq.toFixed(2)} Hz
-        </span>
-        <span className="accent-deep">{instrument.label}</span>
+
+        <Section>
+          <div className="sheet-row">
+            <span>
+              {current.name} = {current.freq.toFixed(2)} Hz
+            </span>
+            <span className="row-detail">{instrument.label}</span>
+          </div>
+        </Section>
       </div>
     </div>
   );
