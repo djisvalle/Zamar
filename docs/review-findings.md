@@ -11,7 +11,7 @@ This list only carries what is still open or only partly fixed. Findings that ar
 
 ## 🟡 Low priority / polish
 
-1. **Heavy use of ad-hoc inline `style={{...}}` objects** instead of shared CSS classes (about 385 across `src/`). This makes theming and spacing changes harder than they need to be.
+1. **Heavy use of ad-hoc inline `style={{...}}` objects** instead of shared CSS classes (about 235 left across `src/`). This makes theming and spacing changes harder than they need to be.
 
 ---
 
