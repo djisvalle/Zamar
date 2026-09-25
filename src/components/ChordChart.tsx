@@ -1,18 +1,19 @@
 import type { ReactNode } from "react";
-import { parseChordPro, type ChordPosition } from "../utils/chordpro";
+import { parseChordPro, type ChordPosition, type KeyChange } from "../utils/chordpro";
 
 export function ChordChart({
   chordpro,
-  semitones = 0,
+  keyChange = null,
   fontScale = 1,
   hideChords = false,
 }: {
   chordpro: string;
-  semitones?: number;
+  /** The key change to spell chords into; null shows them as written. */
+  keyChange?: KeyChange | null;
   fontScale?: number;
   hideChords?: boolean;
 }) {
-  const lines = parseChordPro(chordpro, semitones).filter((l) => !l.isDirective);
+  const lines = parseChordPro(chordpro, keyChange).filter((l) => !l.isDirective);
   return (
     <>
       {lines.map((l, i) =>

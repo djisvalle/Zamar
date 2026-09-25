@@ -6,6 +6,7 @@ export function MusicToolbar({ onOpenTools }: { onOpenTools: () => void }) {
   const { state, dispatch } = useStore();
   const { stage } = state;
   const key = stage.dispKey ?? "C";
+  const song = state.songs.find((s) => s.id === stage.songId);
 
   return (
     <div
@@ -24,7 +25,11 @@ export function MusicToolbar({ onOpenTools }: { onOpenTools: () => void }) {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <KeyChips active={key} onSelect={(k) => dispatch({ type: "STAGE_SET_KEY", key: k })} />
+          <KeyChips
+            active={key}
+            onSelect={(k) => dispatch({ type: "STAGE_SET_KEY", key: k })}
+            offsetFrom={song?.defaultKey}
+          />
         </div>
         <button
           onClick={onOpenTools}

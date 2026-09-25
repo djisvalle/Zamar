@@ -3,7 +3,7 @@ import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Dialog } from "../../components/Overlays";
-import { Segmented } from "../../components/Toggle";
+import { Segmented, Toggle } from "../../components/Toggle";
 import { LargeTitle, Section, Chevron } from "../../components/List";
 import type { StaveSpacing } from "../../state/types";
 
@@ -43,6 +43,32 @@ export function Settings() {
               ]}
               value={state.settings.staveSpacing}
               onChange={(spacing) => dispatch({ type: "SET_STAVE_SPACING", spacing })}
+            />
+          </div>
+        </Section>
+
+        <Section
+          header="Keys"
+          footer={
+            state.settings.strictSpelling
+              ? "Transposed chords keep every note of the key's scale, so C♯ shows E♯m and B♯°."
+              : "Transposed chords avoid E♯, B♯, F♭ and C♭ unless the key itself is spelled that way. Turn on Strict spelling to keep them wherever they're in the key."
+          }
+        >
+          <div className="sheet-row">
+            <span>Show key offsets</span>
+            <Toggle
+              on={state.settings.showKeyOffsets}
+              onChange={() => dispatch({ type: "SET_SHOW_KEY_OFFSETS", value: !state.settings.showKeyOffsets })}
+              label="Show key offsets"
+            />
+          </div>
+          <div className="sheet-row">
+            <span>Strict spelling</span>
+            <Toggle
+              on={state.settings.strictSpelling}
+              onChange={() => dispatch({ type: "SET_STRICT_SPELLING", value: !state.settings.strictSpelling })}
+              label="Strict spelling"
             />
           </div>
         </Section>

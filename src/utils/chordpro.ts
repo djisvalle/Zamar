@@ -1,56 +1,24 @@
-export const CHROMATIC = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+import { transposeNote, type KeyChange } from "./keys";
 
-/** Every spelling that isn't already in CHROMATIC: the seven flats plus the two
- * sharps that land on a natural (E# = F, B# = C). */
-const ENHARMONIC: Record<string, string> = {
-  Cb: "B",
-  Db: "C#",
-  Eb: "D#",
-  Fb: "E",
-  Gb: "F#",
-  Ab: "G#",
-  Bb: "A#",
-  "E#": "F",
-  "B#": "C",
-};
+export { keySemitoneShift, noteIndex, type KeyChange } from "./keys";
 
-function normalizeRoot(root: string): string {
-  return ENHARMONIC[root] ?? root;
-}
-
-/** Semitone index (0 = C) of a note name like "Eb" or "F#", or -1 when it isn't one. */
-export function noteIndex(note: string): number {
-  return CHROMATIC.indexOf(normalizeRoot(note));
-}
-
-export function keySemitoneShift(fromKey: string, toKey: string): number {
-  const a = noteIndex(fromKey);
-  const b = noteIndex(toKey);
-  if (a < 0 || b < 0) return 0;
-  return b - a;
-}
-
-function shiftNote(note: string, semitones: number): string | null {
-  const idx = noteIndex(note);
-  if (idx < 0) return null;
-  return CHROMATIC[((idx + semitones) % 12 + 12) % 12];
-}
-
-/** Transposes a chord symbol's root and, for slash chords, its bass note ("G/B" up
- * two is "A/C#"). Anything it can't read is returned unchanged; findChordProIssues
- * reports those in the editor so they don't get skipped silently. */
-export function transposeChord(chord: string, semitones: number): string {
+/** Transposes a chord symbol's root and, for slash chords, its bass note
+ * ("G/B" from G to A is "A/C#"), keeping each note on the right letter for
+ * the new key (see transposeNote). Anything it can't read is returned
+ * unchanged; findChordProIssues reports those in the editor so they don't
+ * get skipped silently. */
+export function transposeChord(chord: string, change: KeyChange): string {
   const m = chord.match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/);
   if (!m) return chord;
-  const root = shiftNote(m[1], semitones);
+  const root = transposeNote(m[1], change);
   if (root === null) return chord;
-  const bass = m[3] ? shiftNote(m[3], semitones) : null;
+  const bass = m[3] ? transposeNote(m[3], change) : null;
   return root + m[2] + (m[3] ? "/" + (bass ?? m[3]) : "");
 }
 
 /** Whether transposeChord can actually move this chord symbol. */
 export function isTransposableChord(chord: string): boolean {
-  return transposeChord(chord, 1) !== chord;
+  return transposeChord(chord, { from: "C", to: "D", strict: false }) !== chord;
 }
 
 export interface ChordPosition {
@@ -96,12 +64,12 @@ function isSectionLabel(line: string): boolean {
 /** Merges a standalone chord line with the lyric line beneath it (or an
  * empty lyric, for a floating instrumental chord line), preserving each
  * chord's real column offset the same way bracket notation does. */
-function mergeChordAndLyricLine(chordLine: string, lyricLine: string, semitones: number): ChordProLine {
+function mergeChordAndLyricLine(chordLine: string, lyricLine: string, change: KeyChange | null): ChordProLine {
   const chords: ChordPosition[] = [];
   const tokenRe = /\S+/g;
   let match: RegExpExecArray | null;
   while ((match = tokenRe.exec(chordLine))) {
-    chords.push({ col: match.index, sym: semitones ? transposeChord(match[0], semitones) : match[0] });
+    chords.push({ col: match.index, sym: change ? transposeChord(match[0], change) : match[0] });
   }
   return { lyric: lyricLine, chords, isDirective: false, isSection: false };
 }
@@ -139,7 +107,7 @@ export function extractChordLineChords(text: string): string[] {
  * chord's column offset in that lyric — mirrors the source design's
  * chord-chip-over-lyric layout, computed from real bracket offsets rather
  * than hand-placed spacing. */
-export function parseChordProLine(raw: string, semitones = 0): ChordProLine {
+export function parseChordProLine(raw: string, change: KeyChange | null = null): ChordProLine {
   if (DIRECTIVE_RE.test(raw.trim())) {
     return { lyric: raw, chords: [], isDirective: true, isSection: false };
   }
@@ -150,7 +118,7 @@ export function parseChordProLine(raw: string, semitones = 0): ChordProLine {
   let match: RegExpExecArray | null;
   while ((match = CHORD_RE.exec(raw))) {
     lyric += raw.slice(lastIndex, match.index);
-    chords.push({ col: lyric.length, sym: semitones ? transposeChord(match[1], semitones) : match[1] });
+    chords.push({ col: lyric.length, sym: change ? transposeChord(match[1], change) : match[1] });
     lastIndex = CHORD_RE.lastIndex;
   }
   lyric += raw.slice(lastIndex);
@@ -161,7 +129,9 @@ export function parseChordProLine(raw: string, semitones = 0): ChordProLine {
  * both `[Chord]lyric` bracket notation and the traditional "chords over
  * lyrics" two-line format (a chord-only line followed by its lyric line),
  * so pasted charts don't have to be in ChordPro already. */
-export function parseChordPro(text: string, semitones = 0): ChordProLine[] {
+/** `change` is the key change to spell chords into (see activeKeyChange);
+ * null leaves them as written. */
+export function parseChordPro(text: string, change: KeyChange | null = null): ChordProLine[] {
   const rawLines = text.split("\n");
   const result: ChordProLine[] = [];
   let i = 0;
@@ -177,7 +147,7 @@ export function parseChordPro(text: string, semitones = 0): ChordProLine[] {
       continue;
     }
     if (HAS_BRACKET_CHORD_RE.test(line)) {
-      result.push(parseChordProLine(line, semitones));
+      result.push(parseChordProLine(line, change));
       i++;
       continue;
     }
@@ -191,10 +161,10 @@ export function parseChordPro(text: string, semitones = 0): ChordProLine[] {
       const nextIsLyric =
         next !== undefined && next.trim().length > 0 && !isChordLine(next) && !DIRECTIVE_RE.test(next.trim()) && !isSectionLabel(next);
       if (nextIsLyric) {
-        result.push(mergeChordAndLyricLine(line, next, semitones));
+        result.push(mergeChordAndLyricLine(line, next, change));
         i += 2;
       } else {
-        result.push(mergeChordAndLyricLine(line, "", semitones));
+        result.push(mergeChordAndLyricLine(line, "", change));
         i++;
       }
       continue;

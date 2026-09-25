@@ -72,9 +72,10 @@ the tension rather than silently picking one.
   `--tint`, `--scrim` in `theme.css`, light and dark, applied via `data-theme` on `.device`.
   Barlow / Barlow Condensed, steel-blue accent.
 - **ChordPro and transposition are real.** `src/utils/chordpro.ts` parses both `[C]lyric`
-  ChordPro and chords-over-lyrics, positions chords from real offsets, and transposes by
-  semitone distance (`keySemitoneShift`/`transposeChord`). `MxlScore.tsx` re-engraves
-  MusicXML in the display key via OSMD.
+  ChordPro and chords-over-lyrics, positions chords from real offsets, and transposes
+  letter-aware between two keys (`utils/keys.ts`: the 15 key-signature keys, nearest-way
+  `keySemitoneShift`, spelling rules). `MxlScore.tsx` re-engraves MusicXML in the display
+  key via OSMD with `utils/scoreTranspose.ts` in place of OSMD's own transpose calculator.
 - **Attachments are categorized, versioned buckets.** `Song.attachments`
   (`src/state/types.ts`) holds up to one bucket per kind (`musicxml` → Sheet Music, `pdf`,
   `image` → Photo), each an ordered list of versions plus a `selectedVersionId`. All

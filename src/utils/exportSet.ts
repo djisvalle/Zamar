@@ -1,6 +1,8 @@
 import type { PDFDocument, PDFFont, PDFPage, RGB } from "pdf-lib";
 import type { AttachmentKind, Setlist, Song } from "../state/types";
-import { keySemitoneShift, parseChordPro, type ChordPosition, type ChordProLine } from "./chordpro";
+import { parseChordPro, type ChordPosition, type ChordProLine } from "./chordpro";
+import { activeKeyChange, keySemitoneShift, type KeyChange } from "./keys";
+import { KeyAwareTransposeCalculator } from "./scoreTranspose";
 import { firstAvailableCategory, selectedVersion } from "./attachments";
 import { flattenSetlist } from "./setlistCalc";
 import bravuraUrl from "../assets/fonts/Bravura.woff2?url";
@@ -18,6 +20,8 @@ export interface ExportOptions {
   /** PDF only: print each note's letter name inside its notehead on
    * engraved MusicXML scores. */
   noteNames: boolean;
+  /** Settings → Keys "Strict spelling", for transposed chords. */
+  strictSpelling: boolean;
 }
 
 /** One song slot of the set and what it will export as. `view` is null when
@@ -26,6 +30,8 @@ export interface PlannedSong {
   song: Song;
   key: string;
   semitones: number;
+  /** How the chart's chords are respelled for `key`; null when unchanged. */
+  keyChange: KeyChange | null;
   view: "chords" | AttachmentKind | null;
 }
 
@@ -65,7 +71,8 @@ export function planExport(setlist: Setlist, songs: Song[], format: ExportFormat
       const semitones = keySemitoneShift(s.defaultKey, key);
       const view: PlannedSong["view"] =
         format === "pdf" ? pdfView(s) : format === "chordpro" ? (hasChart(s) ? "chords" : null) : s.attachments.musicxml ? "musicxml" : null;
-      return { song: s, key, semitones, view };
+      const keyChange = activeKeyChange(s.defaultKey, key, opts.strictSpelling);
+      return { song: s, key, semitones, keyChange, view };
     });
 }
 
@@ -79,10 +86,10 @@ async function dataUrlBytes(dataUrl: string): Promise<Uint8Array> {
 
 /** Splits a chart into stanzas (blank-line separated) and parses each, since
  * the parser itself drops blank lines. */
-function chartStanzas(chordpro: string, semitones: number): ChordProLine[][] {
+function chartStanzas(chordpro: string, keyChange: KeyChange | null): ChordProLine[][] {
   return chordpro
     .split(/\n\s*\n/)
-    .map((block) => parseChordPro(block, semitones))
+    .map((block) => parseChordPro(block, keyChange))
     .filter((lines) => lines.length > 0);
 }
 
@@ -111,7 +118,7 @@ function songToChordPro(p: PlannedSong, includeChords: boolean): string {
   if (p.key && p.key !== "—") head.push(`{key: ${p.key}}`);
   if (s.tempo) head.push(`{tempo: ${s.tempo}}`);
   if (s.timeSig) head.push(`{time: ${s.timeSig}}`);
-  const body = chartStanzas(s.chordpro, p.semitones)
+  const body = chartStanzas(s.chordpro, p.keyChange)
     .map((lines) =>
       lines
         .filter((l) => !(l.isDirective && METADATA_DIRECTIVE_RE.test(l.lyric.trim())))
@@ -288,7 +295,7 @@ function drawChartLine(ctx: PdfCtx, lyric: string, chords: ChordPosition[], incl
 
 function drawChart(ctx: PdfCtx, p: PlannedSong, includeChords: boolean) {
   const maxWidth = ctx.size[0] - MARGIN * 2;
-  chartStanzas(p.song.chordpro, p.semitones).forEach((stanza, i) => {
+  chartStanzas(p.song.chordpro, p.keyChange).forEach((stanza, i) => {
     if (i > 0) ctx.y -= 9;
     for (const line of stanza) {
       if (line.isDirective) continue;
@@ -536,8 +543,15 @@ function trimBottom(canvas: HTMLCanvasElement): HTMLCanvasElement {
 /** Engraves a score as JPEG pages. `area` is the PDF space a page of score
  * fills (points); OSMD's pages take its proportions, and OSMD's own page
  * margins are kept small since the PDF page already has margins. */
-async function renderScorePages(dataUrl: string, semitones: number, area: { w: number; h: number }, noteNames: boolean): Promise<Uint8Array[]> {
-  const { OpenSheetMusicDisplay, TransposeCalculator, Pitch } = await import("opensheetmusicdisplay");
+async function renderScorePages(
+  dataUrl: string,
+  semitones: number,
+  targetKey: string,
+  area: { w: number; h: number },
+  noteNames: boolean
+): Promise<Uint8Array[]> {
+  const osmdModule = await import("opensheetmusicdisplay");
+  const { OpenSheetMusicDisplay, Pitch } = osmdModule;
   const host = document.createElement("div");
   host.style.cssText = `position:fixed;left:-10000px;top:0;width:${SCORE_HOST_PX}px;background:#fff`;
   document.body.appendChild(host);
@@ -551,7 +565,9 @@ async function renderScorePages(dataUrl: string, semitones: number, area: { w: n
       drawPartNames: true,
       disableCursor: true,
     });
-    osmd.TransposeCalculator = new TransposeCalculator();
+    const transposer = new KeyAwareTransposeCalculator(osmdModule);
+    transposer.targetKey = targetKey;
+    osmd.TransposeCalculator = transposer;
     osmd.setCustomPageFormat(area.w, area.h);
     const rules = osmd.EngravingRules;
     rules.PageLeftMargin = 2;
@@ -641,7 +657,7 @@ export async function buildPdf(setlist: Setlist, plan: PlannedSong[], opts: Expo
       await drawImagePages(ctx, p, [await imageToJpeg(selectedVersion(p.song.attachments.image!).dataUrl)]);
     } else if (p.view === "musicxml") {
       const area = { w: ctx.size[0] - SCORE_MARGIN * 2, h: ctx.size[1] - MARGIN * 2 };
-      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, area, opts.noteNames);
+      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, p.key, area, opts.noteNames);
       await drawImagePages(ctx, p, pages, SCORE_MARGIN);
     }
   }

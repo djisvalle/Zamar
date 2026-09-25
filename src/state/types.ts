@@ -241,6 +241,11 @@ export interface Settings {
   annotateRecents: AnnotateRecents;
   /** Whether text and notation marks snap to lyric lines on the chords view. */
   annotateSnap: boolean;
+  /** Settings → Keys: show each key chip's semitone move from the song's key. */
+  showKeyOffsets: boolean;
+  /** Settings → Keys: keep every note of the key's scale when spelling
+   * transposed chords (E#m in C#), instead of only the key's own name. */
+  strictSpelling: boolean;
 }
 
 /** Up to `MAX_RECENTS` recently used styles per Annotate tool popover. */

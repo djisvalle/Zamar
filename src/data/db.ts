@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -177,6 +177,15 @@ async function openDb(): Promise<SQLiteDBConnection> {
       // already have chords marks are pinned on load (store.ts hydrateState).
       toVersion: 8,
       statements: ["ALTER TABLE songs ADD COLUMN chordsTextScale INTEGER;"],
+    },
+    {
+      // Additive columns — Settings > Keys: key-chip offsets and strict
+      // chord spelling, both off by default.
+      toVersion: 9,
+      statements: [
+        "ALTER TABLE settings ADD COLUMN showKeyOffsets INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE settings ADD COLUMN strictSpelling INTEGER NOT NULL DEFAULT 0;",
+      ],
     },
   ]);
 

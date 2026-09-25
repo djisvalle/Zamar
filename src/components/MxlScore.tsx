@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import type { MusicalAnchor, StaveSpacing } from "../state/types";
+import { KeyAwareTransposeCalculator } from "../utils/scoreTranspose";
 
 const MIN_ENGRAVING_ZOOM = 0.5;
 const MAX_ENGRAVING_ZOOM = 2.5;
@@ -240,6 +241,9 @@ export const MxlScore = forwardRef<
      * transpose that shifts the chord chart, applied to real notation instead
      * of chord letters. */
     transpose?: number;
+    /** The key picked on the chips. A transposed score's key signature and
+     * notes follow its spelling (see KeyAwareTransposeCalculator). */
+    targetKey?: string;
     /** Instrument ids to hide (for multi-part scores — a piano-only file like
      * the seeded default song has nothing to hide, but this is ready the
      * moment a multi-instrument score is attached). */
@@ -263,9 +267,10 @@ export const MxlScore = forwardRef<
      * Annotate freeze rule instead of being reprojected. */
     onRerendered?: () => void;
   }
->(function MxlScore({ src, transpose = 0, hiddenParts, onInstrumentsChange, disableZoom = false, staveSpacing = "default", onRerendered }, ref) {
+>(function MxlScore({ src, transpose = 0, targetKey, hiddenParts, onInstrumentsChange, disableZoom = false, staveSpacing = "default", onRerendered }, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
+  const transposerRef = useRef<KeyAwareTransposeCalculator | null>(null);
   const unitInPixelsRef = useRef(10);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [engravingZoom, setEngravingZoom] = useState(1);
@@ -310,7 +315,8 @@ export const MxlScore = forwardRef<
 
     (async () => {
       if (!hostRef.current) return;
-      const { OpenSheetMusicDisplay: OSMD, TransposeCalculator, unitInPixels } = await import("opensheetmusicdisplay");
+      const osmdModule = await import("opensheetmusicdisplay");
+      const { OpenSheetMusicDisplay: OSMD, unitInPixels } = osmdModule;
       if (cancelled || !hostRef.current) return;
       unitInPixelsRef.current = unitInPixels;
       hostRef.current.innerHTML = "";
@@ -324,7 +330,10 @@ export const MxlScore = forwardRef<
         drawingParameters: "compacttight",
         disableCursor: true,
       });
-      osmd.TransposeCalculator = new TransposeCalculator();
+      const transposer = new KeyAwareTransposeCalculator(osmdModule);
+      transposer.targetKey = targetKey ?? null;
+      transposerRef.current = transposer;
+      osmd.TransposeCalculator = transposer;
       const rules = STAVE_SPACING_RULES[staveSpacing];
       osmd.EngravingRules.StaffDistance = rules.staffDistance;
       osmd.EngravingRules.MinimumDistanceBetweenSystems = rules.systemDistance;
@@ -364,6 +373,7 @@ export const MxlScore = forwardRef<
   useEffect(() => {
     const osmd = osmdRef.current;
     if (!osmd || status !== "ready") return;
+    if (transposerRef.current) transposerRef.current.targetKey = targetKey ?? null;
     osmd.Sheet.Transpose = transpose;
     osmd.updateGraphic();
     osmd.render();
@@ -372,7 +382,7 @@ export const MxlScore = forwardRef<
     // the Annotate freeze rule (see the `onRerendered` prop doc above).
     onRerendered?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transpose, status]);
+  }, [transpose, targetKey, status]);
 
   useEffect(() => {
     const osmd = osmdRef.current;

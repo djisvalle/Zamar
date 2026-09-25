@@ -14,6 +14,7 @@ import { extractBracketChords, extractChordLineChords, findChordProIssues } from
 import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, moveVersion, removeVersion, renameVersion, selectVersion, selectedVersion } from "../../utils/attachments";
 import type { ImportMethod } from "../import/ImportSong";
 import type { AttachmentKind, Attachments, ChartFormat, Song, SongSource } from "../../state/types";
+import { canonicalKey } from "../../utils/keys";
 
 const KEY_RE = /^[A-G](#|b)?$/;
 const KEY_DIRECTIVE_RE = /\{key:\s*([^}]+)\}/i;
@@ -115,7 +116,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
       id: existing?.id ?? `song-${Date.now()}`,
       title: title.trim(),
       artist: artist.trim() || "Unknown",
-      defaultKey: effectiveKey || "C",
+      defaultKey: canonicalKey(effectiveKey || "C"),
       tempo: Number(tempo) || 80,
       timeSig: timeSig.trim() || "4/4",
       durationSec: existing?.durationSec ?? 240,
