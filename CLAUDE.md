@@ -112,10 +112,10 @@ Shared primitives are in `src/components/`.
   sheet-vs-chords is declared by the user ("What's in this file?"), not detected.
   Declaring "Sheet music" is real end-to-end: the file is added as an attachment version.
 - **Export's PDF/MusicXML generation is simulated** (timer-driven progress).
-- **No drag-and-drop reordering** of setlist slots or attachment versions.
 - **One global theme**, not the source's scoped "dark on stage, light elsewhere".
-- **Unwired source micro-states:** ChordPro-parse-error banner, crash-restore onboarding,
-  and the imported-chart merge-strategy screen (Replace/Append/Review).
+- **Unwired source micro-state:** crash-restore onboarding.
+- **Capo is cut** (TODO): it needs its own design pass against the transpose/key system
+  before it comes back. See `docs/progress-checklist.md`.
 
 ## Gotchas
 
