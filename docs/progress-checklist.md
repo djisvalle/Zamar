@@ -224,8 +224,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] **Text-size slider disconnected from the real chart.** Fixed: there is one saved text
       size, `settings.textScale`. Live Stage renders at it, the Appearance slider and the
       stage's Zoom +/- buttons both change it, and `stage.zoom` no longer exists. Annotated
-      chord charts still lock the Zoom buttons, but changing the size from Appearance reflows
-      them; pinning an annotated chart to the size it was marked at is a possible follow-up.
+      chord charts still lock the Zoom buttons, and render at the size they were marked at
+      (`Song.chordsTextScale`, pinned when the first mark is saved and dropped when marks are
+      cleared), so changing the size from Appearance no longer reflows them under their marks.
 - [x] **Persistence "first run" gate is still fragile.** Fixed: `main.tsx`'s `loadInitial()` now
       loads settings/songs/setlists together and only treats the install as first-run when
       songs and setlists are *also* empty. If a crash left real song/setlist data with no

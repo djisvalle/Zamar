@@ -66,6 +66,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Zamar uses the camera when you choose Take Photo to import a chord chart or sheet music. Photos stay on this device.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Zamar opens your photo library when you choose a photo of a chord chart or sheet music to import. Photos stay on this device.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Zamar listens to the note you play so the Tuner can show whether it's in tune. Audio is analysed on this device and never recorded or uploaded.</string>
 </dict>

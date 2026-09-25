@@ -127,6 +127,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
       defaultView,
       notes,
       annotations: existing?.annotations ?? {},
+      chordsTextScale: existing?.chordsTextScale,
     };
     dispatch({ type: existing ? "UPDATE_SONG" : "ADD_SONG", song } as any);
     nav.pop();

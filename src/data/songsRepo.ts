@@ -17,6 +17,7 @@ interface SongRow {
   notes: string;
   annotations_json: string;
   defaultView: string | null;
+  chordsTextScale: number | null;
 }
 
 function rowToSong(row: SongRow): Song {
@@ -36,6 +37,7 @@ function rowToSong(row: SongRow): Song {
     notes: row.notes ?? "",
     annotations: JSON.parse(row.annotations_json || "{}") as Song["annotations"],
     defaultView: (row.defaultView ?? undefined) as Song["defaultView"],
+    chordsTextScale: row.chordsTextScale ?? undefined,
   };
 }
 
@@ -46,12 +48,13 @@ export function buildDeleteStatement(): { statement: string; values: unknown[] }
 export function buildInsertStatements(songs: Song[]): { statement: string; values: unknown[] }[] {
   return songs.map((s) => ({
     statement: `INSERT INTO songs
-      (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachments_json, notes, annotations_json, defaultView)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, title, artist, defaultKey, tempo, timeSig, durationSec, favourite, source, chordpro, chartFormat, attachments_json, notes, annotations_json, defaultView, chordsTextScale)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     values: [
       s.id, s.title, s.artist, s.defaultKey, s.tempo, s.timeSig, s.durationSec,
       s.favourite ? 1 : 0, s.source, s.chordpro, s.chartFormat,
       JSON.stringify(s.attachments), s.notes, JSON.stringify(s.annotations), s.defaultView ?? null,
+      s.chordsTextScale ?? null,
     ],
   }));
 }

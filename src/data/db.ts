@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -170,6 +170,13 @@ async function openDb(): Promise<SQLiteDBConnection> {
         "ALTER TABLE settings ADD COLUMN annotateRecents_json TEXT NOT NULL DEFAULT '{}';",
         "ALTER TABLE settings ADD COLUMN annotateSnap INTEGER NOT NULL DEFAULT 1;",
       ],
+    },
+    {
+      // Additive column — the text size an annotated chord chart was marked
+      // at (see Song.chordsTextScale). NULL for unmarked charts; songs that
+      // already have chords marks are pinned on load (store.ts hydrateState).
+      toVersion: 8,
+      statements: ["ALTER TABLE songs ADD COLUMN chordsTextScale INTEGER;"],
     },
   ]);
 
