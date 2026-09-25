@@ -354,6 +354,15 @@ const LETTER_ORDER = ["A", "B", "C", "D", "E", "F", "G"];
 const NAME_HEAD_WIDTH = { black: 0.36, half: 0.375, whole: 0.5 } as const;
 /** Ink height of the note-name heads, as a fraction of the font size. */
 const NAME_HEAD_HEIGHT = 0.314;
+/** Each head's outline as an ellipse (fitted to the glyph, in font-size
+ * units from the glyph origin; angle in degrees). A white copy goes under
+ * the glyph so staff and ledger lines don't show through the letter or a
+ * hollow head, as in MuseScore. */
+const NAME_HEAD_SHAPE = {
+  black: { cx: 0.1763, cy: -0.0019, rx: 0.1901, ry: 0.1261, angle: -26.6 },
+  half: { cx: 0.1796, cy: -0.0015, rx: 0.1913, ry: 0.1333, angle: -26.9 },
+  whole: { cx: 0.2415, cy: 0.0038, rx: 0.246, ry: 0.1466, angle: 0.6 },
+} as const;
 
 /** The SMuFL note-name notehead glyph for a pitch and duration — the same
  * glyphs MuseScore's "note names" notehead scheme uses. Double sharps and
@@ -444,9 +453,22 @@ async function drawNoteNames(osmd: any, Pitch: any, host: HTMLElement) {
             const size = head.h / NAME_HEAD_HEIGHT;
             const width = NAME_HEAD_WIDTH[kind] * size;
             const left = head.x + head.w / 2 - width / 2;
+            const baseline = head.y + head.h / 2;
+            const shape = NAME_HEAD_SHAPE[kind];
+            const cx = left + shape.cx * size;
+            const cy = baseline + shape.cy * size;
+            const mask = document.createElementNS(SVG_NS, "ellipse");
+            mask.setAttribute("cx", String(cx));
+            mask.setAttribute("cy", String(cy));
+            // Just inside the outline, so the white never shows past it.
+            mask.setAttribute("rx", String(shape.rx * size * 0.96));
+            mask.setAttribute("ry", String(shape.ry * size * 0.96));
+            mask.setAttribute("transform", `rotate(${shape.angle} ${cx} ${cy})`);
+            mask.setAttribute("fill", "#fff");
+            svg.appendChild(mask);
             const text = document.createElementNS(SVG_NS, "text");
             text.setAttribute("x", String(left));
-            text.setAttribute("y", String(head.y + head.h / 2));
+            text.setAttribute("y", String(baseline));
             text.setAttribute("font-family", "BravuraExport");
             text.setAttribute("font-size", String(size));
             text.setAttribute("fill", "#000");
