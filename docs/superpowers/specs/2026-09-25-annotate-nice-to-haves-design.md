@@ -41,8 +41,7 @@ new `annotateRecents` JSON column (schema v5 migration, default `{}`). Global ra
 per-song because the point is repeating what you just did, and people stamp the same
 dynamics song after song.
 
-**Open question:** should recents persist across launches (the proposal above), or only
-last for the session (no schema change)?
+**Decided (2026-09-25):** recents persist across launches (schema v5).
 
 ## 2. Snap to lyric line
 
@@ -51,17 +50,18 @@ last for the session (no schema change)?
 **What:** while the finger is within 12pt of a lyric line's baseline or top edge (the
 `.lyric-line` and `.chord-line` boxes from `ChordChart.tsx`, measured on pointer-down),
 the mark's y snaps to that edge. A thin tint guide line spans the chart width while
-snapped, and there's a light haptic tick on native when it engages. That needs
-`@capacitor/haptics`, which isn't installed yet: it would be a new dependency, so it's open
-question 4. Moving further than 12pt
-away releases the snap. x is never snapped.
+snapped, and there's a light haptic tick on native when it engages, via
+`@capacitor/haptics` (a new dependency, approved 2026-09-25; no haptic in the browser).
+Moving further than 12pt away releases the snap. x is never snapped.
 
 **Why only y:** chords sit at real character offsets, so snapping x to a chord chip
 would be a separate, riskier feature. Vertical alignment is the part that's hard on a
 phone.
 
-**Toggle:** none. iOS snapping (Freeform, Keynote) is always on, with the guide making
-it visible. If people ask for a way off, it can go in the Annotate `⋯` menu later.
+**Toggle (decided 2026-09-25):** a "Snap to lyrics" switch, on by default, in the
+Text and Notation popovers (where marks are placed), saved in `settings` as
+`annotateSnap` (same schema v5 migration as recents). While off, marks place exactly where
+the finger lifts, with no guide or haptic.
 
 ## 3. Multi-select
 
@@ -78,8 +78,8 @@ extra mode.
 
 The edit sheet (color/size/opacity) still opens only for a single selection.
 
-**Conflict to resolve:** long-press is also proposed for item 4. The proposal is that
-long-press on a single object starts multi-select, and item 4 moves to a repeated tap.
+**Decided (2026-09-25):** long-press on an object starts multi-select, and item 4 uses a
+repeated tap.
 
 ## 4. Reach overlapping marks
 
@@ -121,9 +121,9 @@ Each lands as its own commit so any one can be dropped. Verification for each is
 same as the rest of Annotate: `npm run build`, plus a real-browser pass on the phone
 viewport in both themes, with touch emulation for the gesture items.
 
-## Open questions for review
+## Decisions (2026-09-25, Israel)
 
-1. Recents: persist across launches (schema v5), or session-only?
-2. Is long-press for multi-select and repeat-tap for cycling the right split?
-3. Snap: always on, or a toggle from the start?
-4. Add `@capacitor/haptics` for the snap tick, or leave the snap without haptics?
+1. Recents persist across launches (schema v5).
+2. Long-press starts multi-select; a repeated tap cycles overlapping marks.
+3. Snap to lyric line has an on/off switch, on by default.
+4. Add `@capacitor/haptics` for the snap tick.
