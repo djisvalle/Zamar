@@ -7,7 +7,9 @@ import { Toggle, Segmented } from "../../components/Toggle";
 import { Sheet } from "../../components/Overlays";
 import { Section } from "../../components/List";
 import { Icon } from "../../components/Icon";
+import { KeyChips } from "../../components/KeyChips";
 import { setlistSongCount } from "../../utils/setlistCalc";
+import type { Setlist } from "../../state/types";
 import { ATTACHMENT_LABEL } from "../../utils/attachments";
 import {
   buildChordPro,
@@ -42,14 +44,52 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function Export({ setlistId }: { setlistId: string }) {
+type Direction = "up" | "down";
+
+/** The same key change, moved up or down: +7 and −5 both land a fifth
+ * higher in name, an octave apart in pitch. */
+function towards(semitones: number, direction: Direction): number {
+  const up = ((semitones % 12) + 12) % 12;
+  if (up === 0) return 0;
+  return direction === "up" ? up : up - 12;
+}
+
+/** A one-song export (from a Library row) runs through the same pipeline as
+ * a set, as a one-slot setlist named after the song. The export key rides
+ * on the slot as a key override, so the song's saved key is untouched. */
+function singleSongSet(songId: string, title: string, key: string): Setlist {
+  return {
+    id: `song-${songId}`,
+    name: title,
+    date: "",
+    time: "",
+    description: "",
+    status: "upcoming",
+    sections: [{ id: "s", label: "", items: [{ id: "i", kind: "song", songId, keyOverride: key }] }],
+  };
+}
+
+export function Export({ setlistId, songId }: { setlistId?: string; songId?: string }) {
   const { state } = useStore();
   const nav = useNavigator();
-  const setlist = state.setlists.find((sl) => sl.id === setlistId);
+  const song = songId ? state.songs.find((s) => s.id === songId) : undefined;
+  /** Single-song export only: the key this file is made in. Starts at the
+   * saved key and is never written back to the song. */
+  const [exportKey, setExportKey] = useState(song?.defaultKey ?? "");
+  /** Which way a score moves to reach the export key; null keeps the
+   * default shift. Chords sound the same either way. */
+  const [direction, setDirection] = useState<Direction | null>(null);
+  const setlist = useMemo(
+    () => (song ? singleSongSet(song.id, song.title, exportKey) : state.setlists.find((sl) => sl.id === setlistId)),
+    [song, state.setlists, setlistId, exportKey]
+  );
+  const hasKey = !!song && !!song.defaultKey && song.defaultKey !== "—";
+  const title = song ? "Export song" : "Export set";
   const [format, setFormat] = useState<ExportFormat>("pdf");
   const [includeChords, setIncludeChords] = useState(true);
   const [perSlotKeys, setPerSlotKeys] = useState(true);
   const [onePerPage, setOnePerPage] = useState(false);
+  const [noteNames, setNoteNames] = useState(false);
   const [phase, setPhase] = useState<Phase>("options");
   const [progress, setProgress] = useState<{ label: string; fraction: number }>({ label: "", fraction: 0 });
   const [result, setResult] = useState<ExportedFile | null>(null);
@@ -59,21 +99,26 @@ export function Export({ setlistId }: { setlistId: string }) {
 
   useEffect(() => () => { run.current++; }, []);
 
-  const opts = { includeChords, perSlotKeys, onePerPage };
+  // A single song always takes its export key from the slot.
+  const opts = { includeChords, perSlotKeys: song ? true : perSlotKeys, onePerPage, noteNames };
   const plan = useMemo(
-    () => (setlist ? planExport(setlist, state.songs, format, opts) : []),
+    () => {
+      const planned = setlist ? planExport(setlist, state.songs, format, opts) : [];
+      return song && direction ? planned.map((p) => ({ ...p, semitones: towards(p.semitones, direction) })) : planned;
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage]
+    [setlist, state.songs, format, includeChords, perSlotKeys, onePerPage, noteNames, song, direction]
   );
   const included = plan.filter((p) => p.view);
   const skipped = plan.length - included.length;
+  const hasScores = included.some((p) => p.view === "musicxml");
 
   if (!setlist) {
     return (
       <div className="screen">
-        <Header title="Export set" onBack={nav.pop} />
+        <Header title={title} onBack={nav.pop} />
         <div className="empty">
-          <div className="empty-title">Setlist not found</div>
+          <div className="empty-title">{songId ? "Song not found" : "Setlist not found"}</div>
         </div>
       </div>
     );
@@ -121,7 +166,7 @@ export function Export({ setlistId }: { setlistId: string }) {
   if (phase === "progress") {
     return (
       <div className="screen">
-        <Header title="Export set" onBack={nav.pop} />
+        <Header title={title} onBack={nav.pop} />
         <div className="empty">
           <div className="empty-title">{progress.label}…</div>
           <div style={{ width: "100%", height: 4, background: "var(--fill)", borderRadius: 99, overflow: "hidden" }}>
@@ -147,7 +192,7 @@ export function Export({ setlistId }: { setlistId: string }) {
   if (phase === "error") {
     return (
       <div className="screen screen--grouped">
-        <Header title="Export set" onBack={() => setPhase("options")} backLabel="Export set" />
+        <Header title={title} onBack={() => setPhase("options")} backLabel={title} />
         <div className="ios-list">
           <div className="error-banner" style={{ marginTop: 12 }}>
             <div className="error-banner-title">Couldn't create the {FORMAT_LABEL[format]}</div>
@@ -181,7 +226,7 @@ export function Export({ setlistId }: { setlistId: string }) {
     ].filter(Boolean);
     return (
       <div className="screen screen--grouped">
-        <Header title="Export set" onBack={() => setPhase("options")} backLabel="Export set" />
+        <Header title={title} onBack={() => setPhase("options")} backLabel={title} />
         <div style={{ flex: 1 }} />
         <Sheet onClose={() => setPhase("options")}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -243,10 +288,10 @@ export function Export({ setlistId }: { setlistId: string }) {
   const canExport = included.length > 0;
   return (
     <div className="screen screen--grouped">
-      <Header title="Export set" onBack={nav.pop} />
+      <Header title={title} onBack={nav.pop} />
       <div className="ios-list scroll-under-tabs">
         <div className="row-sub" style={{ padding: "0 16px" }}>
-          {setlist.name} · {setlistSongCount(setlist)} songs
+          {song ? [song.artist, song.defaultKey].filter((v) => v && v !== "—").join(" · ") : `${setlist.name} · ${setlistSongCount(setlist)} songs`}
         </div>
         <div style={{ marginTop: 12 }}>
           <Segmented<ExportFormat>
@@ -259,15 +304,49 @@ export function Export({ setlistId }: { setlistId: string }) {
           footer={
             format === "musicxml"
               ? "Scores are exported as they were imported. Set keys can't be applied inside a MusicXML file."
+              : song
+              ? undefined
               : perSlotKeys
               ? "Slots export in each song's set key."
               : "Songs export in their library key."
           }
         >
           {format !== "musicxml" && <ExportToggle label="Include chords" on={includeChords} onChange={() => setIncludeChords((v) => !v)} />}
-          {format !== "musicxml" && <ExportToggle label="Apply per-slot keys" on={perSlotKeys} onChange={() => setPerSlotKeys((v) => !v)} />}
-          {format === "pdf" && <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />}
+          {format !== "musicxml" && !song && <ExportToggle label="Apply per-slot keys" on={perSlotKeys} onChange={() => setPerSlotKeys((v) => !v)} />}
+          {format === "pdf" && !song && <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />}
+          {format === "pdf" && hasScores && (
+            <ExportToggle label="Note names on noteheads" on={noteNames} onChange={() => setNoteNames((v) => !v)} />
+          )}
         </Section>
+        {song && hasKey && format !== "musicxml" && (
+          <Section
+            header="Key"
+            footer={
+              exportKey === song.defaultKey
+                ? "Exports in the song's saved key."
+                : `This export only. The song stays in ${song.defaultKey}.`
+            }
+          >
+            <div style={{ padding: "8px 0" }}>
+              <KeyChips active={exportKey} onSelect={setExportKey} />
+            </div>
+            {format === "pdf" && hasScores && exportKey !== song.defaultKey && (
+              <div className="sheet-row">
+                <span>Move the score</span>
+                <div style={{ width: 180 }}>
+                  <Segmented<Direction>
+                    options={[
+                      { value: "up", label: "Up" },
+                      { value: "down", label: "Down" },
+                    ]}
+                    value={direction ?? ((plan[0]?.semitones ?? 0) < 0 ? "down" : "up")}
+                    onChange={setDirection}
+                  />
+                </div>
+              </div>
+            )}
+          </Section>
+        )}
         <Section header="In this export" footer={skipped ? SKIP_REASON[format] : undefined}>
           {plan.length === 0 ? (
             <div className="sheet-row">

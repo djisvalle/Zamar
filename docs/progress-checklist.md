@@ -180,9 +180,12 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ### Export
 - [x] Real files (`utils/exportSet.ts`): PDF via pdf-lib (charts, copied PDF attachments,
-      photos, OSMD-engraved scores in the set key), multi-song ChordPro, MusicXML scores as-is
+      photos, OSMD-engraved scores in the set key, optional note names on noteheads), multi-song ChordPro, MusicXML scores as-is
       (zipped when several). Shared through the OS share sheet (`utils/shareFile.ts`,
       Capacitor Share + Filesystem) or downloaded in the browser. Annotations aren't exported.
+- [x] Single-song export from the Library row sheet ("Export…"): the same screen and
+      formats, with a key picker for that export only (starts at the saved key, never saved)
+      and an Up/Down choice for which way a score moves.
 
 ### Settings & visual polish
 - [x] Appearance sub-screen (Light/Stage Dark/Auto), type-`ERASE`-to-confirm reset

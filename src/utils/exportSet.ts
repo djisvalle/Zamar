@@ -3,6 +3,7 @@ import type { AttachmentKind, Setlist, Song } from "../state/types";
 import { keySemitoneShift, parseChordPro, type ChordPosition, type ChordProLine } from "./chordpro";
 import { firstAvailableCategory, selectedVersion } from "./attachments";
 import { flattenSetlist } from "./setlistCalc";
+import bravuraUrl from "../assets/fonts/Bravura.woff2?url";
 
 /** Builds the files Export hands to the share sheet: a PDF songbook, a
  * multi-song ChordPro file, or the set's MusicXML scores. Everything runs
@@ -14,6 +15,9 @@ export interface ExportOptions {
   includeChords: boolean;
   perSlotKeys: boolean;
   onePerPage: boolean;
+  /** PDF only: print each note's letter name inside its notehead on
+   * engraved MusicXML scores. */
+  noteNames: boolean;
 }
 
 /** One song slot of the set and what it will export as. `view` is null when
@@ -160,6 +164,14 @@ export async function buildMusicXml(setlist: Setlist, plan: PlannedSong[], onPro
 // ---------------------------------------------------------------- PDF
 
 const MARGIN = 54;
+/** Scores use narrower side margins than chart text, since notation needs
+ * the width more than the text does. */
+const SCORE_MARGIN = 30;
+/** How much larger than OSMD's default size scores are engraved. Larger
+ * notation means fewer measures per line. */
+const SCORE_ZOOM = 1.2;
+/** Width of the offscreen OSMD host, in CSS px. */
+const SCORE_HOST_PX = 900;
 const INK: [number, number, number] = [0.11, 0.11, 0.12];
 const MUTED: [number, number, number] = [0.45, 0.45, 0.48];
 /** The app's steel-blue accent, so printed chords match what's on stage. */
@@ -310,34 +322,229 @@ async function imageToJpeg(dataUrl: string): Promise<Uint8Array> {
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-/** Places images one per page under the song header, scaled to fit. */
-async function drawImagePages(ctx: PdfCtx, p: PlannedSong, jpegs: Uint8Array[]) {
+/** Places images one per page under the song header, scaled to fit.
+ * `sideMargin` lets scores run wider than the chart text. */
+async function drawImagePages(ctx: PdfCtx, p: PlannedSong, jpegs: Uint8Array[], sideMargin = MARGIN) {
   for (let i = 0; i < jpegs.length; i++) {
     newPage(ctx);
     if (i === 0) songHeader(ctx, p);
     const img = await ctx.doc.embedJpg(jpegs[i]);
-    const maxW = ctx.size[0] - MARGIN * 2;
+    const maxW = ctx.size[0] - sideMargin * 2;
     const maxH = ctx.y - MARGIN;
     const s = Math.min(maxW / img.width, maxH / img.height, 1.5);
     const w = img.width * s;
     const h = img.height * s;
-    ctx.page!.drawImage(img, { x: MARGIN + (maxW - w) / 2, y: ctx.y - h, width: w, height: h });
+    ctx.page!.drawImage(img, { x: sideMargin + (maxW - w) / 2, y: ctx.y - h, width: w, height: h });
   }
   ctx.page = null; // the next song starts on a fresh page
 }
 
 /** Engraves a MusicXML score with OSMD in the slot's key, one SVG per
  * printed page, and rasterizes each page for embedding. */
-async function renderScorePages(dataUrl: string, semitones: number, pageFormat: string): Promise<Uint8Array[]> {
-  const { OpenSheetMusicDisplay, TransposeCalculator } = await import("opensheetmusicdisplay");
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** First codepoint of each SMuFL "note name noteheads" run (Bravura has
+ * them all). Each run goes A♭ A A♯ B♭ B B♯ … G♭ G G♯, three per letter. */
+const NAME_HEAD_BASE = { black: 0xe196, half: 0xe17f, whole: 0xe168 } as const;
+const LETTER_ORDER = ["A", "B", "C", "D", "E", "F", "G"];
+/** Ink width of Bravura's note-name heads, as a fraction of the font size
+ * (measured from the font; every letter of a shape is the same width).
+ * Fixed numbers, so stem placement doesn't depend on when the font has
+ * loaded or on a platform's text measurement. */
+const NAME_HEAD_WIDTH = { black: 0.36, half: 0.375, whole: 0.5 } as const;
+/** Ink height of the note-name heads, as a fraction of the font size. */
+const NAME_HEAD_HEIGHT = 0.314;
+/** Each head's outline as an ellipse (fitted to the glyph, in font-size
+ * units from the glyph origin; angle in degrees). A white copy goes under
+ * the glyph so staff and ledger lines don't show through the letter or a
+ * hollow head, as in MuseScore. */
+const NAME_HEAD_SHAPE = {
+  black: { cx: 0.1763, cy: -0.0019, rx: 0.1901, ry: 0.1261, angle: -26.6 },
+  half: { cx: 0.1796, cy: -0.0015, rx: 0.1913, ry: 0.1333, angle: -26.9 },
+  whole: { cx: 0.2415, cy: 0.0038, rx: 0.246, ry: 0.1466, angle: 0.6 },
+} as const;
+
+/** The SMuFL note-name notehead glyph for a pitch and duration — the same
+ * glyphs MuseScore's "note names" notehead scheme uses. Double sharps and
+ * flats have no glyph of their own and fall back to the plain letter. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function nameHeadGlyph(Pitch: any, pitch: any, kind: keyof typeof NAME_HEAD_BASE): string {
+  const letter: string = Pitch.getNoteEnumString(pitch.FundamentalNote);
+  const shift: number = Pitch.HalfTonesFromAccidental(pitch.Accidental);
+  const acc = shift === 1 ? 2 : shift === -1 ? 0 : 1;
+  return String.fromCodePoint(NAME_HEAD_BASE[kind] + LETTER_ORDER.indexOf(letter) * 3 + acc);
+}
+
+let bravuraCss: Promise<string> | null = null;
+
+/** An @font-face rule carrying Bravura as a data URL. The score is
+ * rasterized by loading its SVG as an image, and an SVG image can't reach
+ * the page's fonts, so the font has to travel inside the SVG itself. */
+function bravuraFontFace(): Promise<string> {
+  bravuraCss ??= (async () => {
+    const bytes = await dataUrlBytes(bravuraUrl);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return `@font-face{font-family:"BravuraExport";src:url(data:font/woff2;base64,${btoa(bin)}) format("woff2");}`;
+  })();
+  return bravuraCss;
+}
+
+/** Swaps each notehead for a notehead with the note's name inside it, like
+ * MuseScore's "note names" notehead scheme: OSMD's own notehead is hidden
+ * and the matching SMuFL note-name glyph from Bravura is drawn in its place
+ * (black, half and whole shapes follow the note's duration). Names follow
+ * the transposed pitch, so they match the set key. OSMD has no built-in for
+ * this; it reads the graphical notes and finds their notehead paths in the
+ * rendered SVG. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function drawNoteNames(osmd: any, Pitch: any, host: HTMLElement) {
+  const css = await bravuraFontFace();
+  for (const svg of Array.from(host.querySelectorAll("svg"))) {
+    const style = document.createElementNS(SVG_NS, "style");
+    style.textContent = css;
+    svg.insertBefore(style, svg.firstChild);
+  }
+  const groups: StemGroup[] = [];
+  for (const row of osmd.GraphicSheet.MeasureList) {
+    for (const measure of row) {
+      if (!measure) continue;
+      for (const entry of measure.staffEntries) {
+        for (const gve of entry.graphicalVoiceEntries) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const notes = gve.notes.filter((n: any) => !n.sourceNote.isRest() && (n.sourceNote.TransposedPitch ?? n.sourceNote.Pitch));
+          if (!notes.length) continue;
+          // One VexFlow note carries every notehead of a chord, so heads
+          // and notes are paired up by pitch order: lowest note, lowest head.
+          const heads: SVGGraphicsElement[] = notes[0].getNoteheadSVGs?.() ?? [];
+          if (heads.length !== notes.length) continue;
+          const svg = heads[0].ownerSVGElement;
+          const ctm = svg?.getScreenCTM()?.inverse();
+          if (!svg || !ctm) continue;
+          const toSvg = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            const a = new DOMPoint(r.left, r.top).matrixTransform(ctm);
+            const b = new DOMPoint(r.right, r.bottom).matrixTransform(ctm);
+            return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+          };
+          const placed = heads.map((el) => ({ el, ...toSvg(el) })).sort((p, q) => q.y - p.y);
+          const stem: SVGGraphicsElement | undefined = notes[0].getStemSVG?.() ?? undefined;
+          // Flags and beams hang off the stem, so they move with it.
+          const attached: Element[] = [notes[0].getFlagSVG?.(), ...(notes[0].getBeamSVGs?.() ?? [])].filter(Boolean);
+          const group: StemGroup = { stem, stemBox: stem ? toSvg(stem) : undefined, attached, heads: placed, glyphs: [] };
+          groups.push(group);
+          const byPitch = [...notes].sort(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (m: any, n: any) => (m.sourceNote.TransposedPitch ?? m.sourceNote.Pitch).getHalfTone() - (n.sourceNote.TransposedPitch ?? n.sourceNote.Pitch).getHalfTone()
+          );
+          byPitch.forEach((gNote, i) => {
+            const head = placed[i];
+            if (!head || head.h <= 0) return;
+            const note = gNote.sourceNote;
+            const len: number = note.Length.RealValue;
+            const kind = len >= 1 ? "whole" : len >= 0.5 ? "half" : "black";
+            // Bravura draws note-name heads about 1.26 staff spaces tall,
+            // bigger than a regular head. They're scaled down to the
+            // regular head's height, as MuseScore does, so they sit inside
+            // their line or space and chord notes don't collide. The
+            // glyph's baseline is the note's own line or space.
+            // Placed by its known ink width rather than text-anchor, which
+            // centres on the advance width and so depends on the font.
+            const size = head.h / NAME_HEAD_HEIGHT;
+            const width = NAME_HEAD_WIDTH[kind] * size;
+            const left = head.x + head.w / 2 - width / 2;
+            const baseline = head.y + head.h / 2;
+            const shape = NAME_HEAD_SHAPE[kind];
+            const cx = left + shape.cx * size;
+            const cy = baseline + shape.cy * size;
+            const mask = document.createElementNS(SVG_NS, "ellipse");
+            mask.setAttribute("cx", String(cx));
+            mask.setAttribute("cy", String(cy));
+            // Just inside the outline, so the white never shows past it.
+            mask.setAttribute("rx", String(shape.rx * size * 0.96));
+            mask.setAttribute("ry", String(shape.ry * size * 0.96));
+            mask.setAttribute("transform", `rotate(${shape.angle} ${cx} ${cy})`);
+            mask.setAttribute("fill", "#fff");
+            svg.appendChild(mask);
+            const text = document.createElementNS(SVG_NS, "text");
+            text.setAttribute("x", String(left));
+            text.setAttribute("y", String(baseline));
+            text.setAttribute("font-family", "BravuraExport");
+            text.setAttribute("font-size", String(size));
+            text.setAttribute("fill", "#000");
+            text.textContent = nameHeadGlyph(Pitch, note.TransposedPitch ?? note.Pitch, kind);
+            head.el.style.visibility = "hidden";
+            svg.appendChild(text);
+            group.glyphs.push({ left, right: left + width });
+          });
+        }
+      }
+    }
+  }
+  reattachStems(groups);
+}
+
+type Box = { x: number; y: number; w: number; h: number };
+interface StemGroup {
+  stem?: SVGGraphicsElement;
+  stemBox?: Box;
+  attached: Element[];
+  heads: (Box & { el: SVGGraphicsElement })[];
+  glyphs: { left: number; right: number }[];
+}
+
+/** Note-name heads are wider than the noteheads OSMD spaced the stems for,
+ * so each stem is slid sideways onto the new heads' edge: the right edge
+ * for an up-stem, the left edge for a down-stem, the way a stem meets a
+ * regular notehead. Without this a stem runs through the middle of an open
+ * (half-note) head. */
+function reattachStems(groups: StemGroup[]) {
+  for (const g of groups) {
+    if (!g.stem || !g.stemBox || !g.glyphs.length) continue;
+    const oldLeft = Math.min(...g.heads.map((h) => h.x));
+    const oldRight = Math.max(...g.heads.map((h) => h.x + h.w));
+    const newLeft = Math.min(...g.glyphs.map((b) => b.left));
+    const newRight = Math.max(...g.glyphs.map((b) => b.right));
+    // An up-stem rises from the heads; a down-stem hangs below them.
+    const headsMidY = g.heads.reduce((sum, h) => sum + h.y + h.h / 2, 0) / g.heads.length;
+    const stemUp = g.stemBox.y + g.stemBox.h / 2 < headsMidY;
+    const dx = stemUp ? newRight - oldRight : newLeft - oldLeft;
+    if (Math.abs(dx) <= 0.01) continue;
+    for (const el of [g.stem, ...g.attached]) el.setAttribute("transform", `translate(${dx} 0)`);
+  }
+}
+
+/** Crops the blank space below the last system, so a page with room to
+ * spare (the first, under the song header, or the last) isn't shrunk to
+ * fit its empty bottom. */
+function trimBottom(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const { width, height } = canvas;
+  const data = canvas.getContext("2d")!.getImageData(0, 0, width, height).data;
+  let last = height - 1;
+  rows: for (; last > 0; last--) {
+    for (let x = 0, i = last * width * 4; x < width; x++, i += 4) if (data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200) break rows;
+  }
+  const h = Math.min(height, last + Math.round(width * 0.02));
+  if (h >= height - 1) return canvas;
+  const out = document.createElement("canvas");
+  out.width = width;
+  out.height = h;
+  out.getContext("2d")!.drawImage(canvas, 0, 0);
+  return out;
+}
+
+/** Engraves a score as JPEG pages. `area` is the PDF space a page of score
+ * fills (points); OSMD's pages take its proportions, and OSMD's own page
+ * margins are kept small since the PDF page already has margins. */
+async function renderScorePages(dataUrl: string, semitones: number, area: { w: number; h: number }, noteNames: boolean): Promise<Uint8Array[]> {
+  const { OpenSheetMusicDisplay, TransposeCalculator, Pitch } = await import("opensheetmusicdisplay");
   const host = document.createElement("div");
-  host.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;background:#fff";
+  host.style.cssText = `position:fixed;left:-10000px;top:0;width:${SCORE_HOST_PX}px;background:#fff`;
   document.body.appendChild(host);
   try {
     const osmd = new OpenSheetMusicDisplay(host, {
       backend: "svg",
       autoResize: false,
-      pageFormat,
       pageBackgroundColor: "#FFFFFF",
       // The song header above the score already carries the title.
       drawTitle: false,
@@ -345,9 +552,24 @@ async function renderScorePages(dataUrl: string, semitones: number, pageFormat: 
       disableCursor: true,
     });
     osmd.TransposeCalculator = new TransposeCalculator();
+    osmd.setCustomPageFormat(area.w, area.h);
+    const rules = osmd.EngravingRules;
+    rules.PageLeftMargin = 2;
+    rules.PageRightMargin = 2;
+    rules.PageTopMargin = 4;
+    rules.PageBottomMargin = 4;
+    // Tighter system spacing than OSMD's default, so the larger notation
+    // still fits a typical song on one page.
+    rules.MinimumDistanceBetweenSystems = 4;
+    rules.MinSkyBottomDistBetweenSystems = 3;
     await osmd.load(await (await fetch(dataUrl)).blob());
+    osmd.Zoom = SCORE_ZOOM;
     osmd.Sheet.Transpose = semitones;
+    // A new Transpose only reaches the notes through updateGraphic(); a bare
+    // render() re-keys the key signature but leaves every note where it was.
+    osmd.updateGraphic();
     osmd.render();
+    if (noteNames) await drawNoteNames(osmd, Pitch, host);
     const out: Uint8Array[] = [];
     for (const svg of Array.from(host.querySelectorAll("svg"))) {
       const w = svg.width.baseVal.value || svg.getBoundingClientRect().width;
@@ -366,7 +588,8 @@ async function renderScorePages(dataUrl: string, semitones: number, pageFormat: 
         g.fillStyle = "#fff";
         g.fillRect(0, 0, canvas.width, canvas.height);
         g.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), "image/jpeg", 0.92));
+        const page = trimBottom(canvas);
+        const blob = await new Promise<Blob>((res, rej) => page.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), "image/jpeg", 0.92));
         out.push(new Uint8Array(await blob.arrayBuffer()));
       } finally {
         URL.revokeObjectURL(url);
@@ -417,8 +640,9 @@ export async function buildPdf(setlist: Setlist, plan: PlannedSong[], opts: Expo
     } else if (p.view === "image") {
       await drawImagePages(ctx, p, [await imageToJpeg(selectedVersion(p.song.attachments.image!).dataUrl)]);
     } else if (p.view === "musicxml") {
-      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, letter ? "Letter_P" : "A4_P");
-      await drawImagePages(ctx, p, pages);
+      const area = { w: ctx.size[0] - SCORE_MARGIN * 2, h: ctx.size[1] - MARGIN * 2 };
+      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, area, opts.noteNames);
+      await drawImagePages(ctx, p, pages, SCORE_MARGIN);
     }
   }
   if (!doc.getPageCount()) newPage(ctx);
