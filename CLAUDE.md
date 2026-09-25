@@ -43,6 +43,8 @@ the tension rather than silently picking one.
 - **`@capacitor-community/sqlite`** on native; **`sql.js` + `jeep-sqlite`** as the
   browser-dev fallback (same repo layer and schema, different engine).
 - **`opensheetmusicdisplay`** renders and re-transposes `.mxl` scores (`MxlScore.tsx`).
+- **`tesseract.js`** (+ `@tesseract.js-data/eng`) for offline OCR on import; **`pdf-lib`** and
+  **`fflate`** build exports; **`@capacitor/share`** + **`@capacitor/filesystem`** share them.
 - **`pdfjs-dist`** renders PDFs page-by-page with pinch-zoom/pan (`PdfPages.tsx`).
 - Plain CSS with custom properties (`src/theme.css`), no Tailwind or CSS-in-JS. Icons are a
   hand-drawn SVG set (`src/components/Icon.tsx`).
@@ -97,21 +99,19 @@ the tension rather than silently picking one.
 | `setlists/` | tab | Upcoming/Past/Templates, run-sheet detail (sections, derived start times, per-slot overrides), Add-to-set sheet, Set-details sheet |
 | `add-edit-song/` | Library "+" / row sheet | one screen for New and Edit; metadata in two compact rows, chord/lyrics editor kept ≥ ~50% of device height, quick-insert chips, Chords/Lyrics + Preview tabs plus one tab per attachment category present, "Import" button |
 | `import/` | Library import FAB / empty state / Add/Edit Song "Import" | real file picker (PDF, photo, MusicXML) in three modes: new song, attach to existing song (PDF/photo only), and in-form (returns to the draft) |
-| `tuner/` | tab | one-time mic-permission sheet, instrument presets with real string frequencies, simulated readings |
+| `tuner/` | tab | one-time mic-permission pre-prompt, live mic pitch detection (`utils/pitch.ts`), instrument presets with Auto string follow |
 | `settings/` | tab | stave spacing, Appearance sub-screen (Light/Stage Dark/Auto, text size), type-`ERASE` reset |
-| `export/` | a setlist's ⋯ menu | format tabs, options, timer-driven progress, share-sheet mock, offline-error variant |
+| `export/` | a setlist's ⋯ menu | format tabs, options, per-song "In this export" list, real PDF/ChordPro/MusicXML files (`utils/exportSet.ts`) handed to the OS share sheet (`utils/shareFile.ts`) |
 
 Shared primitives are in `src/components/`.
 
 ## Deliberately simulated or left out
 
-- **Tuner readings are simulated** (a "Simulate" control; −18 cents flat until tapped).
-  No real mic or pitch detection.
-- **Import conversion is simulated.** Files genuinely upload (`FileReader` → data URL),
-  but "Chords & lyrics" conversion always yields the same canned ChordPro sample, and
-  sheet-vs-chords is declared by the user ("What's in this file?"), not detected.
-  Declaring "Sheet music" is real end-to-end: the file is added as an attachment version.
-- **Export's PDF/MusicXML generation is simulated** (timer-driven progress).
+- **Sheet-vs-chords is declared, not detected.** Import asks "What's in this file?".
+  "Chords & lyrics" conversion is real (`utils/chartImport.ts`: pdf.js text layer, else
+  bundled offline Tesseract OCR), but OCR'd charts usually need touching up.
+- **MusicXML export can't re-key scores.** Scores go out as imported; the PDF export does
+  engrave them in the set key. Annotations aren't exported in any format.
 - **No drag-and-drop reordering** of setlist slots or attachment versions.
 - **One global theme**, not the source's scoped "dark on stage, light elsewhere".
 - **Unwired source micro-states:** ChordPro-parse-error banner, crash-restore onboarding,
@@ -130,6 +130,9 @@ Shared primitives are in `src/components/`.
   `jeep-sqlite` before. Verify `npm run dev` still boots persistence before changing it.
 - **`vite.config.ts` ignores `.playwright-mcp/**`** so browser-automation snapshots don't
   trigger reloads that wipe in-memory state.
+- **Tesseract's model keeps its file name.** `vite.config.ts` emits
+  `eng.traineddata.gz` unhashed under `assets/ocr/`, because Tesseract builds that URL from a
+  folder plus the fixed name. Don't fold it into the hashed asset pattern.
 - **No lint/test tooling.** `npm run build` is the only check; a clean build is the bar.
 
 ## Feature workflow
