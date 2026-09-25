@@ -50,7 +50,7 @@ export function Appearance() {
 
         <Section
           header="Text size"
-          footer="The specimen above is the real stage renderer, so the sample matches the performance view exactly. The Zoom buttons on Live Stage change this same setting."
+          footer="The specimen above is the real stage renderer, so the sample matches the performance view exactly. The Zoom buttons on Live Stage change this same setting. A chord chart with marks on it stays at the size it was marked at."
         >
           <div className="sheet-row" style={{ gap: 12 }}>
             <span aria-hidden style={{ fontSize: 13 }}>

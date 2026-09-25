@@ -176,6 +176,13 @@ export interface Song {
   /** Hand-drawn ink and pins, one layer per view type this song can show.
    * {} when nothing's been placed yet. */
   annotations: Partial<Record<AnnotationView, AnnotationObject[]>>;
+  /** The chart text size (a `settings.textScale` percentage) this song's
+   * chords view was marked at. Chord-chart marks sit at pixel positions over
+   * lyrics that reflow with text size, so while `annotations.chords` has any
+   * marks Live Stage renders the chart at this size instead of the shared
+   * setting. Set by the store when the first chords mark is saved, dropped
+   * when they're all cleared; undefined when the chart has no marks. */
+  chordsTextScale?: number;
 }
 
 export interface SetlistItem {

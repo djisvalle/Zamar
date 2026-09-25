@@ -318,8 +318,9 @@ Things likely to come up, worth checking first:
 
 - **Photo import on iOS.** The photo picker comes from a web `<input type="file"
   accept="image/*">`, which on iOS can offer "Take Photo". Using the camera from an app
-  whose `Info.plist` has no `NSCameraUsageDescription` terminates the app. If "Take Photo"
-  appears and crashes, add that key with a short usage string.
+  whose `Info.plist` has no `NSCameraUsageDescription` terminates the app, so `Info.plist`
+  now carries that key and `NSPhotoLibraryUsageDescription`. Check that "Take Photo" shows
+  the camera permission prompt and that a taken photo imports.
 - **SQLite on iOS.** The `@capacitor-community/sqlite` plugin has never run on iOS in this
   project. Watch the Xcode console on first launch for plugin or database-open errors, and
   confirm the persistence checks in section 7.

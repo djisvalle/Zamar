@@ -84,8 +84,24 @@ export function initialState(): AppState {
   };
 }
 
+/** Keeps `song.chordsTextScale` in step with its chords marks: pinned to
+ * `textScale` (the size the chart is on screen at) when the first mark lands,
+ * kept as-is while marks remain, and dropped once they're all cleared. */
+function lockChordsTextScale(song: Song, textScale: number): Song {
+  const annotated = Boolean(song.annotations.chords?.length);
+  if (annotated && song.chordsTextScale == null) return { ...song, chordsTextScale: textScale };
+  if (!annotated && song.chordsTextScale != null) {
+    const { chordsTextScale: _dropped, ...rest } = song;
+    return rest;
+  }
+  return song;
+}
+
 export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
-  return { songs, setlists, settings, stage: makeEmptyStage(songs), viewport: "ipadAir13" };
+  // Charts marked before the lock existed have no recorded size; the saved
+  // text size is what they're on screen at now, so they're pinned to that.
+  const locked = songs.map((s) => lockChordsTextScale(s, settings.textScale));
+  return { songs: locked, setlists, settings, stage: makeEmptyStage(locked), viewport: "ipadAir13" };
 }
 
 export type Action =
@@ -152,9 +168,11 @@ export function reducer(state: AppState, action: Action): AppState {
         songs: state.songs.map((s) => (s.id === action.songId ? { ...s, favourite: !s.favourite } : s)),
       };
     case "ADD_SONG":
-      return { ...state, songs: [...state.songs, action.song] };
-    case "UPDATE_SONG":
-      return { ...state, songs: state.songs.map((s) => (s.id === action.song.id ? action.song : s)) };
+      return { ...state, songs: [...state.songs, lockChordsTextScale(action.song, state.settings.textScale)] };
+    case "UPDATE_SONG": {
+      const song = lockChordsTextScale(action.song, state.settings.textScale);
+      return { ...state, songs: state.songs.map((s) => (s.id === song.id ? song : s)) };
+    }
     case "DUPLICATE_SONG": {
       const song = state.songs.find((s) => s.id === action.songId);
       if (!song) return state;

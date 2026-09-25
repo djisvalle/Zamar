@@ -141,6 +141,10 @@ export function LiveStage() {
 
   const chordsAnnotated = Boolean(song.annotations.chords?.length);
   const musicxmlAnnotated = Boolean(song.annotations.musicxml?.length);
+  // A marked chord chart stays at the size it was marked at (see
+  // Song.chordsTextScale), so a text-size change elsewhere can't reflow the
+  // lyrics out from under its marks.
+  const chordsTextScale = chordsAnnotated ? song.chordsTextScale ?? state.settings.textScale : state.settings.textScale;
   const persistedAnnotations: AnnotationObject[] = song.annotations[annotationView] ?? [];
   // Reprojection (see AnnotateCanvas's onReproject doc) keeps anchored
   // MusicXML annotations aligned after a transpose even while the Annotate
@@ -212,7 +216,7 @@ export function LiveStage() {
         <ChordChart
           chordpro={song.chordpro}
           semitones={semitones}
-          fontScale={state.settings.textScale / 100}
+          fontScale={chordsTextScale / 100}
           hideChords={stage.lyricsOnly}
         />
       ) : activeKind && activeVersion ? (
