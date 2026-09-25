@@ -62,7 +62,8 @@ screen offers Try again, keeping the file as a PDF or photo, or choosing another
   last system is trimmed.
   "Note names on noteheads" (PDF only, shown when the set has scores) replaces each notehead
   with Bravura's SMuFL note-name notehead for the transposed pitch (black, half or whole
-  shape by duration), the same glyphs MuseScore's note-name scheme uses. Bravura is embedded
+  shape by duration), the same glyphs MuseScore's note-name scheme uses. The glyphs are scaled
+  to a regular notehead's height, as MuseScore does, and stems are moved to their edges. Bravura is embedded
   in each page's SVG as a data URL, since an SVG loaded as an image can't reach page fonts. The
   footer shows the set name and page number. Paper is Letter in US/CA/MX/PH and a few other
   Letter locales, and A4 elsewhere.

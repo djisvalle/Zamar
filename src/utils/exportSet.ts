@@ -352,6 +352,8 @@ const LETTER_ORDER = ["A", "B", "C", "D", "E", "F", "G"];
  * Fixed numbers, so stem placement doesn't depend on when the font has
  * loaded or on a platform's text measurement. */
 const NAME_HEAD_WIDTH = { black: 0.36, half: 0.375, whole: 0.5 } as const;
+/** Ink height of the note-name heads, as a fraction of the font size. */
+const NAME_HEAD_HEIGHT = 0.314;
 
 /** The SMuFL note-name notehead glyph for a pitch and duration — the same
  * glyphs MuseScore's "note names" notehead scheme uses. Double sharps and
@@ -432,12 +434,14 @@ async function drawNoteNames(osmd: any, Pitch: any, host: HTMLElement) {
             const note = gNote.sourceNote;
             const len: number = note.Length.RealValue;
             const kind = len >= 1 ? "whole" : len >= 0.5 ? "half" : "black";
-            // A regular notehead is one staff space tall, and SMuFL sets
-            // 1 em = 4 staff spaces, with the glyph's baseline on the
-            // note's own line or space.
+            // Bravura draws note-name heads about 1.26 staff spaces tall,
+            // bigger than a regular head. They're scaled down to the
+            // regular head's height, as MuseScore does, so they sit inside
+            // their line or space and chord notes don't collide. The
+            // glyph's baseline is the note's own line or space.
             // Placed by its known ink width rather than text-anchor, which
             // centres on the advance width and so depends on the font.
-            const size = head.h * 4;
+            const size = head.h / NAME_HEAD_HEIGHT;
             const width = NAME_HEAD_WIDTH[kind] * size;
             const left = head.x + head.w / 2 - width / 2;
             const text = document.createElementNS(SVG_NS, "text");
