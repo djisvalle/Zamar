@@ -9,6 +9,7 @@ import { PdfPages } from "../../components/PdfPages";
 import { MxlScore } from "../../components/MxlScore";
 import type { AttachmentKind, AttachmentVersion, Attachments, ChartFormat, Song } from "../../state/types";
 import { ATTACHMENT_LABEL, addVersion } from "../../utils/attachments";
+import { NoChartTextError, convertChartFile, type ConvertedChart } from "../../utils/chartImport";
 
 export type ImportMethod = "pdf" | "photo" | "musicxml";
 type Phase = "pick" | "converting" | "review" | "error";
@@ -48,16 +49,6 @@ const METHOD_ACCEPT: Record<ImportMethod, string> = {
   musicxml: ".mxl,.musicxml,.xml",
 };
 
-const CONVERT_STEPS: Record<ImportMethod, string[]> = {
-  pdf: ["Reading pages…", "Detecting chords…", "Finishing up…"],
-  photo: ["Reading photo…", "Detecting chords…", "Finishing up…"],
-  musicxml: ["Reading score…", "Detecting chords…", "Building sheet view…"],
-};
-
-const MOCK_CHORDPRO = `{key: G}
-
-[G]Verse line goes [D]here, edit as [Em]needed to [C]match
-[G]Second line of the [D]imported [Em]chart [C]appears`;
 
 export function ImportSong({ method, target, formDraft }: { method: ImportMethod; target?: ImportTarget; formDraft?: ImportFormDraft }) {
   const { state, dispatch } = useStore();
@@ -74,14 +65,18 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [contentType, setContentType] = useState<ContentType>("chords");
   const [versionLabel, setVersionLabel] = useState("");
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState<{ step: string; fraction: number }>({ step: "", fraction: 0 });
+  const [converted, setConverted] = useState<ConvertedChart | null>(null);
+  const [convertError, setConvertError] = useState<"no-text" | "failed" | null>(null);
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Bumped to abandon an in-flight conversion (Back, unmount) — its result
+   * is ignored if the run it belongs to is no longer current. */
+  const convertRun = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
+  useEffect(() => () => { convertRun.current++; }, []);
 
   const label = METHOD_LABEL[method];
   const canDeclareContent = method !== "musicxml";
@@ -90,6 +85,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   // music — treat it the same as an explicit "Sheet music" declaration.
   const isSheetContent = contentType === "sheet" || !canDeclareContent;
   const willAttach = skipContentDeclaration || (isSheetContent && !!file);
+  const importedChart = converted?.chordpro ?? "";
 
   const buildVersion = (): AttachmentVersion => ({
     id: `att-${Date.now()}`,
@@ -106,27 +102,27 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
     reader.readAsDataURL(picked);
   };
 
-  const startConvert = (forceFail: boolean) => {
-    setProgress(0);
+  const startConvert = () => {
+    if (!file || method === "musicxml") return;
+    const run = ++convertRun.current;
+    setProgress({ step: method === "pdf" ? "Reading pages…" : "Reading photo…", fraction: 0 });
+    setConvertError(null);
     setPhase("converting");
-    const steps = CONVERT_STEPS[method];
-    timer.current = setInterval(() => {
-      setProgress((p) => {
-        const next = p + 1;
-        if (forceFail && next >= 2) {
-          if (timer.current) clearInterval(timer.current);
-          setPhase("error");
-          return next;
-        }
-        if (next >= steps.length) {
-          if (timer.current) clearInterval(timer.current);
-          setTitle(method === "musicxml" ? "Imported Score" : method === "pdf" ? "Imported Chart" : "Scanned Chart");
-          setPhase("review");
-          return next;
-        }
-        return next;
+    convertChartFile(file.dataUrl, method, (step, fraction) => {
+      if (run === convertRun.current) setProgress({ step, fraction });
+    })
+      .then((chart) => {
+        if (run !== convertRun.current) return;
+        setConverted(chart);
+        setTitle(chart.title || file.name.replace(/\.[^.]+$/, "") || "Untitled import");
+        setArtist(chart.artist ?? "");
+        setPhase("review");
+      })
+      .catch((err: unknown) => {
+        if (run !== convertRun.current) return;
+        setConvertError(err instanceof NoChartTextError ? "no-text" : "failed");
+        setPhase("error");
       });
-    }, 500);
   };
 
   const goToReview = () => {
@@ -140,14 +136,14 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       id: `song-${Date.now()}`,
       title: title.trim() || "Untitled import",
       artist: artist.trim() || "Unknown",
-      defaultKey: willAttach ? "—" : "G",
-      tempo: 80,
-      timeSig: "4/4",
+      defaultKey: willAttach ? "—" : converted?.key ?? "C",
+      tempo: willAttach ? 80 : converted?.tempo ?? 80,
+      timeSig: willAttach ? "4/4" : converted?.timeSig ?? "4/4",
       durationSec: 240,
       favourite: false,
       source: method === "musicxml" ? "musicxml" : "imported-pdf",
-      chordpro: willAttach ? "" : MOCK_CHORDPRO,
-      chartFormat: "chordpro",
+      chordpro: willAttach ? "" : importedChart,
+      chartFormat: willAttach ? "chordpro" : converted?.chartFormat ?? "chords-over-lyrics",
       attachments,
       notes: "",
       annotations: {},
@@ -171,12 +167,14 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
     // clears prior attachments, and attaching a file only adds a version to
     // its own category, never disturbing the others.
     const attachments = willAttach ? addVersion(formDraft?.attachments ?? {}, attachmentKind, buildVersion()) : formDraft?.attachments ?? {};
-    const chordpro = willAttach ? formDraft?.chordpro ?? "" : MOCK_CHORDPRO;
-    const chartFormat = willAttach ? formDraft?.chartFormat ?? "chords-over-lyrics" : ("chordpro" as ChartFormat);
+    const chordpro = willAttach ? formDraft?.chordpro ?? "" : importedChart;
+    const chartFormat: ChartFormat = willAttach ? formDraft?.chartFormat ?? "chords-over-lyrics" : converted?.chartFormat ?? "chords-over-lyrics";
     nav.replace("add-edit-song", {
       songId: formDraft?.songId,
-      prefillTitle: formDraft?.title,
-      prefillArtist: formDraft?.artist,
+      // A converted chart's header fills in a title/artist the form doesn't
+      // have yet, but never overwrites what the person already typed.
+      prefillTitle: formDraft?.title || (willAttach ? undefined : converted?.title),
+      prefillArtist: formDraft?.artist || (willAttach ? undefined : converted?.artist),
       prefillTempo: formDraft?.tempo,
       prefillTimeSig: formDraft?.timeSig,
       prefillManualKey: formDraft?.manualKey,
@@ -208,26 +206,24 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   };
 
   if (phase === "converting") {
-    const steps = CONVERT_STEPS[method];
-    const stepIdx = Math.min(progress, steps.length - 1);
     return (
       <div className="screen">
         <Header
           title={label}
           onBack={() => {
-            if (timer.current) clearInterval(timer.current);
+            convertRun.current++;
             setPhase("pick");
           }}
           backLabel="Back"
         />
         <div className="empty">
           <div className="empty-title" style={{ fontSize: 16 }}>
-            {steps[stepIdx]}
+            {progress.step}
           </div>
           <div style={{ width: "100%", height: 4, background: "var(--line)", borderRadius: 99 }}>
             <div
               style={{
-                width: `${(progress / steps.length) * 100}%`,
+                width: `${Math.round(progress.fraction * 100)}%`,
                 height: 4,
                 background: "var(--acc)",
                 borderRadius: 99,
@@ -247,18 +243,27 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
         <Header title={label} onBack={() => setPhase("pick")} backLabel="Back" />
         <div style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
           <div className="error-banner">
-            <div className="error-banner-title">Couldn't read this file</div>
+            <div className="error-banner-title">{convertError === "no-text" ? "No chords or lyrics found" : "Couldn't read this file"}</div>
             <div>
-              {method === "musicxml"
-                ? "The score uses notation this app doesn't recognize yet."
-                : method === "pdf"
-                ? "The scan was too blurry to detect chords and lyrics reliably."
-                : "The photo was too dark or angled to read clearly."}
+              {convertError === "no-text"
+                ? method === "pdf"
+                  ? "This PDF has no readable text. If it's sheet music, keep it as-is instead."
+                  : "The photo may be too dark, blurry or angled to read. Try a straight-on, well-lit photo, or keep it as-is."
+                : "Something went wrong while reading it. Try again, or keep the file as-is."}
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            <button className="btn btn-primary" onClick={() => startConvert(false)}>
+            <button className="btn btn-primary" onClick={startConvert}>
               Try again
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                setContentType("sheet");
+                goToReview();
+              }}
+            >
+              Keep it as {method === "pdf" ? "a PDF" : "a photo"}
             </button>
             <button className="btn" onClick={() => setPhase("pick")}>
               Choose a different file
@@ -290,7 +295,11 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             </div>
           ) : (
             <div className="muted" style={{ fontSize: 11 }}>
-              {willAttach ? `Attached from ${file?.name} — saved as-is, no chords detected.` : `Converted from ${file?.name} — check the details below before saving.`}
+              {willAttach
+                ? `Attached from ${file?.name} — saved as-is, no chords detected.`
+                : converted?.fromOcr
+                ? `Read from ${file?.name} with text recognition — check the chords and their spacing before saving.`
+                : `Converted from ${file?.name} — check the details below before saving.`}
             </div>
           )}
 
@@ -322,9 +331,13 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
           ) : (
             <>
               <div style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, fontSize: 13 }}>
-                <ChordChart chordpro={MOCK_CHORDPRO} />
+                <ChordChart chordpro={importedChart} />
               </div>
-              {!isForm && <div className="field-hint">Detected key: G — fine-tune the chart afterward from the song's Library menu → Edit chart.</div>}
+              {!isForm && (
+                <div className="field-hint">
+                  {converted?.key ? `Detected key: ${converted.key}. ` : ""}Fine-tune the chart afterward from the song's Library menu → Edit chart.
+                </div>
+              )}
             </>
           )}
         </div>
@@ -416,7 +429,7 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
                 if (skipContentDeclaration || isSheetContent) {
                   goToReview();
                 } else {
-                  startConvert(false);
+                  startConvert();
                 }
               }}
             >
@@ -424,15 +437,6 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
             </button>
           )}
         </div>
-        {file && !skipContentDeclaration && !isSheetContent && (
-          <button
-            className="muted"
-            style={{ background: "none", border: "none", fontSize: 11, textDecoration: "underline" }}
-            onClick={() => startConvert(true)}
-          >
-            Simulate a failed scan
-          </button>
-        )}
       </div>
     </div>
   );
