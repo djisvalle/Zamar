@@ -566,7 +566,6 @@ async function renderScorePages(
       disableCursor: true,
     });
     const transposer = new KeyAwareTransposeCalculator(osmdModule);
-    transposer.targetKey = targetKey;
     osmd.TransposeCalculator = transposer;
     osmd.setCustomPageFormat(area.w, area.h);
     const rules = osmd.EngravingRules;
@@ -580,7 +579,7 @@ async function renderScorePages(
     rules.MinSkyBottomDistBetweenSystems = 3;
     await osmd.load(await (await fetch(dataUrl)).blob());
     osmd.Zoom = SCORE_ZOOM;
-    osmd.Sheet.Transpose = semitones;
+    transposer.apply(osmd.Sheet, semitones, targetKey);
     // A new Transpose only reaches the notes through updateGraphic(); a bare
     // render() re-keys the key signature but leaves every note where it was.
     osmd.updateGraphic();
