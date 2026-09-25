@@ -157,13 +157,13 @@ export function StageToolsSheet({
               glyph="－"
               label="Zoom−"
               disabled={chordsLocked}
-              onClick={() => dispatch({ type: "STAGE_SET_ZOOM", zoom: stage.zoom - 10 })}
+              onClick={() => dispatch({ type: "SET_TEXT_SCALE", value: state.settings.textScale - 10 })}
             />
             <ToolIcon
               glyph="＋"
               label="Zoom+"
               disabled={chordsLocked}
-              onClick={() => dispatch({ type: "STAGE_SET_ZOOM", zoom: stage.zoom + 10 })}
+              onClick={() => dispatch({ type: "SET_TEXT_SCALE", value: state.settings.textScale + 10 })}
             />
           </div>
           {chordsLocked && (

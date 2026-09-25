@@ -37,12 +37,10 @@ const defaultSong = seedSongs.find((s) => s.id === DEFAULT_SONG_ID);
 /** The Live Stage screen's "nothing else going on" resting state — used on
  * first boot and whenever a live setlist is exited. Rather than a stark
  * "no song on stage" blank, it lands on a standing default song so the app
- * never opens to a truly empty screen. `zoom` starts from the persisted
- * `settings.textScale` (set in Settings > Appearance) so that setting
- * actually determines the size a chart opens at; the toolbar's live +/-
- * buttons then adjust `stage.zoom` for the rest of that session only,
- * same as the rest of `stage` (see "Single global reducer" in CLAUDE.md). */
-export function makeEmptyStage(textScale: number, songs: Song[] = seedSongs): StageState {
+ * never opens to a truly empty screen. Chart text size isn't part of
+ * `stage`: it's the persisted `settings.textScale`, which Settings >
+ * Appearance and the stage's Zoom +/- buttons both change. */
+export function makeEmptyStage(songs: Song[] = seedSongs): StageState {
   const song = songs.find((s) => s.id === DEFAULT_SONG_ID) ?? defaultSong;
   return {
     songId: song ? DEFAULT_SONG_ID : null,
@@ -53,11 +51,16 @@ export function makeEmptyStage(textScale: number, songs: Song[] = seedSongs): St
     drawer: null,
     chromeHidden: false,
     lyricsOnly: false,
-    zoom: textScale,
   };
 }
 
 const DEFAULT_TEXT_SCALE = 100;
+export const MIN_TEXT_SCALE = 70;
+export const MAX_TEXT_SCALE = 160;
+
+function clampTextScale(value: number): number {
+  return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, value));
+}
 
 export function initialState(): AppState {
   return {
@@ -70,13 +73,13 @@ export function initialState(): AppState {
       micPermissionAsked: false,
       staveSpacing: "default",
     },
-    stage: makeEmptyStage(DEFAULT_TEXT_SCALE),
+    stage: makeEmptyStage(),
     viewport: "ipadAir13",
   };
 }
 
 export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
-  return { songs, setlists, settings, stage: makeEmptyStage(settings.textScale, songs), viewport: "ipadAir13" };
+  return { songs, setlists, settings, stage: makeEmptyStage(songs), viewport: "ipadAir13" };
 }
 
 export type Action =
@@ -109,7 +112,6 @@ export type Action =
   | { type: "STAGE_SET_KEY"; key: string }
   | { type: "STAGE_OPEN_DRAWER"; drawer: StageState["drawer"] }
   | { type: "STAGE_TOGGLE_LYRICS_ONLY" }
-  | { type: "STAGE_SET_ZOOM"; zoom: number }
   | { type: "STAGE_SET_CHROME_HIDDEN"; hidden: boolean }
   | { type: "STAGE_ADVANCE" }
   | { type: "STAGE_EXIT" };
@@ -127,7 +129,7 @@ export function reducer(state: AppState, action: Action): AppState {
     case "SET_VIEWPORT":
       return { ...state, viewport: action.viewport };
     case "SET_TEXT_SCALE":
-      return { ...state, settings: { ...state.settings, textScale: action.value } };
+      return { ...state, settings: { ...state.settings, textScale: clampTextScale(action.value) } };
     case "SET_MIC_ASKED":
       return { ...state, settings: { ...state.settings, micPermissionAsked: true } };
     case "SET_STAVE_SPACING":
@@ -163,7 +165,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         setlists: state.setlists.filter((sl) => sl.id !== action.setlistId),
-        stage: state.stage.setlistId === action.setlistId ? makeEmptyStage(state.settings.textScale, state.songs) : state.stage,
+        stage: state.stage.setlistId === action.setlistId ? makeEmptyStage(state.songs) : state.stage,
       };
     case "ADD_SECTION":
       return {
@@ -298,7 +300,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         stage: {
-          ...makeEmptyStage(state.settings.textScale),
+          ...makeEmptyStage(),
           songId: action.songId,
           setlistId: action.setlistId ?? null,
           setlistIndex: action.setlistIndex ?? 0,
@@ -315,8 +317,6 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, stage: { ...state.stage, drawer: action.drawer } };
     case "STAGE_TOGGLE_LYRICS_ONLY":
       return { ...state, stage: { ...state.stage, lyricsOnly: !state.stage.lyricsOnly } };
-    case "STAGE_SET_ZOOM":
-      return { ...state, stage: { ...state.stage, zoom: Math.min(160, Math.max(70, action.zoom)) } };
     case "STAGE_SET_CHROME_HIDDEN":
       return { ...state, stage: { ...state.stage, chromeHidden: action.hidden } };
     case "STAGE_ADVANCE": {
@@ -338,7 +338,7 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
     case "STAGE_EXIT":
-      return { ...state, stage: makeEmptyStage(state.settings.textScale, state.songs) };
+      return { ...state, stage: makeEmptyStage(state.songs) };
     default:
       return state;
   }

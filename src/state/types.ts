@@ -215,7 +215,6 @@ export interface StageState {
   drawer: Drawer;
   chromeHidden: boolean;
   lyricsOnly: boolean;
-  zoom: number;
 }
 
 export type ThemeMode = "light" | "dark";
