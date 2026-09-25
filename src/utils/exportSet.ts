@@ -380,6 +380,7 @@ async function drawNoteNames(osmd: any, Pitch: any, host: HTMLElement) {
     style.textContent = css;
     svg.insertBefore(style, svg.firstChild);
   }
+  const groups: StemGroup[] = [];
   for (const row of osmd.GraphicSheet.MeasureList) {
     for (const measure of row) {
       if (!measure) continue;
@@ -395,14 +396,18 @@ async function drawNoteNames(osmd: any, Pitch: any, host: HTMLElement) {
           const svg = heads[0].ownerSVGElement;
           const ctm = svg?.getScreenCTM()?.inverse();
           if (!svg || !ctm) continue;
-          const placed = heads
-            .map((el) => {
-              const r = el.getBoundingClientRect();
-              const a = new DOMPoint(r.left, r.top).matrixTransform(ctm);
-              const b = new DOMPoint(r.right, r.bottom).matrixTransform(ctm);
-              return { el, x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-            })
-            .sort((p, q) => q.y - p.y);
+          const toSvg = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            const a = new DOMPoint(r.left, r.top).matrixTransform(ctm);
+            const b = new DOMPoint(r.right, r.bottom).matrixTransform(ctm);
+            return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+          };
+          const placed = heads.map((el) => ({ el, ...toSvg(el) })).sort((p, q) => q.y - p.y);
+          const stem: SVGGraphicsElement | undefined = notes[0].getStemSVG?.() ?? undefined;
+          // Flags and beams hang off the stem, so they move with it.
+          const attached: Element[] = [notes[0].getFlagSVG?.(), ...(notes[0].getBeamSVGs?.() ?? [])].filter(Boolean);
+          const group: StemGroup = { stem, stemBox: stem ? toSvg(stem) : undefined, attached, heads: placed, glyphs: [] };
+          groups.push(group);
           const byPitch = [...notes].sort(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (m: any, n: any) => (m.sourceNote.TransposedPitch ?? m.sourceNote.Pitch).getHalfTone() - (n.sourceNote.TransposedPitch ?? n.sourceNote.Pitch).getHalfTone()
@@ -426,10 +431,48 @@ async function drawNoteNames(osmd: any, Pitch: any, host: HTMLElement) {
             text.textContent = nameHeadGlyph(Pitch, note.TransposedPitch ?? note.Pitch, kind);
             head.el.style.visibility = "hidden";
             svg.appendChild(text);
+            group.glyphs.push(text);
           });
         }
       }
     }
+  }
+  await reattachStems(groups);
+}
+
+type Box = { x: number; y: number; w: number; h: number };
+interface StemGroup {
+  stem?: SVGGraphicsElement;
+  stemBox?: Box;
+  attached: Element[];
+  heads: (Box & { el: SVGGraphicsElement })[];
+  glyphs: SVGTextElement[];
+}
+
+/** Note-name heads are wider than the noteheads OSMD spaced the stems for,
+ * so each stem is slid sideways onto the new heads' edge: the right edge
+ * for an up-stem, the left edge for a down-stem, the way a stem meets a
+ * regular notehead. Without this a stem runs through the middle of an open
+ * (half-note) head. The glyphs are measured once Bravura has loaded, since
+ * their width comes from the font. */
+async function reattachStems(groups: StemGroup[]) {
+  const sample = groups.find((g) => g.glyphs.length);
+  if (!sample) return;
+  const size = sample.glyphs[0].getAttribute("font-size") ?? "40";
+  await document.fonts.load(`${size}px BravuraExport`, sample.glyphs[0].textContent ?? "").catch(() => {});
+  for (const g of groups) {
+    if (!g.stem || !g.stemBox || !g.glyphs.length) continue;
+    const boxes = g.glyphs.map((t) => t.getBBox());
+    const oldLeft = Math.min(...g.heads.map((h) => h.x));
+    const oldRight = Math.max(...g.heads.map((h) => h.x + h.w));
+    const newLeft = Math.min(...boxes.map((b) => b.x));
+    const newRight = Math.max(...boxes.map((b) => b.x + b.width));
+    // An up-stem rises from the heads; a down-stem hangs below them.
+    const headsMidY = g.heads.reduce((sum, h) => sum + h.y + h.h / 2, 0) / g.heads.length;
+    const stemUp = g.stemBox.y + g.stemBox.h / 2 < headsMidY;
+    const dx = stemUp ? newRight - oldRight : newLeft - oldLeft;
+    if (Math.abs(dx) <= 0.01) continue;
+    for (const el of [g.stem, ...g.attached]) el.setAttribute("transform", `translate(${dx} 0)`);
   }
 }
 
