@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useReducer, useRef, type Dispatch, type ReactNode, createElement } from "react";
-import type { Setlist, SetlistItem, Settings, Song, StageState, StaveSpacing, ThemeMode, Viewport } from "./types";
+import { createContext, useContext, useEffect, useReducer, useRef, useState, type Dispatch, type ReactNode, createElement } from "react";
+import type { AnnotateRecents, Setlist, SetlistItem, Settings, Song, StageState, StaveSpacing, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
 import * as songsRepo from "../data/songsRepo";
 import * as setlistsRepo from "../data/setlistsRepo";
@@ -37,12 +37,10 @@ const defaultSong = seedSongs.find((s) => s.id === DEFAULT_SONG_ID);
 /** The Live Stage screen's "nothing else going on" resting state — used on
  * first boot and whenever a live setlist is exited. Rather than a stark
  * "no song on stage" blank, it lands on a standing default song so the app
- * never opens to a truly empty screen. `zoom` starts from the persisted
- * `settings.textScale` (set in Settings > Appearance) so that setting
- * actually determines the size a chart opens at; the toolbar's live +/-
- * buttons then adjust `stage.zoom` for the rest of that session only,
- * same as the rest of `stage` (see "Single global reducer" in CLAUDE.md). */
-export function makeEmptyStage(textScale: number, songs: Song[] = seedSongs): StageState {
+ * never opens to a truly empty screen. Chart text size isn't part of
+ * `stage`: it's the persisted `settings.textScale`, which Settings >
+ * Appearance and the stage's Zoom +/- buttons both change. */
+export function makeEmptyStage(songs: Song[] = seedSongs): StageState {
   const song = songs.find((s) => s.id === DEFAULT_SONG_ID) ?? defaultSong;
   return {
     songId: song ? DEFAULT_SONG_ID : null,
@@ -53,11 +51,20 @@ export function makeEmptyStage(textScale: number, songs: Song[] = seedSongs): St
     drawer: null,
     chromeHidden: false,
     lyricsOnly: false,
-    zoom: textScale,
   };
 }
 
 const DEFAULT_TEXT_SCALE = 100;
+export const MIN_TEXT_SCALE = 70;
+export const MAX_TEXT_SCALE = 160;
+
+export function emptyRecents(): AnnotateRecents {
+  return { pen: [], highlighter: [], text: [], shapes: [], notation: [] };
+}
+
+function clampTextScale(value: number): number {
+  return Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, value));
+}
 
 export function initialState(): AppState {
   return {
@@ -69,14 +76,16 @@ export function initialState(): AppState {
       hasSeeded: false,
       micPermissionAsked: false,
       staveSpacing: "default",
+      annotateRecents: emptyRecents(),
+      annotateSnap: true,
     },
-    stage: makeEmptyStage(DEFAULT_TEXT_SCALE),
+    stage: makeEmptyStage(),
     viewport: "ipadAir13",
   };
 }
 
 export function hydrateState(songs: Song[], setlists: Setlist[], settings: Settings): AppState {
-  return { songs, setlists, settings, stage: makeEmptyStage(settings.textScale, songs), viewport: "ipadAir13" };
+  return { songs, setlists, settings, stage: makeEmptyStage(songs), viewport: "ipadAir13" };
 }
 
 export type Action =
@@ -84,6 +93,8 @@ export type Action =
   | { type: "SET_THEME"; theme: ThemeMode }
   | { type: "SET_VIEWPORT"; viewport: Viewport }
   | { type: "SET_TEXT_SCALE"; value: number }
+  | { type: "SET_ANNOTATE_RECENTS"; recents: AnnotateRecents }
+  | { type: "SET_ANNOTATE_SNAP"; value: boolean }
   | { type: "SET_MIC_ASKED" }
   | { type: "SET_STAVE_SPACING"; spacing: StaveSpacing }
   | { type: "TOGGLE_FAVOURITE"; songId: string }
@@ -101,13 +112,14 @@ export type Action =
   | { type: "REMOVE_ITEM"; setlistId: string; itemId: string }
   | { type: "UPDATE_ITEM"; setlistId: string; itemId: string; patch: Partial<SetlistItem> }
   | { type: "DUPLICATE_ITEM"; setlistId: string; itemId: string }
-  | { type: "MOVE_ITEM"; setlistId: string; itemId: string; toSectionId: string }
+  /** Moves an item to another section (appended) or, with `toIndex`, to that
+   * position in `toSectionId` counted without the item itself — drag-to-reorder. */
+  | { type: "MOVE_ITEM"; setlistId: string; itemId: string; toSectionId: string; toIndex?: number }
   | { type: "STAGE_LOAD"; songId: string; setlistId?: string | null; setlistIndex?: number }
   | { type: "STAGE_SET_VIEW"; view: StageState["view"] }
   | { type: "STAGE_SET_KEY"; key: string }
   | { type: "STAGE_OPEN_DRAWER"; drawer: StageState["drawer"] }
   | { type: "STAGE_TOGGLE_LYRICS_ONLY" }
-  | { type: "STAGE_SET_ZOOM"; zoom: number }
   | { type: "STAGE_SET_CHROME_HIDDEN"; hidden: boolean }
   | { type: "STAGE_ADVANCE" }
   | { type: "STAGE_EXIT" };
@@ -125,7 +137,11 @@ export function reducer(state: AppState, action: Action): AppState {
     case "SET_VIEWPORT":
       return { ...state, viewport: action.viewport };
     case "SET_TEXT_SCALE":
-      return { ...state, settings: { ...state.settings, textScale: action.value } };
+      return { ...state, settings: { ...state.settings, textScale: clampTextScale(action.value) } };
+    case "SET_ANNOTATE_RECENTS":
+      return { ...state, settings: { ...state.settings, annotateRecents: action.recents } };
+    case "SET_ANNOTATE_SNAP":
+      return { ...state, settings: { ...state.settings, annotateSnap: action.value } };
     case "SET_MIC_ASKED":
       return { ...state, settings: { ...state.settings, micPermissionAsked: true } };
     case "SET_STAVE_SPACING":
@@ -161,7 +177,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         setlists: state.setlists.filter((sl) => sl.id !== action.setlistId),
-        stage: state.stage.setlistId === action.setlistId ? makeEmptyStage(state.settings.textScale, state.songs) : state.stage,
+        stage: state.stage.setlistId === action.setlistId ? makeEmptyStage(state.songs) : state.stage,
       };
     case "ADD_SECTION":
       return {
@@ -253,24 +269,35 @@ export function reducer(state: AppState, action: Action): AppState {
         }),
       };
     case "MOVE_ITEM": {
-      return {
-        ...state,
-        setlists: state.setlists.map((sl) => {
-          if (sl.id !== action.setlistId) return sl;
-          let moved: SetlistItem | undefined;
-          const withoutItem = sl.sections.map((sec) => {
-            const idx = sec.items.findIndex((i) => i.id === action.itemId);
-            if (idx === -1) return sec;
-            moved = sec.items[idx];
-            return { ...sec, items: sec.items.filter((i) => i.id !== action.itemId) };
-          });
-          if (!moved) return sl;
-          return {
-            ...sl,
-            sections: withoutItem.map((sec) => (sec.id === action.toSectionId ? { ...sec, items: [...sec.items, moved!] } : sec)),
-          };
+      const setlist = state.setlists.find((sl) => sl.id === action.setlistId);
+      if (!setlist) return state;
+      let moved: SetlistItem | undefined;
+      const withoutItem = setlist.sections.map((sec) => {
+        const idx = sec.items.findIndex((i) => i.id === action.itemId);
+        if (idx === -1) return sec;
+        moved = sec.items[idx];
+        return { ...sec, items: sec.items.filter((i) => i.id !== action.itemId) };
+      });
+      if (!moved) return state;
+      const next: Setlist = {
+        ...setlist,
+        sections: withoutItem.map((sec) => {
+          if (sec.id !== action.toSectionId) return sec;
+          const items = [...sec.items];
+          items.splice(Math.max(0, Math.min(action.toIndex ?? items.length, items.length)), 0, moved!);
+          return { ...sec, items };
         }),
       };
+      // If this set is live on stage, keep the stage on the same slot rather
+      // than whatever slot now sits at the old position.
+      let stage = state.stage;
+      if (stage.setlistId === setlist.id) {
+        const songSlots = (sl: Setlist) => sl.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song"));
+        const current = songSlots(setlist)[stage.setlistIndex];
+        const newIndex = current ? songSlots(next).findIndex((i) => i.id === current.id) : -1;
+        if (newIndex >= 0) stage = { ...stage, setlistIndex: newIndex };
+      }
+      return { ...state, stage, setlists: state.setlists.map((sl) => (sl.id === setlist.id ? next : sl)) };
     }
     case "STAGE_LOAD": {
       const setlist = action.setlistId ? state.setlists.find((sl) => sl.id === action.setlistId) : null;
@@ -285,7 +312,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         stage: {
-          ...makeEmptyStage(state.settings.textScale),
+          ...makeEmptyStage(),
           songId: action.songId,
           setlistId: action.setlistId ?? null,
           setlistIndex: action.setlistIndex ?? 0,
@@ -302,8 +329,6 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, stage: { ...state.stage, drawer: action.drawer } };
     case "STAGE_TOGGLE_LYRICS_ONLY":
       return { ...state, stage: { ...state.stage, lyricsOnly: !state.stage.lyricsOnly } };
-    case "STAGE_SET_ZOOM":
-      return { ...state, stage: { ...state.stage, zoom: Math.min(160, Math.max(70, action.zoom)) } };
     case "STAGE_SET_CHROME_HIDDEN":
       return { ...state, stage: { ...state.stage, chromeHidden: action.hidden } };
     case "STAGE_ADVANCE": {
@@ -325,15 +350,20 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
     case "STAGE_EXIT":
-      return { ...state, stage: makeEmptyStage(state.settings.textScale, state.songs) };
+      return { ...state, stage: makeEmptyStage(state.songs) };
     default:
       return state;
   }
 }
 
+/** Why changes aren't reaching disk, if they aren't: `load` when the boot read failed and
+ * persistence was switched off for the session, `write` when a save attempt threw. */
+export type StorageProblem = "load" | "write" | null;
+
 interface StoreContextValue {
   state: AppState;
   dispatch: Dispatch<Action>;
+  storageProblem: StorageProblem;
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -352,6 +382,7 @@ export function StoreProvider({
   persistEnabled?: boolean;
 }) {
   const [state, dispatch] = useReducer(reducer, initial);
+  const [storageProblem, setStorageProblem] = useState<StorageProblem>(persistEnabled ? null : "load");
 
   const firstRun = useRef(true);
   const persistGen = useRef(0);
@@ -394,19 +425,23 @@ export function StoreProvider({
           ]);
         } catch (err) {
           console.warn("Zamar: failed to persist songs/setlists/settings", err);
+          if (persistGen.current === mine) setStorageProblem("write");
+          return;
         }
         if (persistGen.current !== mine) return;
         try {
           await persist();
+          setStorageProblem((p) => (p === "write" ? null : p));
         } catch (err) {
           console.warn("Zamar: failed to flush persisted state to web store", err);
+          if (persistGen.current === mine) setStorageProblem("write");
         }
       })();
     }, 250);
     return () => clearTimeout(t);
   }, [state.songs, state.setlists, state.settings, persistEnabled]);
 
-  return createElement(StoreContext.Provider, { value: { state, dispatch } }, children);
+  return createElement(StoreContext.Provider, { value: { state, dispatch, storageProblem } }, children);
 }
 
 export function useStore(): StoreContextValue {

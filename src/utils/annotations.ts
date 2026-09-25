@@ -1,4 +1,4 @@
-import type { AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
+import type { AnnotateRecents, AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
 
 export const STROKE_WIDTH = 3;
 export const ERASE_RADIUS = 14;
@@ -134,6 +134,52 @@ function strokeSegments(stroke: Stroke): [Point, Point][] {
   return segments;
 }
 
+/** How far (CSS px at the content's natural size) a simplified pen or
+ * highlighter stroke may stray from what was drawn — below what the eye
+ * can see at any stroke width the tools offer. */
+export const STROKE_SIMPLIFY_TOLERANCE = 0.75;
+
+/** Indices of the points Ramer-Douglas-Peucker keeps at `tolerance`, in
+ * order. The first and last points are always kept. */
+export function simplifyIndices(points: Point[], tolerance: number = STROKE_SIMPLIFY_TOLERANCE): number[] {
+  if (points.length <= 2) return points.map((_, i) => i);
+  const keep = new Array<boolean>(points.length).fill(false);
+  keep[0] = keep[points.length - 1] = true;
+  const stack: [number, number][] = [[0, points.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    let worst = -1;
+    let worstDist = 0;
+    for (let i = a + 1; i < b; i++) {
+      const d = distanceToSegment(points[i], points[a], points[b]);
+      if (d > worstDist) {
+        worstDist = d;
+        worst = i;
+      }
+    }
+    if (worst !== -1 && worstDist > tolerance) {
+      keep[worst] = true;
+      stack.push([a, worst], [worst, b]);
+    }
+  }
+  return keep.flatMap((k, i) => (k ? [i] : []));
+}
+
+/** Drops the raw pointer samples a finished pen/highlighter stroke doesn't
+ * need, keeping `anchors` parallel to `points`. Square strokes (two corner
+ * points) come back unchanged. */
+export function simplifyStroke(stroke: Stroke): Stroke {
+  if (stroke.tool === "square") return stroke;
+  const kept = simplifyIndices(stroke.points);
+  if (kept.length === stroke.points.length) return stroke;
+  return {
+    ...stroke,
+    points: kept.map((i) => stroke.points[i]),
+    anchors: stroke.anchors ? kept.map((i) => stroke.anchors![i]) : undefined,
+  };
+}
+
+
 /** True if `point` lands within `radius` of any part of `stroke`'s drawn
  * path. Used by the eraser tool, which removes whole strokes rather than
  * partial pixel regions — see the spec's "object eraser" decision. `radius`
@@ -161,11 +207,18 @@ export function hitTestMark(mark: TextMark | ShapeMark, point: Point, radius: nu
     const { halfW, halfH } = shapeHalfExtents(mark);
     return Math.abs(local.x - mark.position.x) <= Math.max(floor, halfW) && Math.abs(local.y - mark.position.y) <= Math.max(floor, halfH);
   }
-  // A notation stamp is one glyph drawn at SMUFL_SIZE_SCALE × size (see
-  // AnnotateCanvas's renderMarkGlyph), not a run of UI-font letters.
-  const halfW = Math.max(floor, mark.symbolId ? mark.size * 0.8 : (mark.text.length || 1) * mark.size * 0.32);
-  const halfH = Math.max(floor, mark.size * 0.9);
-  return Math.abs(point.x - mark.position.x) <= halfW && Math.abs(point.y - mark.position.y) <= halfH;
+  const { halfW, halfH } = textMarkHalfExtents(mark);
+  return Math.abs(point.x - mark.position.x) <= Math.max(floor, halfW) && Math.abs(point.y - mark.position.y) <= Math.max(floor, halfH);
+}
+
+/** Rough half-size of a text or notation mark around its center. A notation
+ * stamp is one glyph drawn at SMUFL_SIZE_SCALE × size (see AnnotateCanvas's
+ * renderMarkGlyph), not a run of UI-font letters. */
+export function textMarkHalfExtents(mark: TextMark): { halfW: number; halfH: number } {
+  return {
+    halfW: mark.symbolId ? mark.size * 0.8 : (mark.text.length || 1) * mark.size * 0.32,
+    halfH: mark.size * 0.9,
+  };
 }
 
 /** Eraser-tool hit test across a mixed `AnnotationObject[]` array, regardless
@@ -186,6 +239,97 @@ export function topStrokeHit(point: Point, items: AnnotationObject[], radius: nu
     if (hitTestStroke(item, point, radius)) return item.id;
   }
   return null;
+}
+
+/** Every ink stroke and text/shape mark under a point, topmost first — the
+ * Select tool's hit list. A repeated tap walks down it to reach marks
+ * stacked under the top one. Pins aren't included: they handle their own
+ * taps (open the note) and drags. */
+export function hitsAt(point: Point, items: AnnotationObject[], radius: number = ERASE_RADIUS): string[] {
+  const ids: string[] = [];
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (isPin(item)) continue;
+    if (isMark(item) ? hitTestMark(item, point, radius) : hitTestStroke(item, point, radius)) ids.push(item.id);
+  }
+  return ids;
+}
+
+export interface Bounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Axis-aligned bounds of a stroke, mark or pin in content coordinates,
+ * for box selection and for placing the selection's edit menu. */
+export function objectBounds(obj: AnnotationObject): Bounds {
+  if (isPin(obj)) return { left: obj.position.x - 12, top: obj.position.y - 12, right: obj.position.x + 12, bottom: obj.position.y + 12 };
+  if (isMark(obj)) {
+    let { halfW, halfH } = obj.kind === "shape" ? shapeHalfExtents(obj) : textMarkHalfExtents(obj);
+    if (obj.kind === "shape" && isLineShape(obj.shapeId) && obj.rotation) {
+      // A rotated line shape's box: its full length could point any way.
+      halfW = halfH = Math.max(halfW, halfH);
+    }
+    return { left: obj.position.x - halfW, top: obj.position.y - halfH, right: obj.position.x + halfW, bottom: obj.position.y + halfH };
+  }
+  const pad = (obj.size ?? STROKE_WIDTH) / 2;
+  const xs = obj.points.map((p) => p.x);
+  const ys = obj.points.map((p) => p.y);
+  return { left: Math.min(...xs) - pad, top: Math.min(...ys) - pad, right: Math.max(...xs) + pad, bottom: Math.max(...ys) + pad };
+}
+
+export function boundsIntersect(a: Bounds, b: Bounds): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+export function unionBounds(list: Bounds[]): Bounds | null {
+  if (list.length === 0) return null;
+  return {
+    left: Math.min(...list.map((b) => b.left)),
+    top: Math.min(...list.map((b) => b.top)),
+    right: Math.max(...list.map((b) => b.right)),
+    bottom: Math.max(...list.map((b) => b.bottom)),
+  };
+}
+
+/** Moves any annotation by (dx, dy). A manual move drops musical anchors,
+ * so the next transpose doesn't snap it back to where it was. */
+export function translateObject<T extends AnnotationObject>(obj: T, dx: number, dy: number): T {
+  if (isStroke(obj)) return { ...obj, points: obj.points.map((p) => ({ x: p.x + dx, y: p.y + dy })), anchors: undefined };
+  return { ...obj, position: { x: obj.position.x + dx, y: obj.position.y + dy }, anchor: undefined };
+}
+
+/** How many entries each Annotate popover's Recent row keeps. */
+export const MAX_RECENTS = 8;
+
+function pushRecent<T>(list: T[], item: T, same: (a: T, b: T) => boolean): T[] {
+  return [item, ...list.filter((x) => !same(x, item))].slice(0, MAX_RECENTS);
+}
+
+/** Folds newly added annotations into the Recent rows: each one's color
+ * (and, for a notation stamp, its symbol) moves to the front of its tool's
+ * row. Returns the same object when nothing changed. */
+export function recordRecents(recents: AnnotateRecents, added: AnnotationObject[]): AnnotateRecents {
+  let next = recents;
+  const eq = (a: string, b: string) => a === b;
+  for (const obj of added) {
+    if (isPin(obj)) continue;
+    if (isStroke(obj)) {
+      if (!obj.color) continue;
+      const key = obj.tool === "highlighter" ? "highlighter" : "pen";
+      next = { ...next, [key]: pushRecent(next[key], obj.color, eq) };
+    } else if (obj.kind === "shape") {
+      next = { ...next, shapes: pushRecent(next.shapes, obj.color, eq) };
+    } else if (obj.symbolId) {
+      const entry = { symbolId: obj.symbolId, color: obj.color };
+      next = { ...next, notation: pushRecent(next.notation, entry, (a, b) => a.symbolId === b.symbolId && a.color === b.color) };
+    } else {
+      next = { ...next, text: pushRecent(next.text, obj.color, eq) };
+    }
+  }
+  return next;
 }
 
 /** Resolves the app's single fixed annotation color from the live theme's

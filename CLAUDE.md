@@ -112,10 +112,10 @@ Shared primitives are in `src/components/`.
   bundled offline Tesseract OCR), but OCR'd charts usually need touching up.
 - **MusicXML export can't re-key scores.** Scores go out as imported; the PDF export does
   engrave them in the set key. Annotations aren't exported in any format.
-- **No drag-and-drop reordering** of setlist slots or attachment versions.
 - **One global theme**, not the source's scoped "dark on stage, light elsewhere".
-- **Unwired source micro-states:** ChordPro-parse-error banner, crash-restore onboarding,
-  and the imported-chart merge-strategy screen (Replace/Append/Review).
+- **Unwired source micro-state:** crash-restore onboarding.
+- **Capo is cut** (TODO): it needs its own design pass against the transpose/key system
+  before it comes back. See `docs/progress-checklist.md`.
 
 ## Gotchas
 
@@ -158,3 +158,6 @@ npm run cap:sync     # vite build && npx cap sync
 npm run cap:android  # build + sync + run on Android (verified)
 npm run cap:ios      # build + sync + run on iOS (unverified)
 ```
+
+Device setup, signing, debugging and an on-device test checklist are in
+`docs/device-testing.md`.

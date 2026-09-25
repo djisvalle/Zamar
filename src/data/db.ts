@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -161,6 +161,15 @@ async function openDb(): Promise<SQLiteDBConnection> {
       // column existed until someone explicitly changes it.
       toVersion: 6,
       statements: ["ALTER TABLE settings ADD COLUMN staveSpacing TEXT NOT NULL DEFAULT 'default';"],
+    },
+    {
+      // Additive columns — Annotate's Recent rows (JSON, see AnnotateRecents
+      // in state/types.ts) and its Snap to Lyrics switch, on by default.
+      toVersion: 7,
+      statements: [
+        "ALTER TABLE settings ADD COLUMN annotateRecents_json TEXT NOT NULL DEFAULT '{}';",
+        "ALTER TABLE settings ADD COLUMN annotateSnap INTEGER NOT NULL DEFAULT 1;",
+      ],
     },
   ]);
 

@@ -2,11 +2,13 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "../../state/store";
 import { Icon, type IconName } from "../../components/Icon";
 import { SmuflGlyph } from "../../components/SmuflGlyph";
-import { NOTATION_SYMBOLS, type NotationSymbol } from "../../utils/notation";
+import { NOTATION_SYMBOLS, notationSymbol, type NotationSymbol } from "../../utils/notation";
+import { Toggle } from "../../components/Toggle";
 import { Sheet } from "../../components/Overlays";
 import { ShapeGlyph, type AnnotateTool, type ArmedSymbol } from "../../components/AnnotateCanvas";
-import { isMark, isStroke, PALETTE_PAGES, STROKE_WIDTH } from "../../utils/annotations";
+import { isMark, isStroke, PALETTE_PAGES, recordRecents, STROKE_WIDTH } from "../../utils/annotations";
 import type {
+  AnnotateRecents,
   AnnotationObject,
   AnnotationView,
   AttachmentKind,
@@ -107,7 +109,8 @@ export function useAnnotateSession({
   noAnnotationTarget: boolean;
   onClose: () => void;
 }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
+  const { annotateRecents: recents, annotateSnap: snapOn } = state.settings;
 
   const [mode, setMode] = useState<"draw" | "cues">("draw");
   const [tool, setTool] = useState<AnnotateTool>("select");
@@ -137,6 +140,9 @@ export function useAnnotateSession({
   // can select it (showing AnnotateCanvas's resize/rotate handles) without
   // also opening its edit sheet — see onEditRequest/onSelectRequest below.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Long-press or box selection of several objects at once; empty when zero
+  // or one object is selected (that's `selectedId`).
+  const [multiIds, setMultiIds] = useState<string[]>([]);
   const [clearOpen, setClearOpen] = useState(false);
 
   // Re-seed the per-session draft whenever the dock opens (or the song/view
@@ -156,6 +162,7 @@ export function useAnnotateSession({
       setMode("draw");
       setEditingId(null);
       setSelectedId(null);
+      setMultiIds([]);
       setClearOpen(false);
     }
   }
@@ -166,12 +173,19 @@ export function useAnnotateSession({
   // to reach it.
   const selectTool = (t: AnnotateTool) => {
     setTool(t);
-    if (t !== "select") setSelectedId(null);
+    if (t !== "select") {
+      setSelectedId(null);
+      setMultiIds([]);
+    }
   };
 
   const commit = (next: AnnotationObject[]) => {
     setHistory((h) => ({ past: [...h.past, annotations], future: [] }));
     setAnnotations(next);
+    const before = new Set(annotations.map((a) => a.id));
+    const added = next.filter((a) => !before.has(a.id));
+    const nextRecents = recordRecents(recents, added);
+    if (nextRecents !== recents) dispatch({ type: "SET_ANNOTATE_RECENTS", recents: nextRecents });
   };
 
   // Silently syncs positions after a transpose re-render — not a user edit,
@@ -235,6 +249,9 @@ export function useAnnotateSession({
     },
     onSelectRequest: setSelectedId,
     selectedId,
+    multiSelectedIds: multiIds,
+    onMultiSelect: setMultiIds,
+    snapToLyrics: snapOn && annotationView === "chords",
     scrollMode,
     penStyle,
     highlighterStyle,
@@ -276,6 +293,9 @@ export function useAnnotateSession({
     setSelectedId,
     clearOpen,
     setClearOpen,
+    recents,
+    snapOn,
+    setSnapOn: (value: boolean) => dispatch({ type: "SET_ANNOTATE_SNAP", value }),
     commit,
     undo,
     redo,
@@ -477,6 +497,9 @@ export function AnnotateToolbar({ session, title }: { session: AnnotateSession; 
                 onArmSymbol={s.setArmedSymbol}
                 armedShape={s.armedShape}
                 onArmShape={s.setArmedShape}
+                recents={s.recents}
+                snapOn={s.snapOn}
+                onSnapChange={s.setSnapOn}
               />
             )}
           </div>
@@ -657,6 +680,9 @@ function ToolSettings({
   onArmSymbol,
   armedShape,
   onArmShape,
+  recents,
+  snapOn,
+  onSnapChange,
 }: {
   tool: AnnotateTool;
   penStyle: { color: string; size: number; opacity: number };
@@ -673,16 +699,60 @@ function ToolSettings({
   onArmSymbol: (s: NotationSymbol) => void;
   armedShape: ShapeId;
   onArmShape: (s: ShapeId) => void;
+  recents: AnnotateRecents;
+  snapOn: boolean;
+  onSnapChange: (v: boolean) => void;
 }) {
   if (tool === "pen" || tool === "square") {
-    return <InkControls value={penStyle} onChange={onPenStyleChange} sizeRange={[1, 14]} opacityRange={[0.3, 1]} />;
+    return (
+      <>
+        <RecentColors colors={recents.pen} value={penStyle.color} onPick={(color) => onPenStyleChange({ ...penStyle, color })} />
+        <InkControls value={penStyle} onChange={onPenStyleChange} sizeRange={[1, 14]} opacityRange={[0.3, 1]} />
+      </>
+    );
   }
   if (tool === "highlighter") {
-    return <InkControls value={highlighterStyle} onChange={onHighlighterStyleChange} sizeRange={[6, 34]} opacityRange={[0.1, 0.7]} />;
+    return (
+      <>
+        <RecentColors
+          colors={recents.highlighter}
+          value={highlighterStyle.color}
+          onPick={(color) => onHighlighterStyleChange({ ...highlighterStyle, color })}
+        />
+        <InkControls value={highlighterStyle} onChange={onHighlighterStyleChange} sizeRange={[6, 34]} opacityRange={[0.1, 0.7]} />
+      </>
+    );
   }
   if (tool === "text" || tool === "notation") {
     return (
       <>
+        {tool === "notation" ? (
+          <RecentRow empty="Symbols you place show up here.">
+            {recents.notation.flatMap((r) => {
+              const sym = notationSymbol(r.symbolId);
+              if (!sym) return [];
+              const active = armedSymbol.id === sym.id && markStyle.color === r.color;
+              return [
+                <button
+                  key={r.symbolId + r.color}
+                  className={"glyph-cell recent-cell" + (active ? " active" : "")}
+                  onClick={() => {
+                    onArmSymbol(sym);
+                    onMarkStyleChange({ ...markStyle, color: r.color });
+                  }}
+                  aria-label={`${sym.label}, recent`}
+                  aria-pressed={active}
+                  title={sym.label}
+                  style={{ color: r.color }}
+                >
+                  <SmuflGlyph glyph={sym.smufl} size={24} />
+                </button>,
+              ];
+            })}
+          </RecentRow>
+        ) : (
+          <RecentColors colors={recents.text} value={markStyle.color} onPick={(color) => onMarkStyleChange({ ...markStyle, color })} />
+        )}
         {tool === "notation" && (
           <Paged
             pages={chunk(NOTATION_SYMBOLS, GLYPHS_PER_PAGE)}
@@ -708,12 +778,20 @@ function ToolSettings({
         )}
         <ColorGrid value={markStyle.color} onChange={(color) => onMarkStyleChange({ ...markStyle, color })} />
         <NumberField label="Size" value={markStyle.size} unit="pt" min={10} max={48} onChange={(size) => onMarkStyleChange({ ...markStyle, size })} />
+        <div className="popover-row">
+          <span>
+            Snap to Lyrics
+            <small>Lines marks up under or over a lyric line on chord charts.</small>
+          </span>
+          <Toggle on={snapOn} onChange={() => onSnapChange(!snapOn)} label="Snap to Lyrics" />
+        </div>
       </>
     );
   }
   if (tool === "shapes") {
     return (
       <>
+        <RecentColors colors={recents.shapes} value={shapeStyle.color} onPick={(color) => onShapeStyleChange({ ...shapeStyle, color })} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
           {SHAPE_LIST.map((sh) => (
             <button
@@ -740,6 +818,34 @@ function ToolSettings({
     return <div className="popover-hint">Tap the chart to drop a pin.</div>;
   }
   return null;
+}
+
+/** The "Recent" strip at the top of a tool popover. Shows a hint instead
+ * of an empty row until something has been used. */
+function RecentRow({ empty, children }: { empty: string; children: React.ReactNode[] }) {
+  return (
+    <div>
+      <div className="popover-label">Recent</div>
+      {children.length > 0 ? <div className="recent-row">{children}</div> : <div className="popover-hint recent-empty">{empty}</div>}
+    </div>
+  );
+}
+
+function RecentColors({ colors, value, onPick }: { colors: string[]; value: string; onPick: (color: string) => void }) {
+  return (
+    <RecentRow empty="Colors you use show up here.">
+      {colors.map((c) => (
+        <button
+          key={c}
+          className={"swatch" + (value === c ? " active" : "")}
+          onClick={() => onPick(c)}
+          aria-label={`Recent color ${c}`}
+          aria-pressed={value === c}
+          style={{ background: c }}
+        />
+      ))}
+    </RecentRow>
+  );
 }
 
 function chunk<T>(items: T[], size: number): T[][] {

@@ -105,7 +105,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       imported PDF or photo of sheet music into real `.mxl`/MusicXML (so it could then get
       genuine transposition/re-engraving via `MxlScore.tsx`, instead of staying a static
       image/PDF attachment). Note this is a different problem from `import/`'s existing
-      "Chords & lyrics" conversion path, which is already a simulated/canned conversion for
+      "Chords & lyrics" conversion path, which reads text (pdf.js text layer or OCR) from
       text charts — OMR would mean actually recognizing musical notation from a raster/PDF
       source, which is a much harder, open-ended problem (accuracy on real-world scans,
       licensing/bundling an OMR engine or model, on-device feasibility offline). **Action:**
@@ -147,14 +147,21 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ### Setlists
 - [x] Upcoming/Past/Templates tabs, run-sheet detail, derived per-slot start times
+- [x] Drag a slot's grip to reorder it, within its section or into another one (pointer
+      events, so it works with touch in the iOS/Android web views; `useDragReorder.ts`).
+      Attachment versions in Add/Edit Song reorder the same way
 - [x] Per-slot key/note override sheet, Add-to-set sheet (was a side drawer)
 
 ### Add/Edit Song
 - [x] Combined new/edit screen, ChordPro-vs-Chords-over-Lyrics editing
+- [x] Chart-problem banner in the editor: unbalanced `[`/`]`, unclosed `{directive}`, and
+      chord symbols transposition can't move (`findChordProIssues`)
 - [x] Live `{key: ...}` directive detection, format-aware quick-insert chips, live Preview tab
 - [x] Sheet Music tab appears once a song has an attachment, with remove-attachment action
 
 ### Import
+- [x] Converting chords into a song form that already has a chart asks Replace / Append /
+      Compare instead of overwriting it
 - [x] Real file picker (PDF, photo, MusicXML) with genuine `FileReader` upload
 - [x] "Sheet music" declaration path is fully real end-to-end (file stored and rendered later
       on Live Stage, no simulation involved)
@@ -214,12 +221,11 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       theme for the whole device, applied everywhere at once," matching `App.tsx`'s actual
       `data-theme`-on-`.device`-root behavior instead of describing the per-surface scoping this
       app doesn't implement.
-- [x] **Text-size slider disconnected from the real chart.** Fixed: `store.ts`'s `emptyStage`
-      constant became `makeEmptyStage(textScale)`, called wherever the stage resets (boot,
-      `STAGE_LOAD`, `STAGE_EXIT`, deleting the on-stage setlist) with `settings.textScale` — so
-      the Appearance slider now sets the size a chart actually opens at. `stage.zoom` still
-      adjusts session-only from there via the toolbar's +/- buttons, same as every other `stage`
-      field (see "Single global reducer" in CLAUDE.md); it was never meant to persist on its own.
+- [x] **Text-size slider disconnected from the real chart.** Fixed: there is one saved text
+      size, `settings.textScale`. Live Stage renders at it, the Appearance slider and the
+      stage's Zoom +/- buttons both change it, and `stage.zoom` no longer exists. Annotated
+      chord charts still lock the Zoom buttons, but changing the size from Appearance reflows
+      them; pinning an annotated chart to the size it was marked at is a possible follow-up.
 - [x] **Persistence "first run" gate is still fragile.** Fixed: `main.tsx`'s `loadInitial()` now
       loads settings/songs/setlists together and only treats the install as first-run when
       songs and setlists are *also* empty. If a crash left real song/setlist data with no
@@ -267,10 +273,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       Wired on Library, Setlists, and Settings. Library's select-mode header (`"N selected"` /
       Cancel) intentionally keeps the old compact single-line style, matching iOS's own
       collapse-to-compact behaviour while an in-page action bar is active.
-- [ ] List rows use a "boxed card per row" Material-ish style rather than iOS's fused
-      grouped-table look (valid alternative, just noting the departure)
-- [ ] FABs remain a Material Design pattern, not native to iOS — noted as out of scope for now
-      (bigger layout change than warranted)
+- [x] List rows use a "boxed card per row" Material-ish style: fixed by the iOS look rollout
+      (grouped lists, PR #13).
+- [x] FABs were a Material Design pattern: removed in favor of header and toolbar actions.
 - [x] Chord/lyric chart text runs a little small relative to iOS defaults: fixed — bumped
       `ChordChart`'s base sizes (`src/components/ChordChart.tsx`, mirrored in the `.chord-line`/
       `.lyric-line` fallbacks in `theme.css`) from 12/14.5px to 14/17px (lyric line now matches

@@ -1,20 +1,29 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import type { AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
 import {
+  boundsIntersect,
+  hitsAt,
   hitTestAnnotation,
   isLineShape,
   isMark,
   isPin,
   isStroke,
+  objectBounds,
   PALETTE_PAGES,
   resolveAccentColor,
   resolveSelectionColor,
   rotateAround,
   shapeHalfExtents,
+  simplifyStroke,
   SHAPE_ASPECT,
   snapRotation,
   STROKE_WIDTH,
-  topStrokeHit,
+  textMarkHalfExtents,
+  translateObject,
+  unionBounds,
+  type Bounds,
 } from "../utils/annotations";
 import type { MxlScoreHandle } from "./MxlScore";
 import { Icon, type IconName } from "./Icon";
@@ -43,6 +52,30 @@ export interface ArmedSymbol {
 
 const TAP_THRESHOLD = 6;
 const SELECT_HIT_RADIUS = 10;
+/** How long a press on a mark takes to add it to (or drop it from) a
+ * multi-selection. */
+const LONG_PRESS_MS = 400;
+/** A second tap this soon and this close to the first reaches the next mark
+ * down in a stack instead of re-selecting the top one. */
+const CYCLE_WINDOW_MS = 1500;
+const CYCLE_SLOP = 8;
+/** How close (px) a text/notation mark has to come to a lyric line to snap. */
+const SNAP_DISTANCE = 12;
+/** Gap between a snapped mark's edge and the line it snaps to. */
+const SNAP_GAP = 2;
+
+/** A light haptic tick on iOS/Android; nothing in the browser. */
+function hapticTick() {
+  if (!Capacitor.isNativePlatform()) return;
+  Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+}
+
+interface SnapTarget {
+  /** Mark center y that puts the mark's edge SNAP_GAP from the line. */
+  centerY: number;
+  /** Where to draw the guide. */
+  guideY: number;
+}
 
 function strokesOf(annotations: AnnotationObject[]): Stroke[] {
   return annotations.filter(isStroke);
@@ -50,6 +83,24 @@ function strokesOf(annotations: AnnotationObject[]): Stroke[] {
 
 function marksOf(annotations: AnnotationObject[]): (TextMark | ShapeMark)[] {
   return annotations.filter(isMark);
+}
+
+/** Traces a freehand polyline as quadratic curves through the midpoints
+ * between samples (each sample is the control point), so a simplified
+ * stroke still reads as a smooth line instead of visible straight segments. */
+function traceSmooth(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length < 3) {
+    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    return;
+  }
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mid = { x: (pts[i].x + pts[i + 1].x) / 2, y: (pts[i].y + pts[i + 1].y) / 2 };
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last.x, last.y);
 }
 
 function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvasElement, offset?: { x: number; y: number }) {
@@ -64,9 +115,7 @@ function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvas
     const [a, b] = pts;
     ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   } else if (pts.length > 0) {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    traceSmooth(ctx, pts);
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
@@ -91,9 +140,7 @@ function drawSelectionHalo(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTM
     const [a, b] = pts;
     ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   } else if (pts.length > 0) {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    traceSmooth(ctx, pts);
     ctx.stroke();
   }
   ctx.restore();
@@ -114,6 +161,9 @@ export function AnnotateCanvas({
   onEditRequest,
   onSelectRequest,
   selectedId,
+  multiSelectedIds = [],
+  onMultiSelect,
+  snapToLyrics = false,
   scrollMode = false,
   scoreRef,
   reprojectSignal,
@@ -163,6 +213,15 @@ export function AnnotateCanvas({
    * a highlight so the Select tool's target is visible on the canvas, not
    * just in the edit sheet. */
   selectedId?: string | null;
+  /** Ids in the current multi-selection (long-press or box select). When
+   * non-empty it takes over from `selectedId`. */
+  multiSelectedIds?: string[];
+  /** Reports a new multi-selection; `[]` clears it. */
+  onMultiSelect?: (ids: string[]) => void;
+  /** Snap text/notation marks to the chart's lyric lines while placing or
+   * dragging them. Only meaningful on the chords view, whose ChordChart
+   * renders `.lyric-line`/`.chord-line` rows. */
+  snapToLyrics?: boolean;
   /** true pauses drawing so the wrapped content can be scrolled with a
    * normal single-finger drag instead — a single finger can't both draw
    * and scroll, so Annotate mode's tool row offers this as an explicit
@@ -195,10 +254,26 @@ export function AnnotateCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const draft = useRef<Stroke | null>(null);
   const activePointer = useRef<number | null>(null);
-  const selectDrag = useRef<{ id: string; startX: number; startY: number; dx: number; dy: number } | null>(null);
+  // The Select tool's gesture in progress: a press on one or more stacked
+  // objects (which becomes a drag once it moves), or a box drawn from empty
+  // canvas.
+  const selectGesture = useRef<
+    | { kind: "press"; start: { x: number; y: number }; hits: string[]; long: boolean; timer: ReturnType<typeof setTimeout> }
+    | { kind: "drag"; start: { x: number; y: number }; ids: string[]; lead: string; dx: number; dy: number }
+    | { kind: "box"; start: { x: number; y: number } }
+    | null
+  >(null);
+  const lastTap = useRef<{ at: number; p: { x: number; y: number }; hits: string; index: number } | null>(null);
   const placeStart = useRef<{ x: number; y: number } | null>(null);
+  const snapped = useRef<number | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [dragPreview, setDragPreview] = useState<{ id: string; dx: number; dy: number } | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ ids: string[]; dx: number; dy: number } | null>(null);
+  const [box, setBox] = useState<Bounds | null>(null);
+  const [guideY, setGuideY] = useState<number | null>(null);
+  // Where a text/notation mark being placed currently sits (it follows the
+  // finger, snapping to lyric lines, until release).
+  const [placeGhost, setPlaceGhost] = useState<{ x: number; y: number } | null>(null);
+  const selection = interactive && tool === "select" ? (multiSelectedIds.length > 0 ? multiSelectedIds : selectedId ? [selectedId] : []) : [];
   const [editingPin, setEditingPin] = useState<{ id: string; x: number; y: number; text: string; anchor: Pin["anchor"]; isNew: boolean } | null>(
     null
   );
@@ -236,15 +311,11 @@ export function AnnotateCanvas({
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const selectedStroke = selectedId ? strokesOf(annotations).find((s) => s.id === selectedId) : undefined;
-    if (selectedStroke) {
-      const haloOffset = dragPreview && dragPreview.id === selectedStroke.id ? { x: dragPreview.dx, y: dragPreview.dy } : undefined;
-      drawSelectionHalo(ctx, selectedStroke, canvas, haloOffset);
-    }
+    const offsetFor = (id: string) => (dragPreview && dragPreview.ids.includes(id) ? { x: dragPreview.dx, y: dragPreview.dy } : undefined);
     for (const s of strokesOf(annotations)) {
-      const offset = dragPreview && dragPreview.id === s.id ? { x: dragPreview.dx, y: dragPreview.dy } : undefined;
-      drawStroke(ctx, s, canvas, offset);
+      if (selection.includes(s.id)) drawSelectionHalo(ctx, s, canvas, offsetFor(s.id));
     }
+    for (const s of strokesOf(annotations)) drawStroke(ctx, s, canvas, offsetFor(s.id));
     if (draft.current) drawStroke(ctx, draft.current, canvas);
     // draft.current is a ref (mutated imperatively by the pointer handlers
     // below, not React state) so it isn't itself a dependency — this effect
@@ -252,7 +323,7 @@ export function AnnotateCanvas({
     // and the handlers call the canvas's 2D context directly for the
     // in-progress preview in between.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotations, size, dragPreview, selectedId]);
+  }, [annotations, size, dragPreview, selectedId, multiSelectedIds]);
 
   // Reprojection: silently re-derives every anchored pin/mark/stroke's
   // on-screen position from the score's current layout after a
@@ -314,6 +385,62 @@ export function AnnotateCanvas({
     }
   };
 
+  // ---------- selection ----------
+  const selectOnly = (id: string | null) => {
+    onMultiSelect?.([]);
+    onSelectRequest?.(id);
+  };
+  const selectMany = (ids: string[]) => {
+    if (ids.length <= 1) {
+      selectOnly(ids[0] ?? null);
+      return;
+    }
+    onSelectRequest?.(null);
+    onMultiSelect?.(ids);
+  };
+
+  // ---------- snap to lyric lines ----------
+  /** Snap positions for a mark `halfH` tall: just under each lyric line, or
+   * just over the chord row above it (the lyric line itself when a line has
+   * no chords). Measured from the live DOM so it follows text size. */
+  const snapTargets = (halfH: number): SnapTarget[] => {
+    const wrap = wrapperRef.current;
+    if (!wrap || !snapToLyrics) return [];
+    const top = wrap.getBoundingClientRect().top;
+    return Array.from(wrap.querySelectorAll<HTMLElement>(".lyric-line")).flatMap((lyric) => {
+      const r = lyric.getBoundingClientRect();
+      const above = lyric.previousElementSibling?.classList.contains("chord-line") ? lyric.previousElementSibling.getBoundingClientRect() : r;
+      const under = r.bottom - top;
+      const over = above.top - top;
+      return [
+        { centerY: under + SNAP_GAP + halfH, guideY: under },
+        { centerY: over - SNAP_GAP - halfH, guideY: over },
+      ];
+    });
+  };
+  /** Snaps a mark's center y to the nearest target within SNAP_DISTANCE,
+   * showing the guide (and a haptic tick when it first engages). */
+  const snapY = (y: number, halfH: number): number => {
+    let best: SnapTarget | null = null;
+    for (const t of snapTargets(halfH)) {
+      if (Math.abs(t.centerY - y) <= SNAP_DISTANCE && (!best || Math.abs(t.centerY - y) < Math.abs(best.centerY - y))) best = t;
+    }
+    if (!best) {
+      snapped.current = null;
+      setGuideY(null);
+      return y;
+    }
+    if (snapped.current !== best.guideY) hapticTick();
+    snapped.current = best.guideY;
+    setGuideY(best.guideY);
+    return best.centerY;
+  };
+  const clearSnap = () => {
+    snapped.current = null;
+    setGuideY(null);
+  };
+  const armedHalfH = () => textMarkHalfExtents({ id: "", kind: "text", position: { x: 0, y: 0 }, text: armedSymbol.glyph ?? "Note", symbolId: tool === "notation" ? armedSymbol.id : undefined, color: "", size: markStyle.size }).halfH;
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (!interactive || scrollMode) return;
     e.stopPropagation();
@@ -334,25 +461,37 @@ export function AnnotateCanvas({
       return;
     }
     if (tool === "select") {
-      const hitId = topStrokeHit(p, annotations, SELECT_HIT_RADIUS);
-      if (!hitId) {
-        // Still track this pointer even though it missed every stroke, so
-        // its matching pointerUp passes the activePointer check below and
-        // reaches the tool === "select" branch there — otherwise a tap on
-        // empty canvas (meant to clear a stuck selection) is silently
-        // swallowed by that guard instead of ever calling onSelectRequest.
-        activePointer.current = e.pointerId;
-        return;
-      }
       capture(e);
       activePointer.current = e.pointerId;
-      selectDrag.current = { id: hitId, startX: p.x, startY: p.y, dx: 0, dy: 0 };
+      const hits = hitsAt(p, annotations, SELECT_HIT_RADIUS);
+      if (hits.length === 0) {
+        selectGesture.current = { kind: "box", start: p };
+        return;
+      }
+      const timer = setTimeout(() => {
+        const g = selectGesture.current;
+        if (!g || g.kind !== "press") return;
+        g.long = true;
+        // Long-press adds the top object to the selection (or drops it if
+        // it's already in), starting a multi-selection from whatever was
+        // selected before.
+        const id = g.hits[0];
+        const next = selection.includes(id) ? selection.filter((x) => x !== id) : [...selection, id];
+        hapticTick();
+        onSelectRequest?.(null);
+        onMultiSelect?.(next.length === 1 ? [] : next);
+        if (next.length === 1) onSelectRequest?.(next[0]);
+      }, LONG_PRESS_MS);
+      selectGesture.current = { kind: "press", start: p, hits, long: false, timer };
       return;
     }
     if (tool === "text" || tool === "notation" || tool === "shapes") {
       capture(e);
       activePointer.current = e.pointerId;
       placeStart.current = p;
+      // Text and notation marks follow the finger until release, so they can
+      // be lined up (and snapped) before they land.
+      if (tool !== "shapes") setPlaceGhost({ x: p.x, y: snapY(p.y, armedHalfH()) });
       return;
     }
     capture(e);
@@ -383,13 +522,38 @@ export function AnnotateCanvas({
       return;
     }
     if (tool === "select") {
-      if (!selectDrag.current) return;
-      selectDrag.current.dx = p.x - selectDrag.current.startX;
-      selectDrag.current.dy = p.y - selectDrag.current.startY;
-      setDragPreview({ id: selectDrag.current.id, dx: selectDrag.current.dx, dy: selectDrag.current.dy });
+      const g = selectGesture.current;
+      if (!g) return;
+      if (g.kind === "box") {
+        setBox({ left: Math.min(p.x, g.start.x), top: Math.min(p.y, g.start.y), right: Math.max(p.x, g.start.x), bottom: Math.max(p.y, g.start.y) });
+        return;
+      }
+      if (g.kind === "press") {
+        if (Math.hypot(p.x - g.start.x, p.y - g.start.y) <= TAP_THRESHOLD) return;
+        clearTimeout(g.timer);
+        // Dragging a selected object moves the whole selection; dragging an
+        // unselected one selects and moves just that one.
+        const lead = g.hits[0];
+        const ids = selection.includes(lead) ? selection : [lead];
+        if (!selection.includes(lead)) selectOnly(lead);
+        selectGesture.current = { kind: "drag", start: g.start, ids, lead, dx: 0, dy: 0 };
+      }
+      const d = selectGesture.current;
+      if (!d || d.kind !== "drag") return;
+      d.dx = p.x - d.start.x;
+      d.dy = p.y - d.start.y;
+      const leadObj = annotations.find((a) => a.id === d.lead);
+      if (leadObj && isMark(leadObj) && leadObj.kind === "text") {
+        d.dy = snapY(leadObj.position.y + d.dy, textMarkHalfExtents(leadObj).halfH) - leadObj.position.y;
+      }
+      setDragPreview({ ids: d.ids, dx: d.dx, dy: d.dy });
       return;
     }
-    if (tool === "text" || tool === "notation" || tool === "shapes") return;
+    if (tool === "text" || tool === "notation") {
+      if (placeStart.current) setPlaceGhost({ x: p.x, y: snapY(p.y, armedHalfH()) });
+      return;
+    }
+    if (tool === "shapes") return;
     if (!draft.current) return;
     // A later point failing to anchor (point strayed off any measure and
     // findNearestMeasureAnchor still found *something* nearest, so this
@@ -423,52 +587,88 @@ export function AnnotateCanvas({
     const p = toContentPoint(e);
 
     if (tool === "select") {
-      const drag = selectDrag.current;
-      selectDrag.current = null;
+      const g = selectGesture.current;
+      selectGesture.current = null;
       setDragPreview(null);
-      if (!drag) {
-        // Tapped empty canvas — nothing to drag or edit, so clear any
-        // existing selection instead of leaving it stuck with no way to
-        // dismiss it (see onSelectRequest doc above).
-        onSelectRequest?.(null);
+      setBox(null);
+      clearSnap();
+      if (!g) return;
+      if (g.kind === "box") {
+        const rect = { left: Math.min(p.x, g.start.x), top: Math.min(p.y, g.start.y), right: Math.max(p.x, g.start.x), bottom: Math.max(p.y, g.start.y) };
+        if (rect.right - rect.left + (rect.bottom - rect.top) <= TAP_THRESHOLD * 2) {
+          // Tapped empty canvas: clear the selection.
+          selectOnly(null);
+          lastTap.current = null;
+          return;
+        }
+        selectMany(annotations.filter((a) => !isPin(a) && boundsIntersect(objectBounds(a), rect)).map((a) => a.id));
         return;
       }
-      if (Math.hypot(drag.dx, drag.dy) > TAP_THRESHOLD) {
-        // A manual reposition wins over reprojection going forward — keeping
-        // a stale anchor would silently snap the stroke back to its old spot
-        // on the next transpose.
+      if (g.kind === "drag") {
+        if (Math.hypot(g.dx, g.dy) <= TAP_THRESHOLD) return;
+        const wrapRect = wrapperRef.current?.getBoundingClientRect();
         onCommit(
-          annotations.map((a) =>
-            a.id === drag.id && isStroke(a)
-              ? { ...a, points: a.points.map((pt) => ({ x: pt.x + drag.dx, y: pt.y + drag.dy })), anchors: undefined }
-              : a
-          )
+          annotations.map((a) => {
+            if (!g.ids.includes(a.id)) return a;
+            const moved = translateObject(a, g.dx, g.dy);
+            // Marks on a score re-anchor to the measure under their new
+            // spot; strokes and pins stay pixel-positioned once moved.
+            if (isMark(moved) && scoreRef?.current && wrapRect) {
+              const anchor = scoreRef.current.anchorAtClientPoint(wrapRect.left + moved.position.x, wrapRect.top + moved.position.y) ?? undefined;
+              return { ...moved, anchor };
+            }
+            return moved;
+          })
         );
+        return;
+      }
+      clearTimeout(g.timer);
+      if (g.long) return;
+      // A plain tap. Tapping the same spot again soon after walks down the
+      // stack of objects under it.
+      const key = g.hits.join(",");
+      const prev = lastTap.current;
+      const again = prev && prev.hits === key && Date.now() - prev.at < CYCLE_WINDOW_MS && Math.hypot(p.x - prev.p.x, p.y - prev.p.y) < CYCLE_SLOP;
+      const index = again ? (prev.index + 1) % g.hits.length : 0;
+      lastTap.current = { at: Date.now(), p, hits: key, index };
+      const id = g.hits[index];
+      const obj = annotations.find((a) => a.id === id);
+      if (g.hits.length > 1 || (obj && isMark(obj) && obj.kind === "shape" && selectedId !== id)) {
+        // In a stack, a tap only selects, so the next tap can move on down
+        // it; Edit is in the selection menu. A shape's first tap also only
+        // selects, showing its resize/rotate handles.
+        selectOnly(id);
       } else {
-        onEditRequest?.(drag.id);
+        onMultiSelect?.([]);
+        onEditRequest?.(id);
       }
       return;
     }
 
     if (tool === "text" || tool === "notation" || tool === "shapes") {
       const start = placeStart.current;
+      const ghost = placeGhost;
       placeStart.current = null;
+      setPlaceGhost(null);
+      clearSnap();
       if (!start) return;
-      if (Math.hypot(p.x - start.x, p.y - start.y) > TAP_THRESHOLD) return;
-      const anchor = scoreRef?.current?.anchorAtClientPoint(e.clientX, e.clientY) ?? undefined;
+      if (tool === "shapes" && Math.hypot(p.x - start.x, p.y - start.y) > TAP_THRESHOLD) return;
+      const at = tool === "shapes" ? start : ghost ?? p;
+      const wrapRect = wrapperRef.current?.getBoundingClientRect();
+      const anchor = (wrapRect && scoreRef?.current?.anchorAtClientPoint(wrapRect.left + at.x, wrapRect.top + at.y)) ?? undefined;
       const id = `mark-${Date.now()}`;
       if (tool === "shapes") {
         const mark: ShapeMark = { id, kind: "shape", position: start, shapeId: armedShape, color: shapeStyle.color, size: shapeStyle.size, anchor };
         onCommit([...annotations, mark]);
       } else if (tool === "text") {
-        const mark: TextMark = { id, kind: "text", position: start, text: "Note", color: markStyle.color, size: markStyle.size, anchor };
+        const mark: TextMark = { id, kind: "text", position: at, text: "Note", color: markStyle.color, size: markStyle.size, anchor };
         onCommit([...annotations, mark]);
         onEditRequest?.(id);
       } else {
         const mark: TextMark = {
           id,
           kind: "text",
-          position: start,
+          position: at,
           text: armedSymbol.glyph ?? "",
           symbolId: armedSymbol.id,
           color: markStyle.color,
@@ -481,7 +681,7 @@ export function AnnotateCanvas({
     }
 
     if (draft.current && draft.current.points.length > 0) {
-      onCommit([...annotations, draft.current]);
+      onCommit([...annotations, simplifyStroke(draft.current)]);
     }
     draft.current = null;
   };
@@ -565,26 +765,21 @@ export function AnnotateCanvas({
           />
         ))}
         {marksOf(annotations).map((mark) => {
-          const displayMark: TextMark | ShapeMark =
+          let displayMark: TextMark | ShapeMark =
             mark.kind === "shape" && shapePreview && shapePreview.id === mark.id
               ? { ...mark, ...shapePreview }
               : mark;
+          if (dragPreview && dragPreview.ids.includes(mark.id)) displayMark = translateObject(displayMark, dragPreview.dx, dragPreview.dy);
           return (
             <Fragment key={mark.id}>
               <MarkBadge
                 mark={displayMark}
                 tool={tool}
                 canvasInteractive={interactive}
-                selected={interactive && tool === "select" && mark.id === selectedId}
+                selected={selection.includes(mark.id)}
                 onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
-                onEdit={() => onEditRequest?.(mark.id)}
-                onSelect={() => onSelectRequest?.(mark.id)}
-                onDrag={(x, y, clientX, clientY) => {
-                  const anchor = scoreRef?.current?.anchorAtClientPoint(clientX, clientY) ?? undefined;
-                  onCommit(annotations.map((a) => (a.id === mark.id ? { ...a, position: { x, y }, anchor } : a)));
-                }}
               />
-              {interactive && tool === "select" && selectedId === mark.id && mark.kind === "shape" && (
+              {interactive && tool === "select" && selectedId === mark.id && multiSelectedIds.length === 0 && !dragPreview && mark.kind === "shape" && (
                 <ShapeHandles
                   mark={displayMark as ShapeMark}
                   toContent={toContent}
@@ -596,6 +791,44 @@ export function AnnotateCanvas({
             </Fragment>
           );
         })}
+        {placeGhost && (tool === "text" || tool === "notation") && (
+          <MarkBadge
+            mark={{
+              id: "ghost",
+              kind: "text",
+              position: placeGhost,
+              text: tool === "notation" ? armedSymbol.glyph ?? "" : "Note",
+              symbolId: tool === "notation" ? armedSymbol.id : undefined,
+              color: markStyle.color,
+              size: markStyle.size,
+            }}
+            tool={tool}
+            canvasInteractive={false}
+            selected={false}
+            onErase={() => {}}
+          />
+        )}
+        {guideY !== null && <div className="snap-guide" style={{ top: guideY }} />}
+        {box && <div className="select-box" style={{ left: box.left, top: box.top, width: box.right - box.left, height: box.bottom - box.top }} />}
+        {selection.length > 0 && !dragPreview && !box && (
+          <SelectionMenu
+            bounds={unionBounds(annotations.filter((a) => selection.includes(a.id)).map(objectBounds))}
+            wrapWidth={wrapWidth}
+            onEdit={selection.length === 1 ? () => onEditRequest?.(selection[0]) : undefined}
+            onDuplicate={() => {
+              const stamp = Date.now();
+              const copies = annotations
+                .filter((a) => selection.includes(a.id))
+                .map((a, i) => ({ ...translateObject(a, 16, 16), id: `${isStroke(a) ? "stroke" : isPin(a) ? "pin" : "mark"}-${stamp}-${i}` }));
+              onCommit([...annotations, ...copies]);
+              selectMany(copies.map((c) => c.id));
+            }}
+            onDelete={() => {
+              onCommit(annotations.filter((a) => !selection.includes(a.id)));
+              selectOnly(null);
+            }}
+          />
+        )}
         {editingPin && (
           <PinEditor
             x={editingPin.x}
@@ -648,26 +881,20 @@ function MarkBadge({
   canvasInteractive,
   selected,
   onErase,
-  onEdit,
-  onSelect,
-  onDrag,
 }: {
   mark: TextMark | ShapeMark;
   tool: AnnotateTool;
   /** Mirrors the wrapping AnnotateCanvas's `interactive` prop — `false`
-   * disables every pointer handler below regardless of `tool`, so a mark
-   * shown by the read-only overlay can't be dragged/tapped. */
+   * disables the eraser handler below regardless of `tool`, so a mark shown
+   * by the read-only overlay can't be erased. */
   canvasInteractive: boolean;
   selected: boolean;
   onErase: () => void;
-  onEdit: () => void;
-  /** Tap-without-drag on an unselected ShapeMark calls this instead of
-   * `onEdit` — see `onSelectRequest` on AnnotateCanvas for why. */
-  onSelect: () => void;
-  onDrag: (x: number, y: number, clientX: number, clientY: number) => void;
 }) {
-  const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
-  const interactive = canvasInteractive && (tool === "select" || tool === "eraser");
+  // Select-tool taps and drags are hit-tested by the canvas overlay (so a
+  // repeated tap can reach a mark stacked under this one); only the eraser
+  // still acts on the badge directly.
+  const interactive = canvasInteractive && tool === "eraser";
 
   return (
     <div
@@ -687,7 +914,6 @@ function MarkBadge({
         alignItems: "center",
         justifyContent: "center",
         pointerEvents: interactive ? "auto" : "none",
-        cursor: tool === "select" ? "grab" : "default",
         userSelect: "none",
         touchAction: "none",
         whiteSpace: "nowrap",
@@ -697,36 +923,47 @@ function MarkBadge({
       }}
       onPointerDown={(e) => {
         e.stopPropagation();
-        if (tool === "eraser") {
-          onErase();
-          return;
-        }
-        if (tool !== "select") return;
-        dragState.current = { startX: e.clientX, startY: e.clientY, origX: mark.position.x, origY: mark.position.y, moved: false };
-        (e.target as Element).setPointerCapture?.(e.pointerId);
-      }}
-      onPointerMove={(e) => {
-        const d = dragState.current;
-        if (!d) return;
-        if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 3) d.moved = true;
-      }}
-      onPointerUp={(e) => {
-        const d = dragState.current;
-        dragState.current = null;
-        if (!d) return;
-        if (d.moved) {
-          onDrag(d.origX + (e.clientX - d.startX), d.origY + (e.clientY - d.startY), e.clientX, e.clientY);
-        } else if (mark.kind === "shape" && !selected) {
-          // First tap on an unselected shape only selects it (revealing its
-          // resize/rotate handles) — a second tap, once already selected,
-          // opens the edit sheet like every other mark kind does on tap 1.
-          onSelect();
-        } else {
-          onEdit();
-        }
+        if (tool === "eraser") onErase();
       }}
     >
       {renderMarkGlyph(mark)}
+    </div>
+  );
+}
+
+/** The iOS edit menu over the current selection: Edit (one object only),
+ * Duplicate and Delete. Sits above the selection, or below it when there's
+ * no room above. */
+function SelectionMenu({
+  bounds,
+  wrapWidth,
+  onEdit,
+  onDuplicate,
+  onDelete,
+}: {
+  bounds: Bounds | null;
+  wrapWidth: number;
+  onEdit?: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  if (!bounds) return null;
+  const below = bounds.top < 56;
+  const x = Math.min(Math.max((bounds.left + bounds.right) / 2, 110), Math.max(110, wrapWidth - 110));
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  return (
+    <div
+      className="edit-menu"
+      style={{ left: x, top: below ? bounds.bottom + 12 : bounds.top - 12, transform: below ? "translateX(-50%)" : "translate(-50%, -100%)" }}
+      onPointerDown={stop}
+      onPointerUp={stop}
+      onClick={stop}
+    >
+      {onEdit && <button onClick={onEdit}>Edit</button>}
+      <button onClick={onDuplicate}>Duplicate</button>
+      <button className="destructive" onClick={onDelete}>
+        Delete
+      </button>
     </div>
   );
 }

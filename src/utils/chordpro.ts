@@ -1,6 +1,8 @@
 export const CHROMATIC = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-const FLAT_TO_SHARP: Record<string, string> = {
+/** Every spelling that isn't already in CHROMATIC: the seven flats plus the two
+ * sharps that land on a natural (E# = F, B# = C). */
+const ENHARMONIC: Record<string, string> = {
   Cb: "B",
   Db: "C#",
   Eb: "D#",
@@ -8,27 +10,47 @@ const FLAT_TO_SHARP: Record<string, string> = {
   Gb: "F#",
   Ab: "G#",
   Bb: "A#",
+  "E#": "F",
+  "B#": "C",
 };
 
 function normalizeRoot(root: string): string {
-  return FLAT_TO_SHARP[root] ?? root;
+  return ENHARMONIC[root] ?? root;
+}
+
+/** Semitone index (0 = C) of a note name like "Eb" or "F#", or -1 when it isn't one. */
+export function noteIndex(note: string): number {
+  return CHROMATIC.indexOf(normalizeRoot(note));
 }
 
 export function keySemitoneShift(fromKey: string, toKey: string): number {
-  const a = CHROMATIC.indexOf(normalizeRoot(fromKey));
-  const b = CHROMATIC.indexOf(normalizeRoot(toKey));
+  const a = noteIndex(fromKey);
+  const b = noteIndex(toKey);
   if (a < 0 || b < 0) return 0;
   return b - a;
 }
 
+function shiftNote(note: string, semitones: number): string | null {
+  const idx = noteIndex(note);
+  if (idx < 0) return null;
+  return CHROMATIC[((idx + semitones) % 12 + 12) % 12];
+}
+
+/** Transposes a chord symbol's root and, for slash chords, its bass note ("G/B" up
+ * two is "A/C#"). Anything it can't read is returned unchanged; findChordProIssues
+ * reports those in the editor so they don't get skipped silently. */
 export function transposeChord(chord: string, semitones: number): string {
-  const m = chord.match(/^([A-G][#b]?)(.*)$/);
+  const m = chord.match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/);
   if (!m) return chord;
-  const root = normalizeRoot(m[1]);
-  const idx = CHROMATIC.indexOf(root);
-  if (idx < 0) return chord;
-  const newIdx = ((idx + semitones) % 12 + 12) % 12;
-  return CHROMATIC[newIdx] + m[2];
+  const root = shiftNote(m[1], semitones);
+  if (root === null) return chord;
+  const bass = m[3] ? shiftNote(m[3], semitones) : null;
+  return root + m[2] + (m[3] ? "/" + (bass ?? m[3]) : "");
+}
+
+/** Whether transposeChord can actually move this chord symbol. */
+export function isTransposableChord(chord: string): boolean {
+  return transposeChord(chord, 1) !== chord;
 }
 
 export interface ChordPosition {
@@ -181,4 +203,59 @@ export function parseChordPro(text: string, semitones = 0): ChordProLine[] {
     i++;
   }
   return result;
+}
+
+export interface ChordProIssue {
+  line: number; // 1-indexed
+  message: string;
+}
+
+/** Scans raw ChordPro text for unbalanced `[`/`]` bracket chords and unclosed
+ * `{directive}` braces — syntax the regex-driven parser above never rejects,
+ * it just silently folds the stray bracket/brace into plain lyric text. Also
+ * flags `[chords]` whose root isn't a note name (a typo like `[H]` or a lowercase
+ * `[am]`), which transposition would otherwise leave behind
+ * without a word. This surfaces those cases instead of leaving them invisible
+ * in the editor. */
+export function findChordProIssues(text: string): ChordProIssue[] {
+  const issues: ChordProIssue[] = [];
+  text.split("\n").forEach((raw, i) => {
+    const lineNo = i + 1;
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{")) {
+      const opens = (trimmed.match(/\{/g) ?? []).length;
+      const closes = (trimmed.match(/\}/g) ?? []).length;
+      if (!trimmed.endsWith("}") || opens !== closes) {
+        issues.push({ line: lineNo, message: `Unclosed "{" — directive is missing its closing "}"` });
+        return;
+      }
+      return; // a well-formed directive has no chords to check
+    }
+    let depth = 0;
+    for (const ch of raw) {
+      if (ch === "[") depth++;
+      else if (ch === "]") {
+        depth--;
+        if (depth < 0) {
+          issues.push({ line: lineNo, message: `Unmatched "]" with no opening "[" before it` });
+          depth = 0;
+        }
+      }
+    }
+    if (depth > 0) {
+      issues.push({ line: lineNo, message: `Unmatched "[" — missing its closing "]"` });
+      return;
+    }
+    const re = /\[([^\]]+)\]/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(raw))) {
+      const sym = m[1].trim();
+      // "N.C." (no chord) and similar non-chord markers are fine to leave alone.
+      if (/^(n\.?c\.?|x|%|\|)$/i.test(sym)) continue;
+      if (!isTransposableChord(sym)) {
+        issues.push({ line: lineNo, message: `"${sym}" isn't a chord Zamar can transpose, so it won't change key` });
+      }
+    }
+  });
+  return issues;
 }

@@ -96,19 +96,25 @@ forgotten:
 
 ### Nice-to-have — lower priority
 
-7. **Recently-used colors/symbols row** above the full color grid / notation
-   palette, for fast repeat stamping (e.g. placing the same "pp" or the same
-   red color many times down one chart).
-8. **Snap-to-lyric-line guide** while placing/dragging a mark, so it's easy
-   to align a stamp exactly under a specific word or chord on a small phone
-   screen.
-9. **Multi-select (marquee or shift-tap)** for batch move/delete/duplicate
-   once a chart has many marks on it.
-10. **Long-press to cycle through overlapping strokes** when several marks
-    are stacked close together (tap currently always grabs the topmost one).
-11. **Pen stroke smoothing/simplification** (e.g. Douglas-Peucker) — a long
-    or fast freehand gesture currently stores every raw pointer sample
-    as-is; fine for a mockup, worth revisiting for a real build.
+All five are **done (2026-09-25)**. Design and decisions:
+`docs/superpowers/specs/2026-09-25-annotate-nice-to-haves-design.md`.
+
+7. ~~Recently-used colors/symbols row~~ Done: a Recent row at the top of the
+   Pen, Highlighter, Text, Notation and Shapes popovers, saved across launches
+   in `settings.annotateRecents`.
+8. ~~Snap-to-lyric-line guide~~ Done: text and notation marks snap under or
+   over a lyric line on the chords view while placing or dragging, with a
+   dashed guide and a haptic tick on native. "Snap to Lyrics" switch in the
+   Text and Notation popovers (`settings.annotateSnap`, on by default).
+9. ~~Multi-select~~ Done: long-press an object to add it, or drag a box from
+   empty canvas. Dragging moves the selection together; an iOS edit menu
+   offers Duplicate and Delete (plus Edit for a single object).
+10. ~~Reach overlapping marks~~ Done, as a repeated tap rather than a
+    long-press (long-press is multi-select): tapping the same spot again
+    within 1.5s selects the next object down the stack.
+11. ~~Pen stroke smoothing~~ Done: finished pen/highlighter strokes are
+    simplified with Ramer-Douglas-Peucker (0.75px) and drawn as smooth
+    curves.
 
 ## Suggested sequencing for the next session
 
