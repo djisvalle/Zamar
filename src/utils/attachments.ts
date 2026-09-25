@@ -59,6 +59,18 @@ export function renameVersion(attachments: Attachments, kind: AttachmentKind, ve
   };
 }
 
+/** Moves one version to `toIndex` (counted without it) — the order the
+ * version pickers list them in. The default version doesn't change. */
+export function moveVersion(attachments: Attachments, kind: AttachmentKind, versionId: string, toIndex: number): Attachments {
+  const bucket = attachments[kind];
+  if (!bucket) return attachments;
+  const version = bucket.versions.find((v) => v.id === versionId);
+  if (!version) return attachments;
+  const versions = bucket.versions.filter((v) => v.id !== versionId);
+  versions.splice(Math.max(0, Math.min(toIndex, versions.length)), 0, version);
+  return { ...attachments, [kind]: { ...bucket, versions } };
+}
+
 /** Changes which version is the bucket's default — used by Add/Edit Song's
  * "Use this version" action. Live Stage's in-session version switch does
  * NOT call this; it's local view state, not a change to the song. */

@@ -212,7 +212,7 @@ export function LiveStage() {
         <ChordChart
           chordpro={song.chordpro}
           semitones={semitones}
-          fontScale={stage.zoom / 100}
+          fontScale={state.settings.textScale / 100}
           hideChords={stage.lyricsOnly}
         />
       ) : activeKind && activeVersion ? (

@@ -215,7 +215,6 @@ export interface StageState {
   drawer: Drawer;
   chromeHidden: boolean;
   lyricsOnly: boolean;
-  zoom: number;
 }
 
 export type ThemeMode = "light" | "dark";
@@ -231,4 +230,17 @@ export interface Settings {
    * global and static (never per-song, never adjustable mid-session on a
    * given chart), so it never interacts with the Annotate freeze rule. */
   staveSpacing: StaveSpacing;
+  /** Annotate's "Recent" rows, most recent first, shared by every song. */
+  annotateRecents: AnnotateRecents;
+  /** Whether text and notation marks snap to lyric lines on the chords view. */
+  annotateSnap: boolean;
+}
+
+/** Up to `MAX_RECENTS` recently used styles per Annotate tool popover. */
+export interface AnnotateRecents {
+  pen: string[];
+  highlighter: string[];
+  text: string[];
+  shapes: string[];
+  notation: { symbolId: string; color: string }[];
 }

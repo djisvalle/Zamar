@@ -9,6 +9,7 @@ import { AddToSetSheet } from "./AddToSetSheet";
 import { Section } from "../../components/List";
 import { SlotDetailSheet } from "./SlotDetailSheet";
 import { SetDetailsSheet } from "./SetDetailsSheet";
+import { useDragReorder } from "../../components/useDragReorder";
 import type { SetlistItem, SetlistSection, Song } from "../../state/types";
 
 export function SetlistDetail({ setlistId }: { setlistId: string }) {
@@ -33,6 +34,9 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const [renameValue, setRenameValue] = useState("");
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<SetlistSection | null>(null);
   const [confirmDeleteSet, setConfirmDeleteSet] = useState(false);
+  const drag = useDragReorder((itemId, to) =>
+    dispatch({ type: "MOVE_ITEM", setlistId, itemId, toSectionId: to.group, toIndex: to.index })
+  );
 
   if (!setlist) {
     return (
@@ -84,16 +88,17 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
             }
           >
             {section.items.length === 0 && (
-              <div className="sheet-row" style={{ fontSize: 15, color: "var(--mut)" }}>
+              <div {...drag.emptyGroupProps(section.id)} className={"sheet-row " + (drag.emptyGroupProps(section.id).className ?? "")} style={{ fontSize: 15, color: "var(--mut)" }}>
                 No songs in this section yet.
               </div>
             )}
-            {section.items.map((item) => {
+            {section.items.map((item, i) => {
               const entry = flat.find((e) => e.item.id === item.id)!;
+              const dp = drag.rowProps(item.id, section.id, i, section.items.length);
               if (item.kind === "note") {
                 return (
-                  <div key={item.id} className="sheet-row sheet-row--lead">
-                    <span className="row-lead" style={{ color: "var(--mut)" }}>
+                  <div key={item.id} {...dp} className={"sheet-row sheet-row--lead " + dp.className}>
+                    <span className="row-lead" {...drag.handleProps(item.id)} style={{ ...drag.handleProps(item.id).style, color: "var(--mut)" }} aria-label={`Reorder ${item.label}`}>
                       <Icon name="note" size={18} strokeWidth={1.8} />
                     </span>
                     <div className="row-main">
@@ -109,8 +114,8 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
               songSlotIndex += 1;
               const idx = songSlotIndex;
               return (
-                <button key={item.id} className="sheet-row sheet-row--lead" onClick={() => setSlot({ item, song, index: idx })}>
-                  <span className="row-lead" style={{ color: "var(--tertiary)" }}>
+                <button key={item.id} {...dp} className={"sheet-row sheet-row--lead " + dp.className} onClick={() => setSlot({ item, song, index: idx })}>
+                  <span className="row-lead" {...drag.handleProps(item.id)} style={{ ...drag.handleProps(item.id).style, color: "var(--tertiary)" }} aria-label={`Reorder ${song.title}`}>
                     <Icon name="grip" size={18} strokeWidth={1.8} />
                   </span>
                   <div className="row-main">

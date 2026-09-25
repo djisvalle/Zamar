@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStore } from "../../state/store";
+import { useStore, MIN_TEXT_SCALE, MAX_TEXT_SCALE } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Segmented } from "../../components/Toggle";
@@ -19,7 +19,7 @@ export function Appearance() {
   };
 
   const scale = state.settings.textScale;
-  const pct = ((scale - 70) / (160 - 70)) * 100;
+  const pct = ((scale - MIN_TEXT_SCALE) / (MAX_TEXT_SCALE - MIN_TEXT_SCALE)) * 100;
 
   return (
     <div className="screen screen--grouped">
@@ -50,7 +50,7 @@ export function Appearance() {
 
         <Section
           header="Text size"
-          footer="The specimen above is the real stage renderer, so the sample matches the performance view exactly."
+          footer="The specimen above is the real stage renderer, so the sample matches the performance view exactly. The Zoom buttons on Live Stage change this same setting."
         >
           <div className="sheet-row" style={{ gap: 12 }}>
             <span aria-hidden style={{ fontSize: 13 }}>
@@ -59,8 +59,8 @@ export function Appearance() {
             <input
               className="ios-slider"
               type="range"
-              min={70}
-              max={160}
+              min={MIN_TEXT_SCALE}
+              max={MAX_TEXT_SCALE}
               value={scale}
               aria-label="Text size"
               onChange={(e) => dispatch({ type: "SET_TEXT_SCALE", value: Number(e.target.value) })}
