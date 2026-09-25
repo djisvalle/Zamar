@@ -246,9 +246,9 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
       <div className="screen">
         <Header title={label} onBack={() => setPhase("pick")} backLabel="Back" />
         <div style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ background: "rgba(140,59,59,.09)", border: "1px solid #8c3b3b", borderRadius: 8, padding: 11, display: "flex", flexDirection: "column", gap: 7 }}>
-            <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 13, color: "#8c3b3b" }}>Couldn't read this file</div>
-            <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+          <div className="error-banner">
+            <div className="error-banner-title">Couldn't read this file</div>
+            <div>
               {method === "musicxml"
                 ? "The score uses notation this app doesn't recognize yet."
                 : method === "pdf"

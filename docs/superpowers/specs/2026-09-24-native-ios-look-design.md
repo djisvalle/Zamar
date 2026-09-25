@@ -139,3 +139,29 @@ The rest of this spec assumes option 1.
   (`.tabs-top`) even while the bar is hidden, so Live Stage's chart doesn't jump when its
   chrome auto-hides or Annotate opens.
 
+
+## Part 3 notes (lists, controls, forms)
+
+- Grouped screens (`.screen--grouped`) put their content on the grouped background in
+  inset sections (`<Section>` in `components/List.tsx`): uppercase footnote header, a
+  rounded group of 44pt `.sheet-row`s with hairlines inset to the text, and a footnote
+  footer. Library, Setlists, set detail, Settings, Appearance, Export and Tuner use it.
+- Large titles now collapse: the 34pt `<LargeTitle>` is the first thing in the screen's
+  scroll area, and `<Header large>` fades in its small centered title and takes on the
+  bar material once the large title has scrolled under the bar.
+- Controls: a 51×31 switch in system green (UISwitch's default on color, whatever the
+  app tint), a capsule segmented control with one sliding thumb, the `.ios-slider` for
+  Text size, and filter capsules (`.chip`) that scroll sideways instead of wrapping.
+  Setlists' Upcoming/Past/Templates, Export's format and the Tuner's strings became
+  segmented controls, since each is one choice among a few.
+- Forms: Add/Edit Song's metadata is an inset group of placeholder fields (Title | Key,
+  Artist | Tempo | Time Sig.), with "Default on Live Stage" as a menu picker row.
+  Set details is a sheet with Cancel/Save in a nav row. Alert text fields replace the
+  labelled inputs in the New setlist, section and version dialogs.
+- Pull-down menus (`PullDown.tsx`) are portaled to the device so list groups can't clip
+  them; Order By uses one.
+- "Add to set" and Live Stage's "Add to Setlist" are large-detent sheets sharing
+  `SongPickerSheet` (search, Order By, A–Z sections with a section index). Quick edit
+  and Export's share sheet use the sheet styling. The side drawer is gone.
+- Error banners, "Remove this version" and "Reset app data" use system red
+  (`--danger-fg`).

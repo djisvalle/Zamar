@@ -4,7 +4,9 @@ import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Dialog } from "../../components/Overlays";
 import { Icon } from "../../components/Icon";
-import { setlistStatus } from "../../utils/setlistCalc";
+import { LargeTitle, Section, Chevron } from "../../components/List";
+import { Segmented } from "../../components/Toggle";
+import { setlistStatus, setlistSongCount } from "../../utils/setlistCalc";
 import type { Setlist } from "../../state/types";
 
 type Tab = "upcoming" | "past" | "template";
@@ -46,8 +48,39 @@ export function Setlists() {
     nav.push("setlist-detail", { setlistId: id, openDetails: true });
   };
 
+  const startOrStop = (sl: Setlist, isActive: boolean) => {
+    if (isActive) {
+      dispatch({ type: "STAGE_EXIT" });
+      return;
+    }
+    const ids = sl.sections.flatMap((sec) => sec.items.filter((it) => it.kind === "song").map((it) => it.songId!));
+    if (ids.length) {
+      dispatch({ type: "STAGE_LOAD", songId: ids[0], setlistId: sl.id, setlistIndex: 0 });
+      nav.resetTab("live-stage");
+    }
+  };
+
+  const row = (sl: Setlist) => {
+    const isActive = state.stage.setlistId === sl.id;
+    return (
+      <button key={sl.id} className="sheet-row" onClick={() => nav.push("setlist-detail", { setlistId: sl.id })}>
+        <div className="row-main">
+          <div className="row-title">
+            <span style={{ fontWeight: 600 }}>{sl.name}</span>
+            {isActive && <span className="badge-live">LIVE</span>}
+          </div>
+          <div className="row-sub">{[sl.date, sl.description].filter(Boolean).join(" · ") || `${setlistSongCount(sl)} songs`}</div>
+        </div>
+        <Chevron />
+      </button>
+    );
+  };
+
+  const [first, ...rest] = list;
+  const firstActive = first ? state.stage.setlistId === first.id : false;
+
   return (
-    <div className="screen">
+    <div className="screen screen--grouped">
       <Header
         title="Setlists"
         large
@@ -60,104 +93,55 @@ export function Setlists() {
           </div>
         }
       />
-      <div style={{ padding: "2px 14px 8px", display: "flex", gap: 6 }}>
-        {(["upcoming", "past", "template"] as Tab[]).map((t) => (
-          <button key={t} className={"chip" + (tab === t ? " active" : "")} onClick={() => setTab(t)}>
-            {t === "upcoming" ? "Upcoming" : t === "past" ? "Past" : "Templates"}
-          </button>
-        ))}
-      </div>
+      <div className="ios-list scroll-under-tabs">
+        <LargeTitle>Setlists</LargeTitle>
+        <Segmented<Tab>
+          options={[
+            { value: "upcoming", label: "Upcoming" },
+            { value: "past", label: "Past" },
+            { value: "template", label: "Templates" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
-      {list.length === 0 ? (
-        <div className="empty">
-          <div className="empty-title">No setlists yet</div>
-          <div className="empty-body">
-            Build one from your {state.songs.length} songs. Order, keys and timings can change any time.
+        {list.length === 0 ? (
+          <div className="empty" style={{ paddingTop: 48 }}>
+            <div className="empty-title">No setlists yet</div>
+            <div className="empty-body">
+              Build one from your {state.songs.length} songs. Order, keys and timings can change any time.
+            </div>
+            <button className="btn btn-primary btn-block" onClick={openCreateDialog}>
+              Build a set
+            </button>
           </div>
-          <button className="btn btn-primary btn-block" onClick={openCreateDialog}>
-            Build a set
-          </button>
-        </div>
-      ) : (
-        <div className="flex-1 hidden-scroll scroll-under-tabs" style={{ padding: "4px 14px", paddingBottom: 90, display: "flex", flexDirection: "column", gap: 10 }}>
-          {list.map((sl, i) => {
-            const isActive = state.stage.setlistId === sl.id;
-            return (
-              <button
-                key={sl.id}
-                className="card"
-                style={{
-                  textAlign: "left",
-                  cursor: "pointer",
-                  padding: 14,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 9,
-                  ...(isActive ? { border: "1.5px solid rgba(140, 59, 59, 0.45)" } : {}),
-                }}
-                onClick={() => nav.push("setlist-detail", { setlistId: sl.id })}
-              >
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16 }}>{sl.name}</div>
-                    <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
-                      {sl.date} · {sl.description}
-                    </div>
-                  </div>
-                  {isActive && (
-                    <span
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        padding: "5px 9px 5px 7px",
-                        borderRadius: 8,
-                        background: "var(--live)",
-                        color: "#fff",
-                        fontSize: 10,
-                        fontWeight: 800,
-                        letterSpacing: "0.06em",
-                      }}
-                    >
-                      <span style={{ width: 5, height: 5, borderRadius: 99, background: "currentColor" }} />
-                      LIVE
-                    </span>
-                  )}
-                </div>
-                {i === 0 && (
-                  <span
-                    className={"btn " + (isActive ? "btn-danger" : "btn-primary")}
-                    style={{ marginTop: 1 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isActive) {
-                        dispatch({ type: "STAGE_EXIT" });
-                        return;
-                      }
-                      const ids = sl.sections.flatMap((sec) => sec.items.filter((it) => it.kind === "song").map((it) => it.songId!));
-                      if (ids.length) {
-                        dispatch({ type: "STAGE_LOAD", songId: ids[0], setlistId: sl.id, setlistIndex: 0 });
-                        nav.resetTab("live-stage");
-                      }
-                    }}
-                  >
-                    <Icon name={isActive ? "stop" : "play"} size={12} />
-                    {isActive ? "Stop Set" : "Start Set"}
-                  </span>
-                )}
+        ) : (
+          <>
+            <Section tight>
+              {row(first)}
+              <button className={"sheet-row action" + (firstActive ? " destructive" : "")} onClick={() => startOrStop(first, firstActive)}>
+                <span style={{ display: "flex" }}>
+                  <Icon name={firstActive ? "stop" : "play"} size={15} />
+                </span>
+                <span>{firstActive ? "Stop Set" : "Start Set"}</span>
               </button>
-            );
-          })}
-        </div>
-      )}
+            </Section>
+            {rest.length > 0 && <Section>{rest.map(row)}</Section>}
+          </>
+        )}
+      </div>
 
       {creating && (
         <Dialog>
           <div className="dialog-title">New setlist</div>
-          <div className={"field" + (duplicateNewName ? " invalid" : "")}>
-            <label>Name</label>
-            <input value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
-          </div>
+          <input
+            className={"alert-input" + (duplicateNewName ? " invalid" : "")}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Name"
+            aria-label="Name"
+            autoFocus
+          />
           {duplicateNewName && <div className="field-error">A setlist with this name already exists.</div>}
           <div className="btn-row" style={{ marginTop: 2 }}>
             <button className="btn" onClick={() => setCreating(false)}>

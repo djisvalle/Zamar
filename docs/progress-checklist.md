@@ -147,7 +147,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ### Setlists
 - [x] Upcoming/Past/Templates tabs, run-sheet detail, derived per-slot start times
-- [x] Per-slot key/note override sheet, Add-to-set drawer
+- [x] Per-slot key/note override sheet, Add-to-set sheet (was a side drawer)
 
 ### Add/Edit Song
 - [x] Combined new/edit screen, ChordPro-vs-Chords-over-Lyrics editing

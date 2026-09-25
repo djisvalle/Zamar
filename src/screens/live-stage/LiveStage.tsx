@@ -8,7 +8,7 @@ import { AnnotateCanvas } from "../../components/AnnotateCanvas";
 import { keySemitoneShift } from "../../utils/chordpro";
 import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
 import type { AnnotationObject, AnnotationView, AttachmentKind } from "../../state/types";
-import { AddSongDrawer } from "./AddSongDrawer";
+import { AddSongSheet } from "./AddSongSheet";
 import { QuickEditSheet } from "./QuickEditSheet";
 import { MusicToolbar } from "./MusicToolbar";
 import { StageToolsSheet } from "./StageToolsSheet";
@@ -127,7 +127,7 @@ export function LiveStage() {
           </div>
         </div>
         {stage.drawer === "add-song" && (
-          <AddSongDrawer onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
+          <AddSongSheet onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
         )}
       </div>
     );
@@ -315,7 +315,7 @@ export function LiveStage() {
       )}
 
       {stage.drawer === "add-song" && (
-        <AddSongDrawer onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
+        <AddSongSheet onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />
       )}
       {stage.drawer === "quick-edit" && (
         <QuickEditSheet songId={song.id} onClose={() => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null })} />

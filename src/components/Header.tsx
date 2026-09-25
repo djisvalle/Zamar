@@ -39,14 +39,17 @@ export function Header({
   /** Overrides the back button's label, for a back that returns to an
    * earlier step of the same screen rather than to the previous frame. */
   backLabel?: string;
-  /** iOS-style Large Title: the small bar carries only the back/action
-   * controls, and `title` renders as a big bold line beneath it. */
+  /** iOS Large Title: the screen renders `<LargeTitle>` at the top of its
+   * scroll area, and the bar shows `title` small only once that has
+   * scrolled under it. */
   large?: boolean;
 }) {
   const nav = useNavigator();
   const { state } = useStore();
   const ref = useRef<HTMLDivElement>(null);
-  const scrolled = useScrolledUnder(ref);
+  const depth = useScrollDepth(ref);
+  const collapsed = large ? depth === 2 : false;
+  const scrolled = large ? collapsed : depth > 0;
   const showBack = Boolean(onBack) || nav.canPop;
   const label = backLabel ?? previousTitle(nav.stack[nav.stack.length - 2], state);
   const backButton = showBack ? (
@@ -57,44 +60,40 @@ export function Header({
   ) : (
     <span />
   );
-  const classes = (base: string) => base + (tinted ? " tinted" : "") + (scrolled ? " scrolled" : "");
 
-  if (large) {
-    return (
-      <div ref={ref} className={classes("hdr-large-wrap")}>
-        <div className="hdr">
-          {backButton}
-          <div className="hdr-right">{right}</div>
-        </div>
-        <div className="hdr-large-title">{title}</div>
-      </div>
-    );
-  }
   return (
-    <div ref={ref} className={classes("hdr")}>
+    <div
+      ref={ref}
+      className={"hdr" + (tinted ? " tinted" : "") + (scrolled ? " scrolled" : "") + (collapsed ? " collapsed" : "")}
+    >
       {backButton}
-      <div className="hdr-title">{title}</div>
+      <div className={"hdr-title" + (large ? " hdr-title--collapsible" : "")} aria-hidden={large && !collapsed}>
+        {title}
+      </div>
       <div className="hdr-right">{right}</div>
     </div>
   );
 }
 
-/** True once any scroll area on the header's screen has scrolled away from
- * the top, which is when iOS gives the nav bar its material and hairline.
+/** How far the header's screen has scrolled: 0 at the top, 1 once content
+ * is under the bar (iOS gives it its material and hairline), 2 once a large
+ * title (41pt plus padding) has gone under it and collapses into the bar.
  * Scroll events don't bubble, so this listens in the capture phase. */
-function useScrolledUnder(ref: React.RefObject<HTMLElement>) {
-  const [scrolled, setScrolled] = useState(false);
+function useScrollDepth(ref: React.RefObject<HTMLElement>) {
+  const [depth, setDepth] = useState<0 | 1 | 2>(0);
   useEffect(() => {
     const screen = ref.current?.closest(".screen");
     if (!screen) return;
     const onScroll = (e: Event) => {
       const target = e.target as HTMLElement;
-      // Only the screen's own scroll areas, not ones inside sheets/popovers.
-      if (!(target instanceof HTMLElement) || target.closest(".backdrop, .popover")) return;
-      setScrolled(target.scrollTop > 0);
+      // Only the screen's own scroll areas, not ones inside sheets/popovers
+      // or sideways chip rows.
+      if (!(target instanceof HTMLElement) || target.closest(".backdrop, .popover, .chip-row")) return;
+      const top = target.scrollTop;
+      setDepth(top > 44 ? 2 : top > 0 ? 1 : 0);
     };
     screen.addEventListener("scroll", onScroll, true);
     return () => screen.removeEventListener("scroll", onScroll, true);
   }, [ref]);
-  return scrolled;
+  return depth;
 }

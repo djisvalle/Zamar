@@ -7,6 +7,8 @@ import { ChordChart } from "../../components/ChordChart";
 import { PdfPages } from "../../components/PdfPages";
 import { MxlScore } from "../../components/MxlScore";
 import { Icon } from "../../components/Icon";
+import { Section } from "../../components/List";
+import { PullDown } from "../../components/PullDown";
 import { extractBracketChords, extractChordLineChords } from "../../utils/chordpro";
 import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, removeVersion, renameVersion, selectVersion, selectedVersion } from "../../utils/attachments";
 import type { ImportMethod } from "../import/ImportSong";
@@ -14,6 +16,7 @@ import type { AttachmentKind, Attachments, ChartFormat, Song, SongSource } from 
 
 const KEY_RE = /^[A-G](#|b)?$/;
 const KEY_DIRECTIVE_RE = /\{key:\s*([^}]+)\}/i;
+type DefaultViewChoice = "auto" | NonNullable<Song["defaultView"]>;
 const CHORDPRO_DIRECTIVES = ["title", "artist", "key", "capo", "tempo", "comment"];
 
 export function AddEditSong({ songId }: { songId?: string }) {
@@ -138,7 +141,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const addVersionFor = (kind: AttachmentKind) => startImport(KIND_TO_METHOD[kind], true);
 
   return (
-    <div className="screen">
+    <div className="screen screen--grouped">
       <div className="hdr">
         <button className="hdr-action" onClick={attemptClose}>
           Cancel
@@ -149,7 +152,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
         </button>
       </div>
 
-      <div style={{ padding: "10px 14px 6px", display: "flex", gap: 6 }}>
+      <div className="chip-row" style={{ padding: "6px 16px 10px" }}>
         <button className={"chip" + (tab === "source" ? " active" : "")} onClick={() => setTab("source")}>
           Chords/Lyrics
         </button>
@@ -167,87 +170,77 @@ export function AddEditSong({ songId }: { songId?: string }) {
       </div>
 
       {tab === "source" && (
-        <div className="flex-1 hidden-scroll" style={{ padding: "0 14px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="flex-1 hidden-scroll" style={{ padding: "0 16px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
           {showErrors && (!titleValid || !keyValid) && (
-            <div style={{ background: "rgba(140,59,59,.1)", border: "1px solid #8c3b3b", borderRadius: 8, padding: "8px 11px", fontSize: 12, fontWeight: 600, color: "#8c3b3b" }}>
-              {(() => {
-                const n = [!titleValid, !keyValid].filter(Boolean).length;
-                return `${n} field${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} attention`;
-              })()}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 7 }}>
-            <div className={"field" + (showErrors && !titleValid ? " invalid" : "")} style={{ flex: 3 }}>
-              <label>Title *</label>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Song title" />
-              {showErrors && !titleValid && <div className="field-error">Required.</div>}
-            </div>
-            <div className={"field" + (showErrors && !keyValid ? " invalid" : "")} style={{ flex: 1 }}>
-              <label>Key {!detectedKey && "*"}</label>
-              {detectedKey ? (
-                <div style={{ height: 38, borderRadius: 8, background: "var(--line)", opacity: 0.6, display: "flex", alignItems: "center", padding: "0 10px", fontSize: 13, color: "var(--mut)" }}>
-                  Auto
-                </div>
-              ) : (
-                <input value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="e.g. G" />
-              )}
-              {showErrors && !keyValid && <div className="field-error">Invalid.</div>}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 7 }}>
-            <div className="field" style={{ flex: 2 }}>
-              <label>Artist</label>
-              <input value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Artist or Traditional" />
-            </div>
-            <div className="field" style={{ flex: 1 }}>
-              <label>Tempo</label>
-              <input value={tempo} onChange={(e) => setTempo(e.target.value)} placeholder="BPM" inputMode="numeric" />
-            </div>
-            <div className="field" style={{ flex: 1 }}>
-              <label>Time Sig.</label>
-              <input value={timeSig} onChange={(e) => setTimeSig(e.target.value)} placeholder="4/4" />
-            </div>
-          </div>
-
-          {(chordpro.trim() || CATEGORY_PRIORITY.some((k) => attachments[k])) && (
-            <div className="field">
-              <label>Default on Live Stage</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                <button
-                  type="button"
-                  className={"chip" + (!defaultView ? " active" : "")}
-                  onClick={() => setDefaultView(undefined)}
-                >
-                  Automatic
-                </button>
-                {chordpro.trim() && (
-                  <button
-                    type="button"
-                    className={"chip" + (defaultView === "chords" ? " active" : "")}
-                    onClick={() => setDefaultView("chords")}
-                  >
-                    Chords/Lyrics
-                  </button>
-                )}
-                {CATEGORY_PRIORITY.filter((k) => attachments[k]).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    className={"chip" + (defaultView === k ? " active" : "")}
-                    onClick={() => setDefaultView(k)}
-                  >
-                    {ATTACHMENT_LABEL[k]}
-                  </button>
-                ))}
+            <div className="error-banner">
+              <div className="error-banner-title">
+                {(() => {
+                  const n = [!titleValid, !keyValid].filter(Boolean).length;
+                  return `${n} field${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} attention`;
+                })()}
               </div>
             </div>
           )}
+          <div style={{ flex: "none" }}>
+            <div className="list-group">
+              <div className="form-row">
+                <div className={"form-cell" + (showErrors && !titleValid ? " invalid" : "")} style={{ flex: 3 }}>
+                  <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" aria-label="Title" />
+                </div>
+                <label className={"form-cell" + (showErrors && !keyValid ? " invalid" : "")} style={{ flex: 1.3 }}>
+                  <span className="form-label" style={{ color: "var(--mut)" }}>
+                    Key
+                  </span>
+                  {detectedKey ? (
+                    <span className="form-static">Auto</span>
+                  ) : (
+                    <input value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="G" style={{ textAlign: "right" }} />
+                  )}
+                </label>
+              </div>
+              <div className="form-row">
+                <div className="form-cell" style={{ flex: 2 }}>
+                  <input value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Artist" aria-label="Artist" />
+                </div>
+                <label className="form-cell" style={{ flex: 1.1 }}>
+                  <input value={tempo} onChange={(e) => setTempo(e.target.value)} placeholder="Tempo" aria-label="Tempo" inputMode="numeric" />
+                  {tempo && <span className="form-suffix">BPM</span>}
+                </label>
+                <div className="form-cell" style={{ flex: 0.9 }}>
+                  <input value={timeSig} onChange={(e) => setTimeSig(e.target.value)} placeholder="4/4" aria-label="Time signature" />
+                </div>
+              </div>
+              {(chordpro.trim() || CATEGORY_PRIORITY.some((k) => attachments[k])) && (
+                <div className="form-row">
+                  <div className="form-cell">
+                    <span className="form-label" style={{ flex: 1 }}>
+                      Default on Live Stage
+                    </span>
+                    <PullDown<DefaultViewChoice>
+                      value={defaultView ?? "auto"}
+                      options={[
+                        { value: "auto", label: "Automatic" },
+                        ...(chordpro.trim() ? [{ value: "chords" as const, label: "Chords/Lyrics" }] : []),
+                        ...CATEGORY_PRIORITY.filter((k) => attachments[k]).map((k) => ({ value: k, label: ATTACHMENT_LABEL[k] })),
+                      ]}
+                      onChange={(v) => setDefaultView(v === "auto" ? undefined : v)}
+                      className="menu-picker"
+                    >
+                      <span>{!defaultView ? "Automatic" : defaultView === "chords" ? "Chords/Lyrics" : ATTACHMENT_LABEL[defaultView]}</span>
+                      <Icon name="chevron-up-down" size={14} strokeWidth={2.2} />
+                    </PullDown>
+                  </div>
+                </div>
+              )}
+            </div>
+            {showErrors && (!titleValid || !keyValid) && (
+              <div className="list-section-footer error">
+                {[!titleValid && "Title is required.", !keyValid && "Key is invalid; use a note like G, Bb or F#."].filter(Boolean).join(" ")}
+              </div>
+            )}
+          </div>
 
-          <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-            <button className="btn" style={{ flex: 1, height: 34 }} onClick={() => setImportMethodOpen(true)}>
-              <Icon name="import" size={14} strokeWidth={2} />
-              Import
-            </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flex: "none" }}>
             <div style={{ flex: 1 }}>
               <Segmented
                 options={[
@@ -258,21 +251,25 @@ export function AddEditSong({ songId }: { songId?: string }) {
                 onChange={setChartFormat}
               />
             </div>
+            <button className="btn btn-tinted btn-sm" onClick={() => setImportMethodOpen(true)}>
+              <Icon name="import" size={15} strokeWidth={2.2} />
+              Import
+            </button>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          <div className="chip-row">
             {chartFormat === "chordpro" &&
               CHORDPRO_DIRECTIVES.map((name) => (
                 <button
                   key={name}
                   type="button"
-                  className="chip"
+                  className="chip chip--small"
                   onClick={() => insertAtCursor(`{${name}: }`, `{${name}: `.length)}
                 >
                   {`{${name}: …}`}
                 </button>
               ))}
             {chartFormat === "chords-over-lyrics" && (
-              <button type="button" className="chip" onClick={() => insertAtCursor("    ")}>
+              <button type="button" className="chip chip--small" onClick={() => insertAtCursor("    ")}>
                 ␣ Space ×4
               </button>
             )}
@@ -280,7 +277,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
               <button
                 key={c}
                 type="button"
-                className="chip"
+                className="chip chip--small"
                 onClick={() => insertAtCursor(chartFormat === "chordpro" ? `[${c}]` : `${c} `)}
               >
                 {chartFormat === "chordpro" ? `[${c}]` : c}
@@ -289,8 +286,10 @@ export function AddEditSong({ songId }: { songId?: string }) {
           </div>
           <textarea
             ref={chartRef}
+            className="form-textarea"
             value={chordpro}
             onChange={(e) => setChordpro(e.target.value)}
+            aria-label="Chart"
             placeholder={
               chartFormat === "chordpro"
                 ? "Type or paste the chart here —\ne.g. [G]Amazing grace, how [D]sweet the sound"
@@ -299,116 +298,93 @@ export function AddEditSong({ songId }: { songId?: string }) {
             style={{
               flex: 1,
               minHeight: 160,
-              border: "1px solid var(--acc-deep)",
-              borderRadius: 8,
-              padding: "9px 10px",
               fontFamily: "ui-monospace, monospace",
-              fontSize: 11,
+              fontSize: 13,
               lineHeight: 1.75,
-              background: "var(--surface)",
-              color: "var(--fg)",
-              resize: "vertical",
             }}
           />
         </div>
       )}
 
       {tab === "preview" && (
-        <div className="flex-1 hidden-scroll" style={{ margin: "0 14px 12px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
+        <div className="flex-1 hidden-scroll" style={{ margin: "0 16px 12px", background: "var(--list-cell)", borderRadius: 12, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
           {chordpro.trim() ? (
             <ChordChart chordpro={chordpro} />
           ) : (
-            <div className="muted" style={{ fontSize: 12 }}>No chords or lyrics yet.</div>
+            <div className="muted" style={{ fontSize: 15 }}>No chords or lyrics yet.</div>
           )}
-          <div className="muted" style={{ fontSize: 11, marginTop: "auto" }}>
+          <div className="muted" style={{ fontSize: 13, marginTop: "auto" }}>
             Renders with the stage engine at stage text size.
           </div>
         </div>
       )}
 
       {tab === "notes" && (
-        <div className="flex-1 hidden-scroll" style={{ padding: "0 14px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="flex-1 hidden-scroll" style={{ padding: "0 16px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
           <textarea
+            className="form-textarea"
+            aria-label="Cues"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Reminders, cues, anything worth having on hand for this song — works the same whether it's a chord chart, a PDF, or sheet music."
-            style={{
-              flex: 1,
-              minHeight: 160,
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              padding: "9px 10px",
-              fontSize: 13,
-              lineHeight: 1.5,
-              background: "var(--surface)",
-              color: "var(--fg)",
-              resize: "vertical",
-            }}
+            style={{ flex: 1, minHeight: 160 }}
           />
         </div>
       )}
 
       {activeKind && activeBucket && activeVersion && (
-        <div className="flex-1 hidden-scroll" style={{ margin: "0 14px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {activeKind === "image" ? (
-            <img src={activeVersion.dataUrl} alt={activeVersion.name} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
-          ) : activeKind === "musicxml" ? (
-            <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden", padding: 8 }}>
-              <MxlScore src={activeVersion.dataUrl} staveSpacing={state.settings.staveSpacing} />
-            </div>
-          ) : (
-            <div style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden" }}>
+        <div className="flex-1 hidden-scroll" style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "var(--list-cell)", flex: "none" }}>
+            {activeKind === "image" ? (
+              <img src={activeVersion.dataUrl} alt={activeVersion.name} style={{ display: "block", width: "100%" }} />
+            ) : activeKind === "musicxml" ? (
+              <div style={{ padding: 8 }}>
+                <MxlScore src={activeVersion.dataUrl} staveSpacing={state.settings.staveSpacing} />
+              </div>
+            ) : (
               <PdfPages src={activeVersion.dataUrl} />
-            </div>
-          )}
-          <div className="muted" style={{ fontSize: 11 }}>
+            )}
+          </div>
+          <div className="list-section-footer" style={{ paddingTop: 0 }}>
             {activeVersion.name} · {ATTACHMENT_LABEL[activeKind]}
           </div>
 
           {activeBucket.versions.length > 1 && (
-            <>
-              <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--mut)" }}>
-                Versions
-              </div>
+            <Section header="Versions" tight>
               {activeBucket.versions.map((v) => (
-                <button
-                  key={v.id}
-                  className="list-row"
-                  style={v.id === activeBucket.selectedVersionId ? { borderColor: "var(--acc-deep)" } : undefined}
-                  onClick={() => setVersionSheetFor({ kind: activeKind, id: v.id, label: v.label })}
-                >
-                  <span
-                    style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 99,
-                      flex: "none",
-                      border: "2px solid var(--acc-deep)",
-                      background: v.id === activeBucket.selectedVersionId ? "var(--acc)" : "transparent",
-                    }}
-                  />
-                  <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{v.label}</div>
-                    <div className="muted" style={{ fontSize: 10.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {v.name}
+                <button key={v.id} className="sheet-row" onClick={() => setVersionSheetFor({ kind: activeKind, id: v.id, label: v.label })}>
+                  <div className="row-main">
+                    <div className="row-title">
+                      <span>{v.label}</span>
                     </div>
-                  </span>
+                    <div className="row-sub">{v.name}</div>
+                  </div>
+                  {v.id === activeBucket.selectedVersionId && (
+                    <span className="accent-deep" style={{ display: "flex" }} aria-label="In use">
+                      <Icon name="check" size={18} strokeWidth={2.4} />
+                    </span>
+                  )}
                 </button>
               ))}
-            </>
+            </Section>
           )}
 
-          <button className="btn" onClick={() => addVersionFor(activeKind)}>
-            <Icon name="plus" size={14} strokeWidth={2} />
-            Add another {ATTACHMENT_LABEL[activeKind]} version
-          </button>
-          <button
-            className="btn"
-            style={{ color: "#8c3b3b" }}
-            onClick={() => setConfirmDeleteVersion({ kind: activeKind, id: activeVersion.id, label: activeVersion.label })}
-          >
-            Remove this version
-          </button>
+          <Section tight={activeBucket.versions.length <= 1}>
+            <button className="sheet-row action sheet-row--lead" onClick={() => addVersionFor(activeKind)}>
+              <span className="row-lead">
+                <Icon name="plus" size={18} strokeWidth={2.2} />
+              </span>
+              <span>Add another {ATTACHMENT_LABEL[activeKind]} version</span>
+            </button>
+          </Section>
+          <Section tight>
+            <button
+              className="sheet-row destructive"
+              onClick={() => setConfirmDeleteVersion({ kind: activeKind, id: activeVersion.id, label: activeVersion.label })}
+            >
+              Remove this version
+            </button>
+          </Section>
         </div>
       )}
 
@@ -458,10 +434,14 @@ export function AddEditSong({ songId }: { songId?: string }) {
       {renameVersionFor && (
         <Dialog>
           <div className="dialog-title">Rename version</div>
-          <div className="field">
-            <label>Version name</label>
-            <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
-          </div>
+          <input
+            className="alert-input"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder="Version name"
+            aria-label="Version name"
+            autoFocus
+          />
           <div className="btn-row" style={{ marginTop: 2 }}>
             <button className="btn" onClick={() => setRenameVersionFor(null)}>
               Cancel
@@ -509,11 +489,11 @@ export function AddEditSong({ songId }: { songId?: string }) {
         <Dialog>
           <div className="dialog-title">Discard edits?</div>
           <div className="dialog-body">Unsaved changes to this song will be lost.</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <div className="btn-stack">
             <button className="btn btn-primary" onClick={() => setConfirmDiscard(false)}>
               Keep editing
             </button>
-            <button className="btn" onClick={() => nav.pop()}>
+            <button className="btn btn-danger" onClick={() => nav.pop()}>
               Discard changes
             </button>
           </div>

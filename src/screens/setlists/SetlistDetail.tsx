@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Sheet, Dialog } from "../../components/Overlays";
 import { Icon } from "../../components/Icon";
 import { flattenSetlist } from "../../utils/setlistCalc";
-import { AddToSetDrawer } from "./AddToSetDrawer";
+import { AddToSetSheet } from "./AddToSetSheet";
+import { Section } from "../../components/List";
 import { SlotDetailSheet } from "./SlotDetailSheet";
 import { SetDetailsSheet } from "./SetDetailsSheet";
 import type { SetlistItem, SetlistSection, Song } from "../../state/types";
@@ -17,6 +18,13 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(Boolean((nav.top.params as any)?.openDetails));
+  // openDetails is a one-shot request from "New setlist": drop it from the
+  // frame so coming back to this screen (from Export, or another tab)
+  // doesn't open Set details again.
+  useEffect(() => {
+    if ((nav.top.params as any)?.openDetails) nav.replace("setlist-detail", { setlistId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [slot, setSlot] = useState<{ item: SetlistItem; song: Song; index: number } | null>(null);
   const [addSectionOpen, setAddSectionOpen] = useState(false);
   const [sectionName, setSectionName] = useState("");
@@ -48,109 +56,107 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   let songSlotIndex = -1;
 
   return (
-    <div className="screen">
-      <Header title={setlist.name} onBack={nav.pop} right={<button className="hdr-action" style={{ display: "flex" }} onClick={() => setMenuOpen(true)}><Icon name="more" size={16} /></button>} />
+    <div className="screen screen--grouped">
+      <Header
+        title={setlist.name}
+        onBack={nav.pop}
+        right={
+          <button className="hdr-btn" onClick={() => setMenuOpen(true)} aria-label="Setlist options">
+            <Icon name="more" size={20} strokeWidth={2} />
+          </button>
+        }
+      />
 
-      <div style={{ padding: "0 14px 9px", display: "flex", flexDirection: "column", gap: 6 }}>
-        <div className="muted" style={{ fontSize: 11 }}>
-          {setlist.date} · {setlist.time} · {setlist.description}
+      <div className="ios-list">
+        <div className="row-sub" style={{ padding: "0 16px", whiteSpace: "normal" }}>
+          {[setlist.date, setlist.time, setlist.description].filter(Boolean).join(" · ")}
         </div>
-      </div>
 
-      <div className="flex-1 hidden-scroll" style={{ padding: "0 14px", display: "flex", flexDirection: "column", gap: 6 }}>
-        {setlist.sections.map((section) => {
-          return (
-            <div key={section.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "4px 2px 3px" }}>
-                <span style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 10, letterSpacing: "0.14em", color: "var(--mut)" }}>
-                  {section.label.toUpperCase()}
-                </span>
-                <span style={{ flex: 1, height: 1, background: "var(--line)" }} />
-                <span
-                  role="button"
-                  aria-label="Section options"
-                  onClick={() => setSectionSheetFor(section)}
-                  className="muted"
-                  style={{ display: "flex", padding: "0 2px" }}
-                >
-                  <Icon name="more" size={14} />
-                </span>
+        {setlist.sections.map((section, si) => (
+          <Section
+            key={section.id}
+            tight={si === 0}
+            header={section.label}
+            headerAccessory={
+              <button onClick={() => setSectionSheetFor(section)} aria-label={`${section.label} options`}>
+                <Icon name="more" size={18} strokeWidth={2} />
+              </button>
+            }
+          >
+            {section.items.length === 0 && (
+              <div className="sheet-row" style={{ fontSize: 15, color: "var(--mut)" }}>
+                No songs in this section yet.
               </div>
-              {section.items.map((item) => {
-                const entry = flat.find((e) => e.item.id === item.id)!;
-                if (item.kind === "note") {
-                  return (
-                    <div key={item.id} style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 9 }}>
-                      <span className="muted" style={{ flex: "none", display: "flex" }}>
-                        <Icon name="note" size={13} strokeWidth={1.8} />
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5 }}>{item.label}</div>
-                        <div className="muted" style={{ fontSize: 10.5, marginTop: 1 }}>
-                          {item.note}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                const song = entry.song!;
-                songSlotIndex += 1;
-                const idx = songSlotIndex;
+            )}
+            {section.items.map((item) => {
+              const entry = flat.find((e) => e.item.id === item.id)!;
+              if (item.kind === "note") {
                 return (
-                  <button
-                    key={item.id}
-                    className="list-row"
-                    style={{ alignItems: "flex-start" }}
-                    onClick={() => setSlot({ item, song, index: idx })}
-                  >
-                    <span className="muted" style={{ display: "flex", flex: "none", alignSelf: "center" }}>
-                      <Icon name="grip" size={15} strokeWidth={1.6} />
+                  <div key={item.id} className="sheet-row sheet-row--lead">
+                    <span className="row-lead" style={{ color: "var(--mut)" }}>
+                      <Icon name="note" size={18} strokeWidth={1.8} />
                     </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {song.title}
+                    <div className="row-main">
+                      <div className="row-title">
+                        <span>{item.label}</span>
                       </div>
-                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                        {song.artist} · {song.tempo} BPM · {song.timeSig}
-                      </div>
-                      {item.note && (
-                        <div className="accent-deep" style={{ fontSize: 10.5, marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
-                          <Icon name="edit" size={11} strokeWidth={1.9} />
-                          <span>{item.note}</span>
-                        </div>
-                      )}
+                      {item.note && <div className="row-sub">{item.note}</div>}
                     </div>
-                    <span className="key-chip" style={{ flex: "none", alignSelf: "center" }}>
-                      {item.keyOverride ?? song.defaultKey}
-                    </span>
-                  </button>
+                  </div>
                 );
-              })}
-            </div>
-          );
-        })}
+              }
+              const song = entry.song!;
+              songSlotIndex += 1;
+              const idx = songSlotIndex;
+              return (
+                <button key={item.id} className="sheet-row sheet-row--lead" onClick={() => setSlot({ item, song, index: idx })}>
+                  <span className="row-lead" style={{ color: "var(--tertiary)" }}>
+                    <Icon name="grip" size={18} strokeWidth={1.8} />
+                  </span>
+                  <div className="row-main">
+                    <div className="row-title">
+                      <span>{song.title}</span>
+                    </div>
+                    <div className="row-sub">
+                      {song.artist} · {song.tempo} BPM · {song.timeSig}
+                    </div>
+                    {item.note && (
+                      <div className="row-note">
+                        <Icon name="edit" size={12} strokeWidth={2} />
+                        <span>{item.note}</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="key-chip">{item.keyOverride ?? song.defaultKey}</span>
+                </button>
+              );
+            })}
+          </Section>
+        ))}
 
-        <button
-          onClick={() => setAddOpen(true)}
-          style={{ border: "1px dashed var(--acc-deep)", background: "var(--tint)", borderRadius: 8, padding: 10, textAlign: "center", fontSize: 12, color: "var(--acc-deep)", fontWeight: 600 }}
-        >
-          + Add song or item
-        </button>
-        <button
-          onClick={() => setAddSectionOpen(true)}
-          style={{ border: "1px dashed var(--line)", background: "none", borderRadius: 8, padding: 10, textAlign: "center", fontSize: 12, color: "var(--mut)", fontWeight: 600, marginBottom: 8 }}
-        >
-          + Add section
-        </button>
+        <Section>
+          <button className="sheet-row action sheet-row--lead" onClick={() => setAddOpen(true)}>
+            <span className="row-lead">
+              <Icon name="plus" size={18} strokeWidth={2.2} />
+            </span>
+            <span>Add song or item</span>
+          </button>
+          <button className="sheet-row action sheet-row--lead" onClick={() => setAddSectionOpen(true)}>
+            <span className="row-lead">
+              <Icon name="plus" size={18} strokeWidth={2.2} />
+            </span>
+            <span>Add section</span>
+          </button>
+        </Section>
       </div>
 
-      <div style={{ flex: "none", padding: "10px 14px 14px", borderTop: "1px solid var(--line)", background: "var(--bg)", display: "flex", gap: 8 }}>
+      <div className="toolbar">
         <button className="btn btn-primary" style={{ flex: 1 }} onClick={startSong} disabled={songEntries.length === 0}>
-          <Icon name="play" size={12} />
+          <Icon name="play" size={14} />
           Start Set
         </button>
         <button className="btn" style={{ width: 44, padding: 0 }} onClick={() => nav.push("export", { setlistId })} aria-label="Export setlist">
-          <Icon name="share" size={16} strokeWidth={1.9} />
+          <Icon name="share" size={18} strokeWidth={2} />
         </button>
       </div>
 
@@ -189,7 +195,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
           </div>
         </Sheet>
       )}
-      {addOpen && <AddToSetDrawer setlist={setlist} onClose={() => setAddOpen(false)} />}
+      {addOpen && <AddToSetSheet setlist={setlist} onClose={() => setAddOpen(false)} />}
       {detailsOpen && <SetDetailsSheet setlist={setlist} onClose={() => setDetailsOpen(false)} />}
       {slot && (
         <SlotDetailSheet
@@ -235,10 +241,14 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
       {renameSectionFor && (
         <Dialog>
           <div className="dialog-title">Rename section</div>
-          <div className="field">
-            <label>Section name</label>
-            <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
-          </div>
+          <input
+            className="alert-input"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder="Section name"
+            aria-label="Section name"
+            autoFocus
+          />
           <div className="btn-row" style={{ marginTop: 2 }}>
             <button className="btn" onClick={() => setRenameSectionFor(null)}>
               Cancel
@@ -307,10 +317,14 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
       {addSectionOpen && (
         <Dialog>
           <div className="dialog-title">Add section</div>
-          <div className="field">
-            <label>Section name</label>
-            <input value={sectionName} onChange={(e) => setSectionName(e.target.value)} placeholder="e.g. Communion" autoFocus />
-          </div>
+          <input
+            className="alert-input"
+            value={sectionName}
+            onChange={(e) => setSectionName(e.target.value)}
+            placeholder="Section name, e.g. Communion"
+            aria-label="Section name"
+            autoFocus
+          />
           <div className="btn-row" style={{ marginTop: 2 }}>
             <button
               className="btn"

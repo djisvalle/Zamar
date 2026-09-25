@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
-import { Toggle } from "../../components/Toggle";
+import { Toggle, Segmented } from "../../components/Toggle";
+import { Sheet } from "../../components/Overlays";
+import { Section } from "../../components/List";
+import { Icon } from "../../components/Icon";
 import { setlistSongCount } from "../../utils/setlistCalc";
 
 type Format = "pdf" | "chordpro" | "musicxml";
 type Phase = "options" | "progress" | "done" | "offline-error";
 
 const TOTAL_PAGES = 6;
+const FORMAT_LABEL: Record<Format, string> = { pdf: "PDF", chordpro: "ChordPro", musicxml: "MusicXML" };
 
 export function Export({ setlistId }: { setlistId: string }) {
   const { state } = useStore();
@@ -63,10 +67,10 @@ export function Export({ setlistId }: { setlistId: string }) {
       <div className="screen">
         <Header title="Export set" onBack={nav.pop} />
         <div className="empty">
-          <div className="empty-title" style={{ fontSize: 16 }}>
+          <div className="empty-title">
             Rendering page {Math.min(page + 1, TOTAL_PAGES)} of {TOTAL_PAGES}
           </div>
-          <div style={{ width: "100%", height: 4, background: "var(--line)", borderRadius: 99 }}>
+          <div style={{ width: "100%", height: 4, background: "var(--fill)", borderRadius: 99, overflow: "hidden" }}>
             <div style={{ width: `${(page / TOTAL_PAGES) * 100}%`, height: 4, background: "var(--acc)", borderRadius: 99, transition: "width .2s" }} />
           </div>
           <div className="empty-body">You can keep using the app — this finishes in the background.</div>
@@ -87,113 +91,161 @@ export function Export({ setlistId }: { setlistId: string }) {
 
   if (phase === "offline-error") {
     return (
-      <div className="screen">
-        <div style={{ background: "var(--fg)", color: "var(--bg)", padding: "7px 14px", fontSize: 11, display: "flex", justifyContent: "space-between" }}>
+      <div className="screen screen--grouped">
+        <div
+          style={{
+            background: "var(--fg)",
+            color: "var(--bg)",
+            padding: "8px 16px",
+            fontSize: 13,
+            display: "flex",
+            justifyContent: "space-between",
+          }}
+        >
           <span>Offline — local export only</span>
           <span style={{ opacity: 0.7 }}>Retry</span>
         </div>
         <Header title="Export set" onBack={nav.pop} />
-        <div style={{ flex: 1, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ background: "rgba(140,59,59,.09)", border: "1px solid #8c3b3b", borderRadius: 8, padding: 11, display: "flex", flexDirection: "column", gap: 7 }}>
-            <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 13, color: "#8c3b3b" }}>Page 5 couldn't render</div>
-            <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+        <div className="ios-list">
+          <div className="error-banner" style={{ marginTop: 12 }}>
+            <div className="error-banner-title">Page 5 couldn't render</div>
+            <div>
               A song in this set has no {format === "musicxml" ? "MusicXML part" : "renderable chart"} — only a typed chart. Export the other 5 pages, or switch this set to ChordPro.
             </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            <button className="btn btn-primary" onClick={() => setPhase("done")}>
+          <Section footer="Mail and cloud targets are hidden while offline; Files and Print stay available.">
+            <button className="sheet-row action" onClick={() => setPhase("done")}>
               Export 5 pages
             </button>
-            <button className="btn" onClick={() => { setFormat("chordpro"); setPhase("options"); }}>
+            <button
+              className="sheet-row action"
+              onClick={() => {
+                setFormat("chordpro");
+                setPhase("options");
+              }}
+            >
               Switch to ChordPro
             </button>
-            <button className="btn" onClick={startExport}>
+            <button className="sheet-row action" onClick={startExport}>
               Retry page 5
             </button>
-          </div>
-          <div className="muted" style={{ fontSize: 11, marginTop: "auto", lineHeight: 1.5 }}>
-            Mail and cloud targets are hidden while offline; Files and Print stay available.
-          </div>
+          </Section>
         </div>
       </div>
     );
   }
 
   if (phase === "done") {
+    const ext = format === "pdf" ? "pdf" : format === "chordpro" ? "cho" : "musicxml";
     return (
-      <div className="screen">
+      <div className="screen screen--grouped">
         <Header title="Export set" onBack={() => setPhase("options")} backLabel="Export set" />
         <div style={{ flex: 1 }} />
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 10, background: "var(--surface)", borderRadius: "14px 14px 0 0", boxShadow: "0 -10px 30px rgba(29,31,32,.3)", padding: 14, display: "flex", flexDirection: "column", gap: 11 }}>
-          <div>
-            <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 14 }}>
-              {setlist.name.replace(/\s/g, "-")}.{format === "pdf" ? "pdf" : format === "chordpro" ? "cho" : "musicxml"}
+        <Sheet onClose={() => setPhase("options")}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              aria-hidden
+              style={{
+                width: 44,
+                height: 52,
+                flex: "none",
+                borderRadius: 8,
+                background: "var(--list-cell)",
+                display: "flex",
+                alignItems: "flex-end",
+                justifyContent: "center",
+                paddingBottom: 6,
+                fontSize: 10,
+                fontWeight: 700,
+                color: "var(--acc-deep)",
+                textTransform: "uppercase",
+              }}
+            >
+              {ext}
             </div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-              {page} pages · 1.2 MB · {includeChords ? "chords included" : "lyrics only"}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 17, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {setlist.name.replace(/\s/g, "-")}.{ext}
+              </div>
+              <div className="row-sub">
+                {page} pages · 1.2 MB · {includeChords ? "chords included" : "lyrics only"}
+              </div>
             </div>
+            <button className="row-icon-btn" style={{ background: "var(--fill)", color: "var(--mut)" }} onClick={() => setPhase("options")} aria-label="Close">
+              <Icon name="close" size={14} strokeWidth={2.6} />
+            </button>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "4px 0" }}>
             {["Mail", "Files", "Print", "More"].map((s) => (
-              <div key={s} style={{ flex: 1, height: 56, borderRadius: 10, border: "1px solid var(--line)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11 }}>
+              <div key={s} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, fontSize: 12 }}>
+                <div style={{ width: 60, height: 60, borderRadius: 14, background: "var(--list-cell)" }} />
                 {s}
               </div>
             ))}
           </div>
-          <button className="btn btn-primary btn-block" onClick={nav.pop}>
-            Open
-          </button>
-        </div>
+          <div className="list-group">
+            <button className="sheet-row" onClick={nav.pop}>
+              <span>Open</span>
+            </button>
+          </div>
+        </Sheet>
       </div>
     );
   }
 
   return (
-    <div className="screen">
+    <div className="screen screen--grouped">
       <Header title="Export set" onBack={nav.pop} />
-      <div className="flex-1 hidden-scroll scroll-under-tabs" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 9 }}>
-        <div className="muted" style={{ fontSize: 11 }}>
+      <div className="ios-list scroll-under-tabs">
+        <div className="row-sub" style={{ padding: "0 16px" }}>
           {setlist.name} · {setlistSongCount(setlist)} songs
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {(["pdf", "chordpro", "musicxml"] as Format[]).map((f) => (
-            <button key={f} className={"chip" + (format === f ? " active" : "")} onClick={() => setFormat(f)}>
-              {f === "pdf" ? "PDF" : f === "chordpro" ? "ChordPro" : "MusicXML"}
-            </button>
-          ))}
+        <div style={{ marginTop: 12 }}>
+          <Segmented<Format>
+            options={(["pdf", "chordpro", "musicxml"] as Format[]).map((f) => ({ value: f, label: FORMAT_LABEL[f] }))}
+            value={format}
+            onChange={setFormat}
+          />
         </div>
-        <ExportToggle label="Include chords" on={includeChords} onChange={() => setIncludeChords((v) => !v)} />
-        <ExportToggle
-          label="Apply per-slot keys"
-          body={setlist.sections[0]?.items[0]?.songId ? `Slots export in each song's set key.` : undefined}
-          on={perSlotKeys}
-          onChange={() => setPerSlotKeys((v) => !v)}
-        />
-        <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />
-        <ExportToggle label="Simulate offline" on={offline} onChange={() => setOffline((v) => !v)} />
-        <div style={{ flex: 1, border: "1px dashed var(--line)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "var(--mut)" }}>
+        <Section
+          footer={setlist.sections[0]?.items[0]?.songId ? "Slots export in each song's set key." : undefined}
+        >
+          <ExportToggle label="Include chords" on={includeChords} onChange={() => setIncludeChords((v) => !v)} />
+          <ExportToggle label="Apply per-slot keys" on={perSlotKeys} onChange={() => setPerSlotKeys((v) => !v)} />
+          <ExportToggle label="One song per page" on={onePerPage} onChange={() => setOnePerPage((v) => !v)} />
+        </Section>
+        <Section>
+          <ExportToggle label="Simulate offline" on={offline} onChange={() => setOffline((v) => !v)} />
+        </Section>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 120,
+            marginTop: 24,
+            borderRadius: 12,
+            background: "var(--list-cell)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 15,
+            color: "var(--mut)",
+          }}
+        >
           Preview · {TOTAL_PAGES} pages
         </div>
-        <button className="btn btn-primary" style={{ height: 40 }} onClick={startExport}>
-          Generate {format === "pdf" ? "PDF" : format === "chordpro" ? "ChordPro" : "MusicXML"}
+        <button className="btn btn-primary" style={{ marginTop: 16, flex: "none" }} onClick={startExport}>
+          Generate {FORMAT_LABEL[format]}
         </button>
       </div>
     </div>
   );
 }
 
-function ExportToggle({ label, body, on, onChange }: { label: string; body?: string; on: boolean; onChange: () => void }) {
+function ExportToggle({ label, on, onChange }: { label: string; on: boolean; onChange: () => void }) {
   return (
-    <div className="list-row">
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 500 }}>{label}</div>
-        {body && (
-          <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>
-            {body}
-          </div>
-        )}
-      </div>
-      <Toggle on={on} onChange={onChange} />
+    <div className="sheet-row">
+      <span>{label}</span>
+      <Toggle on={on} onChange={onChange} label={label} />
     </div>
   );
 }

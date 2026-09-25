@@ -33,7 +33,9 @@ export type IconName =
   | "bow-up"
   | "bow-down"
   | "undo"
-  | "redo";
+  | "redo"
+  | "chevron-up-down"
+  | "queue";
 
 /**
  * One small, hand-drawn icon set (Feather-style: 24x24 grid, round caps/joins)
@@ -242,6 +244,22 @@ const ICON_PATHS: Record<IconName, JSX.Element> = {
     <>
       <path d="m15 14 5-5-5-5" />
       <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+    </>
+  ),
+  /* iOS's pop-up button glyph: a menu picker's value opens a list. */
+  "chevron-up-down": (
+    <>
+      <polyline points="8 9.5 12 5.5 16 9.5" />
+      <polyline points="8 14.5 12 18.5 16 14.5" />
+    </>
+  ),
+  /* "Play next": three lines with a trailing dot, like a queue. */
+  queue: (
+    <>
+      <line x1="3" y1="6" x2="15" y2="6" />
+      <line x1="3" y1="12" x2="13" y2="12" />
+      <line x1="3" y1="18" x2="11" y2="18" />
+      <circle cx="19" cy="16" r="4" />
     </>
   ),
 };
