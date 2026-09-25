@@ -134,6 +134,52 @@ function strokeSegments(stroke: Stroke): [Point, Point][] {
   return segments;
 }
 
+/** How far (CSS px at the content's natural size) a simplified pen or
+ * highlighter stroke may stray from what was drawn — below what the eye
+ * can see at any stroke width the tools offer. */
+export const STROKE_SIMPLIFY_TOLERANCE = 0.75;
+
+/** Indices of the points Ramer-Douglas-Peucker keeps at `tolerance`, in
+ * order. The first and last points are always kept. */
+export function simplifyIndices(points: Point[], tolerance: number = STROKE_SIMPLIFY_TOLERANCE): number[] {
+  if (points.length <= 2) return points.map((_, i) => i);
+  const keep = new Array<boolean>(points.length).fill(false);
+  keep[0] = keep[points.length - 1] = true;
+  const stack: [number, number][] = [[0, points.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    let worst = -1;
+    let worstDist = 0;
+    for (let i = a + 1; i < b; i++) {
+      const d = distanceToSegment(points[i], points[a], points[b]);
+      if (d > worstDist) {
+        worstDist = d;
+        worst = i;
+      }
+    }
+    if (worst !== -1 && worstDist > tolerance) {
+      keep[worst] = true;
+      stack.push([a, worst], [worst, b]);
+    }
+  }
+  return keep.flatMap((k, i) => (k ? [i] : []));
+}
+
+/** Drops the raw pointer samples a finished pen/highlighter stroke doesn't
+ * need, keeping `anchors` parallel to `points`. Square strokes (two corner
+ * points) come back unchanged. */
+export function simplifyStroke(stroke: Stroke): Stroke {
+  if (stroke.tool === "square") return stroke;
+  const kept = simplifyIndices(stroke.points);
+  if (kept.length === stroke.points.length) return stroke;
+  return {
+    ...stroke,
+    points: kept.map((i) => stroke.points[i]),
+    anchors: stroke.anchors ? kept.map((i) => stroke.anchors![i]) : undefined,
+  };
+}
+
+
 /** True if `point` lands within `radius` of any part of `stroke`'s drawn
  * path. Used by the eraser tool, which removes whole strokes rather than
  * partial pixel regions — see the spec's "object eraser" decision. `radius`

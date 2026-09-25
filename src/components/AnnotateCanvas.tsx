@@ -11,6 +11,7 @@ import {
   resolveSelectionColor,
   rotateAround,
   shapeHalfExtents,
+  simplifyStroke,
   SHAPE_ASPECT,
   snapRotation,
   STROKE_WIDTH,
@@ -52,6 +53,24 @@ function marksOf(annotations: AnnotationObject[]): (TextMark | ShapeMark)[] {
   return annotations.filter(isMark);
 }
 
+/** Traces a freehand polyline as quadratic curves through the midpoints
+ * between samples (each sample is the control point), so a simplified
+ * stroke still reads as a smooth line instead of visible straight segments. */
+function traceSmooth(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length < 3) {
+    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    return;
+  }
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mid = { x: (pts[i].x + pts[i + 1].x) / 2, y: (pts[i].y + pts[i + 1].y) / 2 };
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last.x, last.y);
+}
+
 function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvasElement, offset?: { x: number; y: number }) {
   ctx.strokeStyle = s.color ?? resolveAccentColor(canvas);
   ctx.lineWidth = s.size ?? STROKE_WIDTH;
@@ -64,9 +83,7 @@ function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvas
     const [a, b] = pts;
     ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   } else if (pts.length > 0) {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    traceSmooth(ctx, pts);
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
@@ -91,9 +108,7 @@ function drawSelectionHalo(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTM
     const [a, b] = pts;
     ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   } else if (pts.length > 0) {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    traceSmooth(ctx, pts);
     ctx.stroke();
   }
   ctx.restore();
@@ -481,7 +496,7 @@ export function AnnotateCanvas({
     }
 
     if (draft.current && draft.current.points.length > 0) {
-      onCommit([...annotations, draft.current]);
+      onCommit([...annotations, simplifyStroke(draft.current)]);
     }
     draft.current = null;
   };
