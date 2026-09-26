@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useStore } from "../../state/store";
-import { useNavigator } from "../../navigation/Navigator";
+import { useFrame, useNavigator } from "../../navigation/Navigator";
 import { Dialog, Sheet } from "../../components/Overlays";
 import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
@@ -35,7 +35,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
   const existing = songId ? state.songs.find((s) => s.id === songId) : undefined;
-  const params = nav.top.params as any;
+  const params = useFrame().frame.params as any;
   const prefillTitle = params?.prefillTitle as string | undefined;
   const prefillArtist = params?.prefillArtist as string | undefined;
   const prefillTempo = params?.prefillTempo as string | undefined;

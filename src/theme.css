@@ -242,6 +242,29 @@ button {
   pointer-events: none;
 }
 
+/* Every visited tab's screens stay mounted (see ScreenHost in App.tsx), one
+   layer each, stacked in the space below the status bar. Only the showing
+   layer is visible; the rest keep their layout (so scores, PDFs and marks
+   aren't laid out again on return) and are made inert. */
+.screen-host {
+  flex: 1;
+  display: flex;
+  position: relative;
+  min-height: 0;
+}
+.screen-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+.screen-layer[data-showing="false"] {
+  visibility: hidden;
+  /* Backstop: a descendant with an explicit `visibility: visible` escapes
+     its hidden ancestor, but not an ancestor's opacity. */
+  opacity: 0;
+}
+
 .screen {
   flex: 1;
   display: flex;

@@ -4,9 +4,105 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Zamar — mockup</title>
+    <!-- The splash shows while JS and the library load, and the first React
+         render replaces it. It can't read settings yet, so App keeps the theme
+         in localStorage for it, falling back to the system setting. theme.css
+         isn't applied yet either, so it carries its own styles. -->
+    <script>
+      (function () {
+        var t;
+        try {
+          t = localStorage.getItem("zamar.theme");
+        } catch (e) {}
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-boot-theme", t);
+      })();
+    </script>
+    <style>
+      .boot-splash {
+        --bg: #ffffff;
+        --fg: #000000;
+        --acc: #4f7aa3;
+        --line: rgba(60, 60, 67, 0.29);
+        --tint: rgba(79, 122, 163, 0.14);
+        --mut: rgba(60, 60, 67, 0.6);
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, Roboto, "Segoe UI", sans-serif;
+      }
+      [data-boot-theme="dark"] .boot-splash {
+        --bg: #000000;
+        --fg: #ffffff;
+        --acc: #8ab4dc;
+        --line: rgba(84, 84, 88, 0.65);
+        --tint: rgba(138, 180, 220, 0.18);
+        --mut: rgba(235, 235, 245, 0.6);
+      }
+      .boot-splash-center {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+      }
+      .boot-splash-mark {
+        width: 72px;
+        height: 72px;
+        background: var(--tint);
+        border: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, Roboto, "Segoe UI", sans-serif;
+        font-weight: 700;
+        font-size: 30px;
+        color: var(--acc);
+      }
+      .boot-splash-wordmark {
+        font-family: "Bebas Neue", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, Roboto, "Segoe UI", sans-serif;
+        font-size: 50px;
+        letter-spacing: 0.02em;
+        line-height: 1;
+      }
+      .boot-splash-bar {
+        width: 96px;
+        height: 2px;
+        background: var(--line);
+        overflow: hidden;
+      }
+      .boot-splash-bar::before {
+        content: "";
+        display: block;
+        width: 46px;
+        height: 2px;
+        background: var(--acc);
+      }
+      .boot-splash-tagline {
+        text-align: center;
+        font-size: 11px;
+        color: var(--mut);
+        padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-splash" aria-label="Zamar is loading">
+        <div class="boot-splash-center">
+          <div class="boot-splash-mark">Z</div>
+          <div class="boot-splash-wordmark">ZAMAR</div>
+          <div class="boot-splash-bar"></div>
+        </div>
+        <div class="boot-splash-tagline">Make worship, made easier</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

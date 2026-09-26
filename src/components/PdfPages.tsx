@@ -281,7 +281,10 @@ export function PdfPages({ src, disableZoom = false }: { src: string; disableZoo
           // visibility, not display: pdf.js needs to measure a real non-zero
           // width to size pages correctly while the first page is loading —
           // display:none collapses the box to zero width.
-          visibility: status === "ready" ? "visible" : "hidden",
+          // Inherited once ready rather than "visible": an explicit
+          // "visible" would show through the hidden layer of a tab that
+          // isn't on screen (see .screen-layer in theme.css).
+          visibility: status === "ready" ? undefined : "hidden",
           width: "100%",
           // Native vertical scroll handles paging through the document at
           // 1x; once zoomed in, our own pointer handlers take over panning

@@ -1,4 +1,4 @@
-import type { AttachmentBucket, AttachmentKind, AttachmentVersion, Attachments } from "../state/types";
+import type { AttachmentBucket, AttachmentKind, AttachmentVersion, Attachments, Song } from "../state/types";
 
 export const ATTACHMENT_LABEL: Record<AttachmentKind, string> = {
   musicxml: "Sheet Music",
@@ -17,6 +17,21 @@ export function firstAvailableCategory(attachments: Attachments): AttachmentKind
 
 export function selectedVersion(bucket: AttachmentBucket): AttachmentVersion {
   return bucket.versions.find((v) => v.id === bucket.selectedVersionId) ?? bucket.versions[0];
+}
+
+/** The attachment a song opens to on stage, if it opens to one: its saved
+ * default kind while still attached, else the highest-priority one, and that
+ * bucket's default version (as the effect in LiveStage picks). `view` is the
+ * song's resolved default view (store.ts's `resolveDefaultView`), passed in
+ * so this module doesn't import the store. */
+export function openingAttachment(
+  song: Song | undefined,
+  view: "chords" | "sheet"
+): { kind: AttachmentKind; version: AttachmentVersion } | undefined {
+  if (!song || view !== "sheet") return undefined;
+  const saved = song.defaultView && song.defaultView !== "chords" ? song.defaultView : undefined;
+  const kind = saved && song.attachments[saved] ? saved : firstAvailableCategory(song.attachments);
+  return kind ? { kind, version: selectedVersion(song.attachments[kind]!) } : undefined;
 }
 
 /** Appends `version` to `attachments[kind]` (creating the bucket if it

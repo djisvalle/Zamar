@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useStore, activeSetlistSlots, activeSetlistSongIds, resolveDefaultView } from "../../state/store";
-import { useNavigator } from "../../navigation/Navigator";
+import { useFrame, useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
 import { MxlScore, type MxlScoreHandle, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
@@ -9,7 +9,7 @@ import { AnnotateCanvas } from "../../components/AnnotateCanvas";
 import { Icon } from "../../components/Icon";
 import { syncAnnotationWidths } from "../../utils/annotations";
 import { activeKeyChange, keySemitoneShift } from "../../utils/keys";
-import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
+import { CATEGORY_PRIORITY, firstAvailableCategory, openingAttachment, selectedVersion } from "../../utils/attachments";
 import type { AnnotationObject, AnnotationView, AttachmentKind, Song } from "../../state/types";
 import { AddSongSheet } from "./AddSongSheet";
 import { QuickEditSheet } from "./QuickEditSheet";
@@ -59,19 +59,10 @@ function usePortraitWidth(scrollRef: React.RefObject<HTMLDivElement | null>, mou
   return widths;
 }
 
-/** The attachment version a song opens to on stage, if it opens to one:
- * its saved default kind while still attached, else the highest-priority
- * one, and that bucket's default version (as the effect in LiveStage picks). */
-function openingVersionId(song: Song | undefined): string | undefined {
-  if (!song || resolveDefaultView(song) !== "sheet") return undefined;
-  const saved = song.defaultView && song.defaultView !== "chords" ? song.defaultView : undefined;
-  const kind = saved && song.attachments[saved] ? saved : firstAvailableCategory(song.attachments);
-  return kind ? selectedVersion(song.attachments[kind]!).id : undefined;
-}
-
 export function LiveStage() {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
+  const { showing } = useFrame();
   const { stage } = state;
   const [stageToolsOpen, setStageToolsOpen] = useState(false);
   // The slot's band note shows one line until tapped open.
@@ -152,7 +143,7 @@ export function LiveStage() {
   // it doesn't wait on storage.
   const nextSong = setlist ? state.songs.find((s) => s.id === setlistSongIds[stage.setlistIndex + 1]) : undefined;
   useEffect(() => {
-    prefetchAttachmentData([openingVersionId(nextSong)]);
+    prefetchAttachmentData([openingAttachment(nextSong, resolveDefaultView(nextSong))?.version.id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextSong?.id]);
 
@@ -199,14 +190,18 @@ export function LiveStage() {
     }
   };
 
+  // Live Stage stays mounted behind other tabs. Its idle timer only runs
+  // while it's on screen, and coming back shows the chrome again, as
+  // opening it fresh does.
   useEffect(() => {
+    if (!showing) return;
     resetIdle();
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (tapTimer.current) clearTimeout(tapTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage.songId, stage.drawer]);
+  }, [stage.songId, stage.drawer, showing]);
 
   // Marks saved before Song.annotationWidths existed have no recorded width.
   // This is the device they're being used on, so the width they show at now

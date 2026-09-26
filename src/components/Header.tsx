@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigator, type Frame } from "../navigation/Navigator";
+import { useFrame, useNavigator, type Frame } from "../navigation/Navigator";
 import { useStore, type AppState } from "../state/store";
 import { Icon } from "./Icon";
 
@@ -45,13 +45,14 @@ export function Header({
   large?: boolean;
 }) {
   const nav = useNavigator();
+  const own = useFrame();
   const { state } = useStore();
   const ref = useRef<HTMLDivElement>(null);
   const depth = useScrollDepth(ref);
   const collapsed = large ? depth === 2 : false;
   const scrolled = large ? collapsed : depth > 0;
-  const showBack = Boolean(onBack) || nav.canPop;
-  const label = backLabel ?? previousTitle(nav.stack[nav.stack.length - 2], state);
+  const showBack = Boolean(onBack) || own.canPop;
+  const label = backLabel ?? previousTitle(own.previous, state);
   const backButton = showBack ? (
     <button className="hdr-back" onClick={onBack ?? nav.pop} aria-label={`Back to ${label}`}>
       <Icon name="chevron-left" size={24} strokeWidth={2.4} />

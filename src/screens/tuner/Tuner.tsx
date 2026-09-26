@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useStore } from "../../state/store";
+import { useFrame } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { MicPermissionSheet } from "./MicPermissionSheet";
 import { LargeTitle, Section } from "../../components/List";
@@ -99,7 +100,10 @@ export function Tuner() {
   /** A string the person tapped to tune against, or null to follow whichever
    * string is nearest the note being played. */
   const [lockedString, setLockedString] = useState<number | null>(null);
-  const mic = useMicPitch(permissionResolved && micOn);
+  // The Tuner stays mounted when another tab is picked, so the mic follows
+  // whether it's on screen, and the OS mic indicator never outlives it.
+  const { showing } = useFrame();
+  const mic = useMicPitch(permissionResolved && micOn && showing);
 
   if (!permissionResolved) {
     return (
