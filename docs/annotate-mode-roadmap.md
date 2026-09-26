@@ -37,6 +37,11 @@ discussion" items (done 2026-09-25).
   PDF exports. The Text tool opens an empty field at the tap instead of
   placing a "Note" placeholder. Saved pins show as default-size yellow notes.
   See `docs/superpowers/specs/2026-09-26-sticky-notes-and-text-entry-design.md`.
+- **Two-finger scroll** (2026-09-26): with any tool active, two fingers
+  scroll the chart and one finger keeps drawing, so Scroll mode is no longer
+  needed just to move down the page. A second finger cancels whatever the
+  first started; Sticky note, Text and Eraser act on release so the first
+  finger of a scroll never places or erases anything.
 - **Quick wins 1–3** (collapsible tool panel, canvas selection highlight,
   stronger Clear-page vs. Clear-all distinction) — done.
 - **Persisted annotations per song** (was tracked as backlog item 4 below).

@@ -329,6 +329,14 @@ export function AnnotateCanvas({
   >(null);
   const lastTap = useRef<{ at: number; p: { x: number; y: number }; hits: string; index: number } | null>(null);
   const placeStart = useRef<{ x: number; y: number } | null>(null);
+  // A Sticky note/Text/Eraser press waiting to become a tap (or, for the
+  // eraser, a drag). These act on release rather than on touch so that the
+  // first finger of a two-finger scroll never places or erases anything.
+  const pendingTap = useRef<{ x: number; y: number } | null>(null);
+  // Touches currently down, and the last centre point of a two-finger
+  // scroll while one is in progress.
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const twoFingerPan = useRef<{ x: number; y: number } | null>(null);
   const snapped = useRef<number | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [dragPreview, setDragPreview] = useState<{ ids: string[]; dx: number; dy: number } | null>(null);
@@ -529,9 +537,78 @@ export function AnnotateCanvas({
   };
   const armedHalfH = () => textMarkHalfExtents({ id: "", kind: "text", position: { x: 0, y: 0 }, text: armedSymbol.glyph ?? "Note", symbolId: tool === "notation" ? armedSymbol.id : undefined, color: "", size: markStyle.size }).halfH;
 
+  /** Cancels whatever the first finger started, when a second finger turns
+   * the gesture into a scroll. */
+  const abortGesture = () => {
+    activePointer.current = null;
+    pendingTap.current = null;
+    placeStart.current = null;
+    setPlaceGhost(null);
+    const g = selectGesture.current;
+    if (g && g.kind === "press") clearTimeout(g.timer);
+    selectGesture.current = null;
+    setDragPreview(null);
+    setBox(null);
+    clearSnap();
+    draft.current = null;
+    if (liveRef.current) beginPaint(liveRef.current);
+    liveBounds.current = null;
+  };
+
+  const centroid = () => {
+    const pts = [...touches.current.values()];
+    return { x: pts.reduce((a, q) => a + q.x, 0) / pts.length, y: pts.reduce((a, q) => a + q.y, 0) / pts.length };
+  };
+
+  /** Two fingers scroll the chart while any tool is active; one finger
+   * keeps drawing. Returns true when the event belongs to a two-finger
+   * scroll and the tool should ignore it. */
+  const trackTouch = (e: React.PointerEvent, phase: "down" | "move" | "up"): boolean => {
+    if (e.pointerType !== "touch") return false;
+    const t = touches.current;
+    if (phase === "down") {
+      // A primary touch starts a new sequence: anything still tracked is a
+      // finger whose up event was lost.
+      if (e.isPrimary) {
+        t.clear();
+        twoFingerPan.current = null;
+      }
+      t.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (t.size === 2 && !twoFingerPan.current) {
+        abortGesture();
+        twoFingerPan.current = centroid();
+        capture(e);
+      }
+      return twoFingerPan.current !== null;
+    }
+    if (phase === "move") {
+      if (!t.has(e.pointerId)) return false;
+      t.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const last = twoFingerPan.current;
+      if (!last) return false;
+      if (t.size >= 2) {
+        const c = centroid();
+        const scroller = wrapperRef.current && scrollParentOf(wrapperRef.current);
+        if (scroller) {
+          scroller.scrollTop -= c.y - last.y;
+          scroller.scrollLeft -= c.x - last.x;
+        }
+        twoFingerPan.current = c;
+      }
+      return true;
+    }
+    t.delete(e.pointerId);
+    if (!twoFingerPan.current) return false;
+    // The scroll lasts until every finger is up, so the last one lifting
+    // doesn't then draw.
+    if (t.size === 0) twoFingerPan.current = null;
+    return true;
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (!interactive || scrollMode) return;
     e.stopPropagation();
+    if (trackTouch(e, "down")) return;
     // With a note or text field open, a tap anywhere else only closes it.
     // The document-level listener below usually got there first.
     if (closedBy.current === e.nativeEvent || noteEditRef.current || textEditRef.current) {
@@ -540,51 +617,11 @@ export function AnnotateCanvas({
       return;
     }
     const p = toContentPoint(e);
-    if (tool === "eraser") {
-      eraseAt(p);
-      return;
-    }
-    // Tapping an existing note with the Sticky note tool, or existing text
-    // with the Text tool, types into it rather than starting a new one on
-    // top of it.
-    if (tool === "pin" || tool === "text") {
-      const hit = annotations.find((a) => a.id === hitsAt(p, annotations, SELECT_HIT_RADIUS)[0]);
-      const editable = hit && (tool === "pin" ? (isPin(hit) ? hit : null) : isFreeText(hit) ? hit : null);
-      if (editable) {
-        e.preventDefault();
-        startInlineEdit(editable);
-        return;
-      }
-    }
-    if (tool === "pin") {
+    if (tool === "eraser" || tool === "pin" || tool === "text") {
       e.preventDefault();
-      const x = Math.max(0, Math.min(p.x, size.width - NOTE_WIDTH));
-      const y = Math.max(0, Math.min(p.y, size.height - NOTE_HEIGHT));
-      const wrapRect = wrapperRef.current?.getBoundingClientRect();
-      const draft: Pin = {
-        id: `pin-${Date.now()}`,
-        kind: "pin",
-        position: { x, y },
-        text: "",
-        color: noteColor,
-        anchor: (wrapRect && scoreRef?.current?.anchorAtClientPoint(wrapRect.left + x, wrapRect.top + y)) ?? undefined,
-      };
-      openNote({ id: draft.id, isNew: true, draft });
-      return;
-    }
-    if (tool === "text") {
-      e.preventDefault();
-      const y = snapY(p.y, markStyle.size * 0.9);
-      setTextEdit({
-        id: `mark-${Date.now()}`,
-        isNew: true,
-        x: Math.max(0, Math.min(p.x, size.width - 40)),
-        y,
-        centered: false,
-        color: markStyle.color,
-        size: markStyle.size,
-        initial: "",
-      });
+      capture(e);
+      activePointer.current = e.pointerId;
+      pendingTap.current = p;
       return;
     }
     if (tool === "select") {
@@ -673,12 +710,66 @@ export function AnnotateCanvas({
     return anchors.every((a) => a) ? { ...stroke, anchors: anchors as NonNullable<Stroke["anchors"]> } : stroke;
   };
 
+  /** A tap with the Sticky note or Text tool: types into the note or text
+   * under it, or starts a new one there. */
+  const placeAt = (p: { x: number; y: number }) => {
+    const hit = annotations.find((a) => a.id === hitsAt(p, annotations, SELECT_HIT_RADIUS)[0]);
+    const editable = hit && (tool === "pin" ? (isPin(hit) ? hit : null) : isFreeText(hit) ? hit : null);
+    if (editable) {
+      startInlineEdit(editable);
+      return;
+    }
+    if (tool === "pin") {
+      const x = Math.max(0, Math.min(p.x, size.width - NOTE_WIDTH));
+      const y = Math.max(0, Math.min(p.y, size.height - NOTE_HEIGHT));
+      const wrapRect = wrapperRef.current?.getBoundingClientRect();
+      const draft: Pin = {
+        id: `pin-${Date.now()}`,
+        kind: "pin",
+        position: { x, y },
+        text: "",
+        color: noteColor,
+        anchor: (wrapRect && scoreRef?.current?.anchorAtClientPoint(wrapRect.left + x, wrapRect.top + y)) ?? undefined,
+      };
+      openNote({ id: draft.id, isNew: true, draft });
+      return;
+    }
+    setTextEdit({
+      id: `mark-${Date.now()}`,
+      isNew: true,
+      x: Math.max(0, Math.min(p.x, size.width - 40)),
+      y: snapY(p.y, markStyle.size * 0.9),
+      centered: false,
+      color: markStyle.color,
+      size: markStyle.size,
+      initial: "",
+    });
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!interactive || scrollMode || activePointer.current !== e.pointerId) return;
+    if (!interactive || scrollMode) return;
+    if (trackTouch(e, "move")) {
+      e.stopPropagation();
+      return;
+    }
+    if (activePointer.current !== e.pointerId) return;
     e.stopPropagation();
     const p = toContentPoint(e);
     if (tool === "eraser") {
+      // Starts erasing once the finger moves, including where it went down.
+      const start = pendingTap.current;
+      if (start) {
+        if (Math.hypot(p.x - start.x, p.y - start.y) <= TAP_THRESHOLD) return;
+        pendingTap.current = null;
+        eraseAt(start);
+      }
       eraseAt(p);
+      return;
+    }
+    if (tool === "pin" || tool === "text") {
+      const start = pendingTap.current;
+      // A drag isn't a tap: nothing is placed.
+      if (start && Math.hypot(p.x - start.x, p.y - start.y) > TAP_THRESHOLD) pendingTap.current = null;
       return;
     }
     if (tool === "select") {
@@ -741,9 +832,20 @@ export function AnnotateCanvas({
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (!interactive || activePointer.current !== e.pointerId) return;
+    if (!interactive) return;
+    if (trackTouch(e, "up")) return;
+    if (activePointer.current !== e.pointerId) return;
     activePointer.current = null;
     const p = toContentPoint(e);
+
+    if (tool === "eraser" || tool === "pin" || tool === "text") {
+      const start = pendingTap.current;
+      pendingTap.current = null;
+      if (!start) return;
+      if (tool === "eraser") eraseAt(start);
+      else placeAt(start);
+      return;
+    }
 
     if (tool === "select") {
       const g = selectGesture.current;
@@ -1067,13 +1169,7 @@ export function AnnotateCanvas({
           if (textEdit && textEdit.id === mark.id) return null;
           return (
             <Fragment key={mark.id}>
-              <MarkBadge
-                mark={displayMark}
-                tool={tool}
-                canvasInteractive={interactive}
-                selected={selection.includes(mark.id)}
-                onErase={() => onCommit(annotations.filter((a) => a.id !== mark.id))}
-              />
+              <MarkBadge mark={displayMark} selected={selection.includes(mark.id)} />
               {interactive && tool === "select" && selectedId === mark.id && multiSelectedIds.length === 0 && !dragPreview && mark.kind === "shape" && (
                 <ShapeHandles
                   mark={displayMark as ShapeMark}
@@ -1163,10 +1259,7 @@ export function AnnotateCanvas({
               color: markStyle.color,
               size: markStyle.size,
             }}
-            tool={tool}
-            canvasInteractive={false}
             selected={false}
-            onErase={() => {}}
           />
         )}
         {guideY !== null && <div className="snap-guide" style={{ top: guideY }} />}
@@ -1225,26 +1318,11 @@ function renderMarkGlyph(item: TextMark | ShapeMark) {
   return item.text;
 }
 
-function MarkBadge({
-  mark,
-  tool,
-  canvasInteractive,
-  selected,
-  onErase,
-}: {
-  mark: TextMark | ShapeMark;
-  tool: AnnotateTool;
-  /** Mirrors the wrapping AnnotateCanvas's `interactive` prop — `false`
-   * disables the eraser handler below regardless of `tool`, so a mark shown
-   * by the read-only overlay can't be erased. */
-  canvasInteractive: boolean;
-  selected: boolean;
-  onErase: () => void;
-}) {
-  // Select-tool taps and drags are hit-tested by the canvas overlay (so a
-  // repeated tap can reach a mark stacked under this one); only the eraser
-  // still acts on the badge directly.
-  const interactive = canvasInteractive && tool === "eraser";
+/** A text, notation or shape mark. Purely visual: every tool hit-tests
+ * marks through the canvas or its overlay instead (so a repeated tap can
+ * reach a mark stacked under this one, and the eraser can wait to see
+ * whether a second finger turns the touch into a scroll). */
+function MarkBadge({ mark, selected }: { mark: TextMark | ShapeMark; selected: boolean }) {
 
   return (
     <div
@@ -1263,17 +1341,13 @@ function MarkBadge({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        pointerEvents: interactive ? "auto" : "none",
+        pointerEvents: "none",
         userSelect: "none",
         touchAction: "none",
         whiteSpace: "nowrap",
         outline: selected ? "2px solid var(--acc-deep)" : "none",
         outlineOffset: selected ? 4 : 0,
         borderRadius: selected ? 6 : 0,
-      }}
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        if (tool === "eraser") onErase();
       }}
     >
       {renderMarkGlyph(mark)}
