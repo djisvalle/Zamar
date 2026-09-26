@@ -1,6 +1,6 @@
 # Zamar — Progress Checklist
 
-Snapshot date: 2026-09-25. Re-checked against `main` at commit `259c6a3`.
+Snapshot date: 2026-09-26. Re-checked against `main` at commit `749bc8f`.
 Cross-check sources: [review-findings.md](review-findings.md) (senior review, re-checked
 2026-09-25) and [annotate-mode-roadmap.md](annotate-mode-roadmap.md).
 
@@ -17,8 +17,9 @@ Everything below is detailed further down; this is the short list.
 - **OMR (PDF/photo → `.mxl`)** — R&D spike only.
 - **Annotate:** per-song stave spacing; reprojecting marks across an
   engraving-zoom change. See the roadmap and the pins spec's "Future work / TODO".
-- **Inline styles** — about 235 `style={{...}}` objects left in `src/`; needs its own
-  spec/plan.
+- **Inline styles** — about 235 `style={{...}}` objects left in `src/`. Spec written
+  (`docs/superpowers/specs/2026-09-26-inline-styles-to-css-design.md`); implementation not
+  started.
 
 This app has moved past the original CLAUDE.md description of an in-memory mockup into a
 real Capacitor + SQLite app, with a few pieces still deliberately simulated. See notes on
@@ -177,6 +178,18 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       follow the slot on stage rather than the song's first slot
 - [x] Swiping between songs works over sheet music and PDFs too: the score and PDF views
       keep a gesture only when it's a pinch (or a pan on a zoomed-in PDF)
+- [x] The chart keeps one layout width when the device rotates (the portrait width, or the
+      width a view was marked at) and is magnified with a CSS transform to fill the pane,
+      so annotations stay on what they were drawn over (`usePortraitWidth`,
+      `utils/screenScale.ts`). Needs an on-device recheck
+- [x] Pinch zoom on scores and PDFs is reliable (fingers captured on the container), a
+      score pinch previews with a CSS scale and re-lays out once on release, and PDF pan
+      is bounded to the pages
+- [x] No empty tinted header bar above the setlist strip; just the top safe area
+- [x] Chord charts stack each chord over the lyric text it starts on (a wide chord spreads
+      the lyric instead of overlapping the next chord), wrap long lines between words, and
+      leave a gap between stanzas and before section labels. `{comment}` and
+      `{start_of_chorus}`-style directives show as section labels
 
 ### Library
 - [x] A–Z grouped list, live search, filter chips
@@ -207,6 +220,11 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Chart-problem banner in the editor: unbalanced `[`/`]`, unclosed `{directive}`, and
       chord symbols transposition can't move (`findChordProIssues`)
 - [x] Live `{key: ...}` directive detection, format-aware quick-insert chips, live Preview tab
+- [x] `{title}`, `{artist}`, `{key}`, `{tempo}` and `{time}` directives fill the song's
+      fields, and editing a field rewrites its directive; Quick edit applies them on save,
+      and changing a key from the Library updates `{key}`
+- [x] The screen no longer widens past a phone or tablet display on the Chords/Lyrics tab
+      (`#root { min-width: 0 }`)
 - [x] ◀ ▶ caret keys under the chart editor move the cursor one character (repeat on hold)
       without dismissing the keyboard, as in OnSong (`CaretKeys.tsx`)
 - [x] Undo/redo for the chart text (↶ ↷ in the same bar, and Ctrl/⌘+Z, Ctrl/⌘+Shift+Z or
@@ -231,6 +249,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       ("C | F") and passing moves ("Bb/F-F"). Header fills title/artist/key/tempo/time.
       No-text files get a real error with "keep it as a PDF/photo". Sheet-vs-chords is still
       declared by the user, not detected.
+- [x] A Tesseract model that fails to load now lands on the import error screen instead of
+      hanging on "Preparing text recognition…"; the model ships unhashed as
+      `assets/ocr/eng.traineddata`
 
 ### Tuner
 - [x] Instrument presets (Chromatic/Guitar/Bass/Ukulele/Violin/Viola/Cello) with real standard
@@ -337,8 +358,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       ambiguous value.
 - [ ] Heavy use of ad-hoc inline `style={{...}}` objects instead of shared CSS classes. Deferred:
       about 235 occurrences left in `src/` (down from 373 at first count) — real visual-regression risk across the whole app, so this
-      needs its own dedicated spec/plan per the Feature workflow rather than a sweep bundled with
-      the smaller fixes above.
+      got its own spec (`docs/superpowers/specs/2026-09-26-inline-styles-to-css-design.md`:
+      runtime values stay inline, purpose-named classes in `theme.css`, screenshot diff, one
+      PR). Plan and implementation still to do.
 
 ## To-do — UI/UX polish (from the design review, not yet actioned)
 

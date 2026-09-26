@@ -49,6 +49,10 @@ the tension rather than silently picking one.
 - **`opensheetmusicdisplay`** renders and re-transposes `.mxl` scores (`MxlScore.tsx`).
 - **`tesseract.js`** (+ `@tesseract.js-data/eng`) for offline OCR on import; **`pdf-lib`** and
   **`fflate`** build exports; **`@capacitor/share`** + **`@capacitor/filesystem`** share them.
+- **`@capacitor/status-bar`** matches the OS status bar to the theme; **`@capacitor/haptics`**
+  gives Annotate's snap-to-lyric-line tick on native.
+- Notation stamps are engraved SMuFL glyphs from a bundled **Bravura** font
+  (`src/assets/fonts/`, `utils/notation.ts`, `components/SmuflGlyph.tsx`).
 - **`pdfjs-dist`** renders PDFs page-by-page with pinch-zoom/pan (`PdfPages.tsx`).
 - Plain CSS with custom properties (`src/theme.css`), no Tailwind or CSS-in-JS. Icons are a
   hand-drawn SVG set (`src/components/Icon.tsx`).
@@ -76,9 +80,13 @@ the tension rather than silently picking one.
   `--tint`, `--scrim` in `theme.css`, light and dark, applied via `data-theme` on `.device`.
   Barlow / Barlow Condensed, steel-blue accent.
 - **ChordPro and transposition are real.** `src/utils/chordpro.ts` parses both `[C]lyric`
-  ChordPro and chords-over-lyrics, positions chords from real offsets, and transposes
-  letter-aware between two keys (`utils/keys.ts`: 17 key chips (every sharp and flat name for the black keys, no C♭), nearest-way
-  `keySemitoneShift`, spelling rules). `MxlScore.tsx` re-engraves MusicXML in the display
+  ChordPro and chords-over-lyrics (including bar lines `C | F` and passing moves `Bb/F-F`),
+  stacks each chord over the lyric text it starts on, and transposes
+  letter-aware between two keys (`utils/keys.ts`: 17 key chips (every sharp and flat name for
+  the black keys, no C♭; old C♭ keys load as B), nearest-way `keySemitoneShift`, spelling
+  rules). `{comment}` and `{start_of_chorus}`/`{soc}`-style directives render as section
+  labels. In Add/Edit Song the `{title}`, `{artist}`, `{key}`, `{tempo}` and `{time}`
+  directives and the song's fields stay in sync both ways. `MxlScore.tsx` re-engraves MusicXML in the display
   key via OSMD with `utils/scoreTranspose.ts` in place of OSMD's own transpose calculator.
 - **Attachments are categorized, versioned buckets.** `Song.attachments`
   (`src/state/types.ts`) holds up to one bucket per kind (`musicxml` → Sheet Music, `pdf`,
@@ -88,28 +96,29 @@ the tension rather than silently picking one.
   Stage's category/version choice is local state; only Add/Edit Song's "Use this version"
   changes the persisted default. Rationale:
   `docs/superpowers/specs/2026-09-20-attachment-categories-design.md`.
-- **Annotations and cues.** `Song.annotations` holds ink, pins, text and shapes per view
-  type; `Song.notes` is the per-song "Cues" text. Annotate is an overlay on the persistent
+- **Annotations and cues.** `Song.annotations` holds ink, sticky notes (stored as `Pin`),
+  text, notation stamps and shapes per view type; `Song.notes` is the per-song "Cues" text. Annotate is an overlay on the persistent
   Live Stage (`AnnotateOverlay.tsx` + `components/AnnotateCanvas.tsx`, helpers in
   `utils/annotations.ts`). See `docs/superpowers/specs/2026-09-23-annotate-as-overlay-design.md`
   and `docs/annotate-mode-roadmap.md`. Marks are pixel positions, so Live Stage lays the chart
   out at one fixed width (the portrait width, or the width a view was marked at; `usePortraitWidth`
   in `LiveStage.tsx`) and magnifies it with a CSS transform to fill the pane in either
   orientation. Code inside the chart that turns pointer coordinates into content coordinates
-  must divide by `screenScaleOf` (`utils/screenScale.ts`).
+  must divide by `screenScaleOf` (`utils/screenScale.ts`). While annotating, one finger draws
+  and two fingers scroll.
 
 ## Screens (`src/screens/<area>/`)
 
 | Area | Reached from | Notable pieces |
 |---|---|---|
 | `onboarding/` | app boot | Splash only; auto-advances (650ms) into Live Stage |
-| `live-stage/` | tab | chords or attachment view, key chips + Stage Tools sheet (Add to Setlist, Quick edit, Annotate, view/version picker, capo/lyrics/zoom), idle auto-hide chrome (6s) plus tap-empty-space to toggle it, per-song default view, setlist strip (next song, progress, slot notes) |
+| `live-stage/` | tab | chords or attachment view, key chips + Stage Tools sheet (Add to Setlist, Quick edit, Annotate, view/version picker, capo/lyrics/zoom), idle auto-hide chrome (6s) plus tap-empty-space to toggle it, per-song default view, setlist strip (next song, progress, slot notes), song-to-song swipes (also over PDFs and scores), each song opens at the top |
 | `library/` | tab | A–Z list, search, filter chips, multi-select delete, row context sheet, header "+" menu (New song / Import a chart) |
-| `setlists/` | tab | Upcoming/Past/Templates, run-sheet detail (sections, derived start times, per-slot overrides), Add-to-set sheet, Set-details sheet |
-| `add-edit-song/` | Library "+" / row sheet | one screen for New and Edit; metadata in two compact rows, chord/lyrics editor kept ≥ ~50% of device height, quick-insert chips, Chords/Lyrics + Preview tabs plus one tab per attachment category present, "Import" button |
+| `setlists/` | tab | Upcoming/Past/Templates, run-sheet detail (sections, derived start times, per-slot key/note overrides), drag-to-reorder slots and sections (`useDragReorder.ts`), toolbar "+" (Add songs / Add section), Start/Resume/Restart/Stop set, Add-to-set sheet, Set-details sheet |
+| `add-edit-song/` | Library "+" / row sheet | one screen for New and Edit; metadata in two compact rows, chord/lyrics editor kept ≥ ~50% of device height, quick-insert chips, caret keys + undo/redo + expand bar under the editor (`CaretKeys.tsx`, `useTextHistory.ts`), chart-problem banner, Chords/Lyrics + Preview tabs plus one tab per attachment category present, "Import" button |
 | `import/` | Library "+" menu / empty state / row sheet / Add/Edit Song "Import" | real file picker (PDF, photo, MusicXML) in three modes: new song, attach to existing song (PDF/photo only), and in-form (returns to the draft) |
 | `tuner/` | tab | one-time mic-permission pre-prompt, live mic pitch detection (`utils/pitch.ts`), instrument presets with Auto string follow |
-| `settings/` | tab | stave spacing, Appearance sub-screen (Light/Stage Dark/Auto, text size), type-`ERASE` reset |
+| `settings/` | tab | stave spacing, Keys (key offsets, strict spelling), Appearance sub-screen (Light/Stage Dark/Auto, text size), type-`ERASE` reset |
 | `export/` | a setlist's ⋯ menu / Library row sheet (one song) | format tabs, options, per-song "In this export" list, real PDF/ChordPro/MusicXML files (`utils/exportSet.ts`) handed to the OS share sheet (`utils/shareFile.ts`) |
 
 Shared primitives are in `src/components/`.
@@ -124,6 +133,8 @@ Shared primitives are in `src/components/`.
   `docs/superpowers/specs/2026-09-25-priority-2-design.md`), so they need chords included.
 - **One global theme**, not the source's scoped "dark on stage, light elsewhere".
 - **Unwired source micro-state:** crash-restore onboarding.
+- **Artist and tempo may be blank.** No "Unknown"/80 BPM defaults; tempo `0` means none.
+  `hydrateState` loads old "Unknown" artists as blank.
 - **Capo is cut** (TODO): it needs its own design pass against the transpose/key system
   before it comes back. See `docs/progress-checklist.md`.
 
@@ -145,6 +156,12 @@ Shared primitives are in `src/components/`.
   name. Don't fold it into the hashed asset pattern. It deliberately drops the `.gz` suffix
   (the data is still gzipped; Tesseract detects that) because a `.gz` asset left Android OCR
   stuck on "Preparing text recognition…".
+- **`#root` needs `min-width: 0`.** It's a flex item, so without it a `nowrap` chip row
+  widens the whole app past the screen instead of scrolling in its lane.
+- **Inline styles are mid-migration.** About 235 `style={{...}}` objects remain; the plan
+  for moving the fixed ones into `theme.css` is
+  `docs/superpowers/specs/2026-09-26-inline-styles-to-css-design.md`. Put new fixed styles
+  in `theme.css` under a purpose-named class; keep only runtime values inline.
 - **No lint/test tooling.** `npm run build` is the only check; a clean build is the bar.
 
 ## Feature workflow
