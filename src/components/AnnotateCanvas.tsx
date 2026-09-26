@@ -206,7 +206,7 @@ export function AnnotateCanvas({
   onMultiSelect?: (ids: string[]) => void;
   /** Snap text/notation marks to the chart's lyric lines while placing or
    * dragging them. Only meaningful on the chords view, whose ChordChart
-   * renders `.lyric-line`/`.chord-line` rows. */
+   * renders `.chart-line` rows. */
   snapToLyrics?: boolean;
   /** true pauses drawing so the wrapped content can be scrolled with a
    * normal single-finger drag instead — a single finger can't both draw
@@ -393,11 +393,10 @@ export function AnnotateCanvas({
     const wrap = wrapperRef.current;
     if (!wrap || !snapToLyrics) return [];
     const top = wrap.getBoundingClientRect().top;
-    return Array.from(wrap.querySelectorAll<HTMLElement>(".lyric-line")).flatMap((lyric) => {
-      const r = lyric.getBoundingClientRect();
-      const above = lyric.previousElementSibling?.classList.contains("chord-line") ? lyric.previousElementSibling.getBoundingClientRect() : r;
+    return Array.from(wrap.querySelectorAll<HTMLElement>(".chart-line")).flatMap((line) => {
+      const r = line.getBoundingClientRect();
       const under = r.bottom - top;
-      const over = above.top - top;
+      const over = r.top - top;
       return [
         { centerY: under + SNAP_GAP + halfH, guideY: under },
         { centerY: over - SNAP_GAP - halfH, guideY: over },

@@ -320,7 +320,7 @@ function drawChart(ctx: PdfCtx, p: PlannedSong, includeChords: boolean) {
       if (line.isSection) {
         ensureRoom(ctx, 40);
         ctx.y -= 16;
-        drawText(ctx, line.lyric.toUpperCase(), MARGIN, 9.5, ctx.bold, MUTED);
+        drawText(ctx, line.lyric, MARGIN, LYRIC_SIZE, ctx.bold, INK);
         ctx.y -= 2;
         continue;
       }
@@ -488,7 +488,7 @@ async function renderMarkedChart(
     paintAnnotations(g, marks.items, (pt) => ({ x: pt.x * s, y: pt.y * s }), s, marks.colors);
 
     // Cut between lines, never through one.
-    const cuts = Array.from(inner.children).map((c) => c.getBoundingClientRect().bottom - origin.top);
+    const cuts = Array.from(inner.querySelectorAll(".chord-chart > *")).map((c) => c.getBoundingClientRect().bottom - origin.top);
     const ptPerPx = pageWidth / marks.width;
     const slices: Uint8Array[] = [];
     for (let start = 0; start < cssH - 1; ) {

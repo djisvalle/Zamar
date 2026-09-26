@@ -8,6 +8,7 @@ import { Icon } from "../../components/Icon";
 import { LargeTitle, Section, SearchField } from "../../components/List";
 import { OrderByMenu, groupSongs, type SortBy } from "../../components/SongPickerSheet";
 import type { Song } from "../../state/types";
+import { writeChartMeta } from "../../utils/chordpro";
 
 type Filter = "all" | "favourites" | "recent";
 
@@ -413,7 +414,7 @@ export function Library() {
           <KeyChips
             active={keySheetFor.defaultKey}
             onSelect={(k) => {
-              dispatch({ type: "UPDATE_SONG", song: { ...keySheetFor, defaultKey: k } });
+              dispatch({ type: "UPDATE_SONG", song: { ...keySheetFor, defaultKey: k, chordpro: writeChartMeta(keySheetFor.chordpro, "key", k) } });
               setKeySheetFor(null);
             }}
           />
