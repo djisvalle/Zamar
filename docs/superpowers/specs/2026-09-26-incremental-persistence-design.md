@@ -61,18 +61,16 @@ for one save from `(persisted, current)`:
 - **Songs.** Index both lists by id.
   - Removed ids (in persisted, not current): `DELETE FROM setlist_items WHERE
     song_id = ?` then `DELETE FROM songs WHERE id = ?`. The item delete comes
-    first because `DELETE_SONGS` doesn't remove a song's setlist slots from
-    state (today's full rewrite filters them out on save; see "Removed
-    songs' slots" below).
-  - New or changed ids (object not `===` the persisted one): an `UPDATE songs
-    SET … WHERE id = ?` followed by `INSERT OR IGNORE INTO songs (…) VALUES
-    (…)`. The pair works on every SQLite the app runs on (`ON CONFLICT … DO
-    UPDATE` needs 3.24+) and, unlike `INSERT OR REPLACE`, never deletes the
-    row, so `setlist_items.song_id` references stay valid with foreign keys on.
+    first so no slot is left pointing at a missing song (see "Removed songs'
+    slots" below).
+  - New or changed ids (object not `===` the persisted one): `INSERT … ON
+    CONFLICT(id) DO UPDATE`, the upsert the settings row already uses on every
+    engine. Unlike `INSERT OR REPLACE` it never deletes the row, so
+    `setlist_items.song_id` references stay valid with foreign keys on.
 - **Setlists.** Same indexing.
   - Removed: delete its items (by section), its sections, then the setlist.
-  - New or changed: delete its items and sections, upsert the setlist row
-    (same UPDATE + INSERT OR IGNORE pair), reinsert its sections and items.
+  - New or changed: delete its items and sections, upsert the setlist row,
+    reinsert its sections and items.
     Setlists are small; rebuilding one is cheaper to get right than diffing
     positions.
   - Items whose `songId` isn't in the current songs are skipped on insert, as
@@ -88,22 +86,29 @@ no `persist()`).
 
 ### Removed songs' slots
 
-Today a deleted song's slots vanish from disk but stay in state until reload.
-With diffing, a setlist whose object didn't change isn't rewritten, so its
-dangling item rows are removed by the per-song `DELETE FROM setlist_items
-WHERE song_id = ?` above. State and disk then disagree only in the way they
-already do today (state still holds the slot until reload), so nothing new is
-introduced. Cleaning the slot out of state in `DELETE_SONGS` would be a
-behaviour change and stays out of scope.
+Library's delete removes a song's slots from state before `DELETE_SONGS`, so
+the setlist is rewritten in the same save. The per-song `DELETE FROM
+setlist_items WHERE song_id = ?` is the safety net for any other path that
+removes a song without its slots (today's full rewrite covered that by
+filtering slots on save).
+
+### Identity on load
+
+`hydrateState` fixes a few things on load (legacy key names, the "Unknown"
+artist, pinning `chordsTextScale`). It keeps an object's identity when it
+changes nothing, and the snapshot is the rows as read, so only the songs and
+setlists hydration actually changed are written by the first save.
 
 ### Failure handling
 
 The snapshot only advances when `executeSet` succeeds. After a failed save,
 the next save diffs against the last good snapshot, so nothing is lost: every
 change since then is still "changed". `persistGen` keeps today's role
-(dropping a stale save's result). Because an in-flight save can finish after a
-newer one is scheduled, the snapshot a save advances to is the state it
-wrote, not the latest state.
+(a save with a newer one queued behind it does nothing). Saves run one at a
+time on a promise chain and work out their statements only when their turn
+comes: a save computed before the previous one committed could miss a row that
+one wrote (a song added, then deleted, in quick succession). The snapshot a
+save advances to is the state it wrote.
 
 ### First run and recovery
 

@@ -90,9 +90,3 @@ export function buildUpsertStatement(settings: Settings): { statement: string; v
     ],
   };
 }
-
-export async function replaceAll(settings: Settings): Promise<void> {
-  const db = await getDb();
-  const { statement, values } = buildUpsertStatement(settings);
-  await db.run(statement, values);
-}

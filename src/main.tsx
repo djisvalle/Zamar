@@ -6,6 +6,7 @@ import { StoreProvider, initialState, hydrateState, type AppState } from "./stat
 import * as songsRepo from "./data/songsRepo";
 import * as setlistsRepo from "./data/setlistsRepo";
 import * as settingsRepo from "./data/settingsRepo";
+import { EMPTY_SNAPSHOT, type PersistedSnapshot } from "./data/persistPlan";
 import { NavigatorProvider } from "./navigation/Navigator";
 import "./theme.css";
 
@@ -19,6 +20,8 @@ interface LoadResult {
    * session instead of letting the debounced persist effect in store.ts silently overwrite
    * whatever's actually on disk with fresh seed data. */
   persistEnabled: boolean;
+  /** What's on disk, which the first save diffs against (see store.ts). */
+  persisted: PersistedSnapshot;
 }
 
 async function loadInitial(): Promise<LoadResult> {
@@ -28,7 +31,9 @@ async function loadInitial(): Promise<LoadResult> {
       songsRepo.loadAll(),
       setlistsRepo.loadAll(),
     ]);
-    if (settings) return { state: hydrateState(songs, setlists, settings), persistEnabled: true };
+    if (settings) {
+      return { state: hydrateState(songs, setlists, settings), persistEnabled: true, persisted: { songs, setlists, settings } };
+    }
     // A missing settings row isn't on its own proof this is a fresh install: songs, setlists,
     // and settings now persist in one atomic transaction (see store.ts), but an install from
     // before that change could still have leftover songs/setlists with no settings row.
@@ -39,23 +44,25 @@ async function loadInitial(): Promise<LoadResult> {
       return {
         state: hydrateState(songs, setlists, { ...initialState().settings, hasSeeded: true }),
         persistEnabled: true,
+        // No settings row yet, so the first save writes one.
+        persisted: { songs, setlists, settings: null },
       };
     }
-    return { state: initialState(), persistEnabled: true };
+    return { state: initialState(), persistEnabled: true, persisted: EMPTY_SNAPSHOT };
   } catch (err) {
     console.warn(
       "Zamar: persisted storage unavailable, continuing with in-memory state only for this session " +
         "(not persisting, so as not to overwrite any real data that may still be on disk)",
       err
     );
-    return { state: initialState(), persistEnabled: false };
+    return { state: initialState(), persistEnabled: false, persisted: EMPTY_SNAPSHOT };
   }
 }
 
-loadInitial().then(({ state: initial, persistEnabled }) => {
+loadInitial().then(({ state: initial, persistEnabled, persisted }) => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <StoreProvider initial={initial} persistEnabled={persistEnabled}>
+      <StoreProvider initial={initial} persisted={persisted} persistEnabled={persistEnabled}>
         <NavigatorProvider>
           <App />
         </NavigatorProvider>
