@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore, activeSetlistSongIds } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
@@ -66,6 +66,19 @@ export function LiveStage() {
     setActiveKind(kind);
     setActiveVersionId(kind ? selectedVersion(attachments[kind]!).id : undefined);
   }, [song?.id]);
+
+  // Each song opens at the top of its chart. The scroll container stays
+  // mounted between songs, so without this the next song showed wherever
+  // the previous one had been scrolled to. Layout effect so the old offset
+  // never paints against the new chart.
+  useLayoutEffect(() => {
+    const el = chartScrollRef.current;
+    if (el) {
+      el.scrollTop = 0;
+      el.scrollLeft = 0;
+    }
+    // setlistIndex too: a reprise is the same song in a new slot.
+  }, [song?.id, stage.setlistIndex]);
 
   // A score's instrument list (and any hidden parts) belongs to whichever
   // version is on screen — clear it whenever that changes so a leftover
@@ -150,7 +163,9 @@ export function LiveStage() {
   const displayKey = stage.dispKey ?? song.defaultKey;
   const semitones = keySemitoneShift(song.defaultKey, displayKey);
   const keyChange = activeKeyChange(song.defaultKey, displayKey, state.settings.strictSpelling);
-  const songIndex = setlistSongIds.indexOf(song.id);
+  // The slot on stage, not the song's first slot: a reprise is the same
+  // song further down the set.
+  const songIndex = setlistSongIds[stage.setlistIndex] === song.id ? stage.setlistIndex : setlistSongIds.indexOf(song.id);
   const availableKinds = CATEGORY_PRIORITY.filter((k) => song.attachments[k]);
   const activeBucket = activeKind ? song.attachments[activeKind] : undefined;
   const activeVersion = activeBucket ? activeBucket.versions.find((v) => v.id === activeVersionId) ?? selectedVersion(activeBucket) : undefined;
@@ -256,7 +271,13 @@ export function LiveStage() {
               onRerendered={() => setReprojectTick((t) => t + 1)}
             />
           ) : (
-            <PdfPages src={activeVersion.dataUrl} disableZoom={dockOpen} />
+            <PdfPages
+              // A fresh instance per song/version, so pinch-zoom and pan
+              // don't carry over from the previous chart.
+              key={`${song.id}:${stage.setlistIndex}:${activeVersion.id}`}
+              src={activeVersion.dataUrl}
+              disableZoom={dockOpen}
+            />
           )}
           <span style={{ fontSize: 12, color: "var(--sheet-mut)" }}>
             {activeKind === "musicxml"
@@ -275,7 +296,10 @@ export function LiveStage() {
 
   return (
     <div className="screen" onClick={onScreenClick}>
-      <div className={"hdr" + (setlist ? " tinted" : "")} />
+      {/* Clears the status bar on device (0 in the dev frame, which draws its
+          own). No 44pt bar below it: Live Stage has no nav-bar content, and
+          the next-song line and progress bar already mark setlist mode. */}
+      <div style={{ flex: "none", height: "env(safe-area-inset-top, 0px)" }} />
 
       {setlist && (
         <div style={{ padding: "8px 14px 0" }}>

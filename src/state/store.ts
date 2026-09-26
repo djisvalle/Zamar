@@ -41,6 +41,16 @@ const defaultSong = seedSongs.find((s) => s.id === DEFAULT_SONG_ID);
  * never opens to a truly empty screen. Chart text size isn't part of
  * `stage`: it's the persisted `settings.textScale`, which Settings >
  * Appearance and the stage's Zoom +/- buttons both change. */
+/** If `before` is live on stage, keep the stage on the same song slot in
+ * `after` rather than whatever slot now sits at the old position. */
+function keepStageSlot(stage: StageState, before: Setlist, after: Setlist): StageState {
+  if (stage.setlistId !== before.id) return stage;
+  const songSlots = (sl: Setlist) => sl.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song"));
+  const current = songSlots(before)[stage.setlistIndex];
+  const newIndex = current ? songSlots(after).findIndex((i) => i.id === current.id) : -1;
+  return newIndex >= 0 ? { ...stage, setlistIndex: newIndex } : stage;
+}
+
 export function makeEmptyStage(songs: Song[] = seedSongs): StageState {
   const song = songs.find((s) => s.id === DEFAULT_SONG_ID) ?? defaultSong;
   return {
@@ -106,7 +116,14 @@ export function hydrateState(songs: Song[], setlists: Setlist[], settings: Setti
   // text size is what they're on screen at now, so they're pinned to that.
   // Keys saved before the enharmonic picker may be sharps with no chip
   // (A#, D#, G#); they load as the chip for the same pitch (Bb, Eb, Ab).
-  const locked = songs.map((s) => lockChordsTextScale({ ...s, defaultKey: canonicalKey(s.defaultKey) }, settings.textScale));
+  // Songs saved with no artist used to get the placeholder "Unknown"; a
+  // missing artist is blank now, so the placeholder loads as blank too.
+  const locked = songs.map((s) =>
+    lockChordsTextScale(
+      { ...s, defaultKey: canonicalKey(s.defaultKey), artist: s.artist === "Unknown" ? "" : s.artist },
+      settings.textScale
+    )
+  );
   const keyed = setlists.map((sl) => ({
     ...sl,
     sections: sl.sections.map((sec) => ({
@@ -147,6 +164,7 @@ export type Action =
   /** Moves an item to another section (appended) or, with `toIndex`, to that
    * position in `toSectionId` counted without the item itself — drag-to-reorder. */
   | { type: "MOVE_ITEM"; setlistId: string; itemId: string; toSectionId: string; toIndex?: number }
+  | { type: "MOVE_SECTION"; setlistId: string; sectionId: string; toIndex: number }
   | { type: "STAGE_LOAD"; songId: string; setlistId?: string | null; setlistIndex?: number }
   | { type: "STAGE_SET_VIEW"; view: StageState["view"] }
   | { type: "STAGE_SET_KEY"; key: string }
@@ -331,15 +349,17 @@ export function reducer(state: AppState, action: Action): AppState {
           return { ...sec, items };
         }),
       };
-      // If this set is live on stage, keep the stage on the same slot rather
-      // than whatever slot now sits at the old position.
-      let stage = state.stage;
-      if (stage.setlistId === setlist.id) {
-        const songSlots = (sl: Setlist) => sl.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song"));
-        const current = songSlots(setlist)[stage.setlistIndex];
-        const newIndex = current ? songSlots(next).findIndex((i) => i.id === current.id) : -1;
-        if (newIndex >= 0) stage = { ...stage, setlistIndex: newIndex };
-      }
+      const stage = keepStageSlot(state.stage, setlist, next);
+      return { ...state, stage, setlists: state.setlists.map((sl) => (sl.id === setlist.id ? next : sl)) };
+    }
+    case "MOVE_SECTION": {
+      const setlist = state.setlists.find((sl) => sl.id === action.setlistId);
+      const moving = setlist?.sections.find((sec) => sec.id === action.sectionId);
+      if (!setlist || !moving) return state;
+      const sections = setlist.sections.filter((sec) => sec.id !== action.sectionId);
+      sections.splice(Math.max(0, Math.min(action.toIndex, sections.length)), 0, moving);
+      const next: Setlist = { ...setlist, sections };
+      const stage = keepStageSlot(state.stage, setlist, next);
       return { ...state, stage, setlists: state.setlists.map((sl) => (sl.id === setlist.id ? next : sl)) };
     }
     case "STAGE_LOAD": {

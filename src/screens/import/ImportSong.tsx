@@ -147,9 +147,9 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
     const song: Song = {
       id: `song-${Date.now()}`,
       title: title.trim() || "Untitled import",
-      artist: artist.trim() || "Unknown",
+      artist: artist.trim(),
       defaultKey: willAttach ? "—" : converted?.key ?? "C",
-      tempo: willAttach ? 80 : converted?.tempo ?? 80,
+      tempo: willAttach ? 0 : converted?.tempo ?? 0,
       timeSig: willAttach ? "4/4" : converted?.timeSig ?? "4/4",
       durationSec: 240,
       favourite: false,

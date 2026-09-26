@@ -100,7 +100,7 @@ export function SongPickerSheet({
                         <span>{s.title}</span>
                       </div>
                       <div className="row-sub">
-                        {s.artist} · {s.defaultKey}
+                        {[s.artist, s.defaultKey].filter(Boolean).join(" · ")}
                       </div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>{trailing(s)}</div>

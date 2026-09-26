@@ -17,6 +17,10 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
   const pinchStart = useRef<{ dist: number; scale: number } | null>(null);
   const panStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const lastTap = useRef(0);
+  // Whether the gesture in progress is ours: a pinch, or a pan while zoomed
+  // in. Anything else (a one-finger drag at normal size) has to reach Live
+  // Stage's song-to-song swipe, which listens on an ancestor.
+  const claimed = useRef(false);
 
   const clampScale = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
   // Only the horizontal axis is bounded — vertical pan is left free (the
@@ -34,7 +38,6 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    e.stopPropagation();
     try {
       (e.target as Element).setPointerCapture?.(e.pointerId);
     } catch {
@@ -45,6 +48,7 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
       const [a, b] = [...pointers.current.values()];
       pinchStart.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), scale };
       panStart.current = null;
+      claimed.current = true;
     } else if (pointers.current.size === 1) {
       const now = Date.now();
       if (now - lastTap.current < 320) {
@@ -53,13 +57,16 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
         return;
       }
       lastTap.current = now;
-      if (scale > 1) panStart.current = { x: e.clientX, y: e.clientY, tx: translate.x, ty: translate.y };
+      if (scale > 1) {
+        panStart.current = { x: e.clientX, y: e.clientY, tx: translate.x, ty: translate.y };
+        claimed.current = true;
+      }
     }
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!pointers.current.has(e.pointerId)) return;
-    e.stopPropagation();
+    if (claimed.current) e.stopPropagation();
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2 && pinchStart.current) {
       const [a, b] = [...pointers.current.values()];
@@ -74,10 +81,14 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
   };
 
   const endPointer = (e: React.PointerEvent) => {
-    e.stopPropagation();
+    // A pinch or pan ending mustn't read as a swipe to the next song.
+    if (claimed.current) e.stopPropagation();
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinchStart.current = null;
-    if (pointers.current.size === 0) panStart.current = null;
+    if (pointers.current.size === 0) {
+      panStart.current = null;
+      claimed.current = false;
+    }
   };
 
   // Native, not React's onWheel: the synthetic wheel listener is passive,
@@ -108,6 +119,7 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
     pointers.current.clear();
     pinchStart.current = null;
     panStart.current = null;
+    claimed.current = false;
   }, [disableZoom]);
 
   return { scale, translate, onPointerDown, onPointerMove, onPointerUp: endPointer, onPointerCancel: endPointer, onDoubleClick: reset, reset };

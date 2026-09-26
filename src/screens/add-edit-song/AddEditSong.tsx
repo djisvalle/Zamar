@@ -10,6 +10,8 @@ import { Icon } from "../../components/Icon";
 import { Section } from "../../components/List";
 import { PullDown } from "../../components/PullDown";
 import { useDragReorder } from "../../components/useDragReorder";
+import { CaretKeys } from "../../components/CaretKeys";
+import { caretAfterChange, useTextHistory } from "../../components/useTextHistory";
 import {
   extractBracketChords,
   extractChordLineChords,
@@ -49,7 +51,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const initialMeta = readChartMeta(initialChordpro);
   const [title, setTitle] = useState(initialMeta.title ?? prefillTitle ?? existing?.title ?? "");
   const [artist, setArtist] = useState(initialMeta.artist ?? prefillArtist ?? existing?.artist ?? "");
-  const [tempo, setTempo] = useState(initialMeta.tempo ?? prefillTempo ?? (existing ? String(existing.tempo) : ""));
+  const [tempo, setTempo] = useState(initialMeta.tempo ?? prefillTempo ?? (existing?.tempo ? String(existing.tempo) : ""));
   const [timeSig, setTimeSig] = useState(initialMeta.timeSig ?? prefillTimeSig ?? existing?.timeSig ?? "4/4");
   const [manualKey, setManualKey] = useState(initialMeta.key ?? prefillManualKey ?? existing?.defaultKey ?? "");
   const [chordpro, setChordpro] = useState(initialChordpro);
@@ -59,6 +61,9 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [tab, setTab] = useState<"source" | "preview" | "notes" | AttachmentKind>("source");
   const [showErrors, setShowErrors] = useState(false);
+  // Chords/Lyrics editor expanded: the tabs, song fields and format/Import
+  // row are hidden so the chart gets nearly the whole screen.
+  const [expanded, setExpanded] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [importMethodOpen, setImportMethodOpen] = useState(false);
   const [versionSheetFor, setVersionSheetFor] = useState<{ kind: AttachmentKind; id: string; label: string } | null>(null);
@@ -75,17 +80,42 @@ export function AddEditSong({ songId }: { songId?: string }) {
     timeSig: setTimeSig,
   };
 
-  /** Chart edits carry their metadata directives into the fields above. */
-  const editChart = (next: string) => {
+  const chartHistory = useTextHistory();
+
+  /** Chart changes carry their metadata directives into the fields above. */
+  const applyChart = (next: string) => {
     setChordpro(next);
     const meta = readChartMeta(next);
     (Object.keys(meta) as ChartMetaField[]).forEach((field) => FIELD_SETTERS[field](meta[field]!));
   };
 
+  /** An edit to the chart, recorded for undo. `group` merges a burst of
+   * typing into one undo step. */
+  const editChart = (next: string, group?: string) => {
+    if (next === chordpro) return;
+    chartHistory.record(chordpro, group);
+    applyChart(next);
+  };
+
   /** Field edits rewrite the matching directive when the chart has one. */
   const editField = (field: ChartMetaField, value: string) => {
     FIELD_SETTERS[field](value);
-    setChordpro((text) => writeChartMeta(text, field, value));
+    const next = writeChartMeta(chordpro, field, value);
+    if (next !== chordpro) {
+      chartHistory.record(chordpro, `field:${field}`);
+      setChordpro(next);
+    }
+  };
+
+  /** Undo/redo only restore the chart text; directives in it bring their
+   * fields back along with it. The caret goes to the end of what changed. */
+  const stepChart = (dir: "undo" | "redo") => {
+    const next = chartHistory[dir](chordpro);
+    if (next === undefined) return;
+    const pos = caretAfterChange(chordpro, next);
+    applyChart(next);
+    const el = chartRef.current;
+    requestAnimationFrame(() => el?.setSelectionRange(pos, pos));
   };
 
   const insertAtCursor = (snippet: string, cursorOffset?: number) => {
@@ -137,14 +167,17 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const save = () => {
     if (!titleValid || !keyValid) {
       setShowErrors(true);
+      setExpanded(false);
       return;
     }
     const song: Song = {
       id: existing?.id ?? `song-${Date.now()}`,
       title: title.trim(),
-      artist: artist.trim() || "Unknown",
+      // Artist and BPM stay blank when not given (0 = no tempo); only the
+      // time signature has a sensible default.
+      artist: artist.trim(),
       defaultKey: canonicalKey(effectiveKey || "C"),
-      tempo: Number(tempo) || 80,
+      tempo: Number(tempo) || 0,
       timeSig: timeSig.trim() || "4/4",
       durationSec: existing?.durationSec ?? 240,
       favourite: existing?.favourite ?? false,
@@ -188,6 +221,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
         </button>
       </div>
 
+      {!(expanded && tab === "source") && (
       <div className="chip-row" style={{ padding: "6px 16px 10px" }}>
         <button className={"chip" + (tab === "source" ? " active" : "")} onClick={() => setTab("source")}>
           Chords/Lyrics
@@ -204,6 +238,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
           </button>
         ))}
       </div>
+      )}
 
       {tab === "source" && (
         <div className="flex-1 hidden-scroll" style={{ padding: "0 16px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -217,6 +252,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
               </div>
             </div>
           )}
+          {!expanded && (
+          <>
           <div style={{ flex: "none" }}>
             <div className="list-group">
               <div className="form-row">
@@ -288,6 +325,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
               Import
             </button>
           </div>
+          </>
+          )}
           <div className="chip-row">
             {chartFormat === "chordpro" &&
               CHORDPRO_DIRECTIVES.map((name) => (
@@ -331,7 +370,17 @@ export function AddEditSong({ songId }: { songId?: string }) {
             ref={chartRef}
             className="form-textarea"
             value={chordpro}
-            onChange={(e) => editChart(e.target.value)}
+            onChange={(e) => editChart(e.target.value, "typing")}
+            onKeyDown={(e) => {
+              // Hardware keyboards: the browser's own undo can't see our
+              // inserted snippets, so route the shortcuts to our history.
+              if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+              const k = e.key.toLowerCase();
+              if (k === "z" || k === "y") {
+                e.preventDefault();
+                stepChart(k === "y" || e.shiftKey ? "redo" : "undo");
+              }
+            }}
             aria-label="Chart"
             placeholder={
               chartFormat === "chordpro"
@@ -346,6 +395,45 @@ export function AddEditSong({ songId }: { songId?: string }) {
               lineHeight: 1.75,
             }}
           />
+          {/* Under the chart so, with the keyboard up, it sits just above it. */}
+          <div className="editor-keys">
+            <div className="editor-key-group">
+              <button
+                type="button"
+                className="editor-key"
+                onPointerDown={(e) => e.preventDefault()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => stepChart("undo")}
+                disabled={!chartHistory.canUndo}
+                aria-label="Undo"
+              >
+                <Icon name="undo" size={20} strokeWidth={2.2} />
+              </button>
+              <button
+                type="button"
+                className="editor-key"
+                onPointerDown={(e) => e.preventDefault()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => stepChart("redo")}
+                disabled={!chartHistory.canRedo}
+                aria-label="Redo"
+              >
+                <Icon name="redo" size={20} strokeWidth={2.2} />
+              </button>
+              <button
+                type="button"
+                className="editor-key"
+                onPointerDown={(e) => e.preventDefault()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setExpanded((v) => !v)}
+                aria-label={expanded ? "Show song details" : "Expand editor"}
+                aria-pressed={expanded}
+              >
+                <Icon name={expanded ? "collapse" : "expand"} size={18} strokeWidth={2.2} />
+              </button>
+            </div>
+            <CaretKeys target={chartRef} />
+          </div>
         </div>
       )}
 

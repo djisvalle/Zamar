@@ -114,6 +114,10 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
   const pinchStart = useRef<{ dist: number; zoom: number } | null>(null);
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTap = useRef(0);
+  // Whether the gesture now in progress has become a two-finger pinch.
+  // Only a pinch is kept from the stage: a one-finger horizontal drag has to
+  // reach Live Stage's song-to-song swipe, which listens on an ancestor.
+  const pinched = useRef(false);
 
   const clampZoom = (z: number) => Math.min(MAX_ENGRAVING_ZOOM, Math.max(MIN_ENGRAVING_ZOOM, z));
 
@@ -135,7 +139,6 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    e.stopPropagation();
     try {
       (e.target as Element).setPointerCapture?.(e.pointerId);
     } catch {
@@ -144,6 +147,7 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
     }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2) {
+      pinched.current = true;
       const [a, b] = [...pointers.current.values()];
       pinchStart.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: committedZoom.current };
     } else if (pointers.current.size === 1) {
@@ -159,7 +163,7 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!pointers.current.has(e.pointerId)) return;
-    e.stopPropagation();
+    if (pinched.current) e.stopPropagation();
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2 && pinchStart.current) {
       const [a, b] = [...pointers.current.values()];
@@ -171,8 +175,10 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
   };
 
   const endPointer = (e: React.PointerEvent) => {
-    e.stopPropagation();
+    // A pinch's fingers lifting mustn't read as a swipe to the next song.
+    if (pinched.current) e.stopPropagation();
     pointers.current.delete(e.pointerId);
+    if (pointers.current.size === 0) pinched.current = false;
     if (pointers.current.size < 2) pinchStart.current = null;
     // Finalize right away once every finger has lifted, instead of waiting
     // out the debounce — a gesture that's clearly over shouldn't leave the
@@ -214,6 +220,7 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
     if (!disableZoom) return;
     pointers.current.clear();
     pinchStart.current = null;
+    pinched.current = false;
     if (commitTimer.current) clearTimeout(commitTimer.current);
     commitTimer.current = null;
   }, [disableZoom]);
