@@ -188,6 +188,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       events, so it works with touch in the iOS/Android web views; `useDragReorder.ts`).
       Attachment versions in Add/Edit Song reorder the same way
 - [x] Per-slot key/note override sheet, Add-to-set sheet (was a side drawer)
+- [x] Slot notes show on Live Stage during a set: this slot's note under the progress
+      bar (one line, tap to expand) and the next slot's note after "Next: <title>"
+      (see `docs/superpowers/specs/2026-09-26-setlist-notes-on-stage-design.md`)
 - [x] Artist and BPM stay blank when not given (no more "Unknown"/80; tempo 0 = none),
       time signature still defaults to 4/4; the run sheet shows "N/A BPM" for a blank tempo
       and songs saved with the old "Unknown" artist load with it blank (`hydrateState`)

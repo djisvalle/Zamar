@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
-import { useStore, activeSetlistSongIds } from "../../state/store";
+import { useStore, activeSetlistSlots, activeSetlistSongIds } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
 import { MxlScore, type MxlScoreHandle, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
 import { AnnotateCanvas } from "../../components/AnnotateCanvas";
+import { Icon } from "../../components/Icon";
 import { syncAnnotationWidths } from "../../utils/annotations";
 import { activeKeyChange, keySemitoneShift } from "../../utils/keys";
 import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
@@ -61,6 +62,8 @@ export function LiveStage() {
   const nav = useNavigator();
   const { stage } = state;
   const [stageToolsOpen, setStageToolsOpen] = useState(false);
+  // The slot's band note shows one line until tapped open.
+  const [slotNoteExpanded, setSlotNoteExpanded] = useState(false);
   const [scoreInstruments, setScoreInstruments] = useState<ScoreInstrument[]>([]);
   const [hiddenParts, setHiddenParts] = useState<Set<string>>(new Set());
   const [activeKind, setActiveKind] = useState<AttachmentKind | undefined>(undefined);
@@ -77,6 +80,7 @@ export function LiveStage() {
   const hasAttachment = Boolean(song && Object.keys(song.attachments).length > 0);
   const setlist = stage.setlistId ? state.setlists.find((sl) => sl.id === stage.setlistId) : null;
   const setlistSongIds = activeSetlistSongIds(setlist);
+  const setlistSlots = activeSetlistSlots(setlist);
 
   const dockOpen = stage.drawer === "annotate";
   const annotationView: AnnotationView = stage.view === "chords" ? "chords" : activeKind ?? "chords";
@@ -141,6 +145,11 @@ export function LiveStage() {
     }
     // setlistIndex too: a reprise is the same song in a new slot.
   }, [song?.id, stage.setlistIndex]);
+
+  // Each slot's note opens collapsed, like its chart opens at the top.
+  useEffect(() => {
+    setSlotNoteExpanded(false);
+  }, [stage.setlistId, stage.setlistIndex]);
 
   // A score's instrument list (and any hidden parts) belongs to whichever
   // version is on screen — clear it whenever that changes so a leftover
@@ -229,6 +238,9 @@ export function LiveStage() {
   // The slot on stage, not the song's first slot: a reprise is the same
   // song further down the set.
   const songIndex = setlistSongIds[stage.setlistIndex] === song.id ? stage.setlistIndex : setlistSongIds.indexOf(song.id);
+  // Setlist "Note for the band" for this slot and the next one.
+  const slotNote = setlistSlots[songIndex]?.note?.trim();
+  const nextSlotNote = setlistSlots[songIndex + 1]?.note?.trim();
   const availableKinds = CATEGORY_PRIORITY.filter((k) => song.attachments[k]);
   const activeBucket = activeKind ? song.attachments[activeKind] : undefined;
   const activeVersion = activeBucket ? activeBucket.versions.find((v) => v.id === activeVersionId) ?? selectedVersion(activeBucket) : undefined;
@@ -407,10 +419,15 @@ export function LiveStage() {
 
       {setlist && (
         <div style={{ padding: "8px 14px 0" }}>
-          <div className="muted" style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-            {songIndex + 1 < setlistSongIds.length
-              ? `Next: ${state.songs.find((s) => s.id === setlistSongIds[songIndex + 1])?.title ?? ""}`
-              : "Last song"}
+          <div className="stage-next muted">
+            {songIndex + 1 < setlistSongIds.length ? (
+              <>
+                Next: {state.songs.find((s) => s.id === setlistSongIds[songIndex + 1])?.title ?? ""}
+                {nextSlotNote && <span className="stage-next-note"> · {nextSlotNote}</span>}
+              </>
+            ) : (
+              "Last song"
+            )}
           </div>
           <div style={{ width: "100%", height: 4, background: "var(--line)", borderRadius: 99 }}>
             <div
@@ -423,6 +440,18 @@ export function LiveStage() {
               }}
             />
           </div>
+          {slotNote && (
+            <button
+              type="button"
+              className="stage-slot-note"
+              aria-expanded={slotNoteExpanded}
+              aria-label={`Note for the band: ${slotNote}`}
+              onClick={() => setSlotNoteExpanded((v) => !v)}
+            >
+              <Icon name="edit" size={12} strokeWidth={2} />
+              <span>{slotNote}</span>
+            </button>
+          )}
         </div>
       )}
 
