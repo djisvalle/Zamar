@@ -187,6 +187,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Per-slot key/note override sheet, Add-to-set sheet (was a side drawer)
 - [x] Artist and BPM stay blank when not given (no more "Unknown"/80; tempo 0 = none),
       time signature still defaults to 4/4; the run sheet shows "N/A BPM" for a blank tempo
+      and songs saved with the old "Unknown" artist load with it blank (`hydrateState`)
 - [x] Drag a section's header grip to reorder sections (`MOVE_SECTION`), or Move up/down
       from its `⋯` sheet; songs keep their order within it and a live set stays on its song
 - [x] Adding lives in the detail toolbar ("+" → Add songs / Add section) so it stays in

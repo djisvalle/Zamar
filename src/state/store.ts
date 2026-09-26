@@ -116,7 +116,14 @@ export function hydrateState(songs: Song[], setlists: Setlist[], settings: Setti
   // text size is what they're on screen at now, so they're pinned to that.
   // Keys saved before the enharmonic picker may be sharps with no chip
   // (A#, D#, G#); they load as the chip for the same pitch (Bb, Eb, Ab).
-  const locked = songs.map((s) => lockChordsTextScale({ ...s, defaultKey: canonicalKey(s.defaultKey) }, settings.textScale));
+  // Songs saved with no artist used to get the placeholder "Unknown"; a
+  // missing artist is blank now, so the placeholder loads as blank too.
+  const locked = songs.map((s) =>
+    lockChordsTextScale(
+      { ...s, defaultKey: canonicalKey(s.defaultKey), artist: s.artist === "Unknown" ? "" : s.artist },
+      settings.textScale
+    )
+  );
   const keyed = setlists.map((sl) => ({
     ...sl,
     sections: sl.sections.map((sec) => ({
