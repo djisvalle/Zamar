@@ -53,7 +53,8 @@ the tension rather than silently picking one.
   gives Annotate's snap-to-lyric-line tick on native.
 - Notation stamps are engraved SMuFL glyphs from a bundled **Bravura** font
   (`src/assets/fonts/`, `utils/notation.ts`, `components/SmuflGlyph.tsx`).
-- **`pdfjs-dist`** renders PDFs page-by-page with pinch-zoom/pan (`PdfPages.tsx`).
+- **`pdfjs-dist`** renders PDFs page by page, nearest pages first, with pinch-zoom/pan
+  (`PdfPages.tsx`; see `docs/superpowers/specs/2026-09-27-pdf-progressive-rendering-design.md`).
 - Plain CSS with custom properties (`src/theme.css`), no Tailwind or CSS-in-JS. Icons are a
   hand-drawn SVG set (`src/components/Icon.tsx`).
 - Only Android has actually been built and run. The iOS folder is scaffolded but
