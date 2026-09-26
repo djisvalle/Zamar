@@ -7,9 +7,7 @@ band's songs, charts, sheet music and set plans on the phone or tablet itself, a
 them on a distraction-free stage view during a service. It works with no network and no
 account, and nothing leaves the device unless you export it.
 
-It is built first for musicians moving over from OnSong on iOS, so it follows iPhone and
-iPad conventions. It is a cross-platform Capacitor app, though, and runs on Android and in
-the browser too.
+Zamar is a cross-platform Capacitor app that runs on iOS, Android and in the browser.
 
 ## Why
 
