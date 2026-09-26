@@ -263,8 +263,28 @@ each platform, phone and tablet sizes:
 
 - [ ] Import each type (PDF, photo, MusicXML) through the native file picker. On iOS,
       try both Files and the photo library.
-- [ ] MusicXML renders and re-engraves when the key changes.
+- [ ] MusicXML renders and re-engraves when the key changes, including a pure respelling
+      (C♯ ↔ D♭, F♯ ↔ G♭, B ↔ C♭): the key signature and notes follow the chip.
 - [ ] Large PDFs render all pages without running out of memory.
+
+**Tuner (real microphone)**
+
+The Tuner has only been tried in a desktop browser, so this is its first real run.
+
+- [ ] First visit shows Zamar's own mic sheet, then the OS permission prompt. Allowing it
+      starts listening straight away, with no extra tap.
+- [ ] Guitar preset: each open string reads within a few cents of a clip-on or
+      phone tuner, and Auto follows the string being played. Repeat with Chromatic on a
+      voice or keyboard, and with Bass for the low E (about 41 Hz).
+- [ ] The needle settles on a sustained note instead of jittering, and goes back to
+      "Listening for a note…" about a second after the note stops.
+- [ ] Denying the prompt shows "Microphone is off" with this platform's Settings path.
+      Allowing the mic in the OS Settings and tapping Try again starts listening.
+- [ ] The OS mic indicator (iOS orange dot, Android green chip) disappears when you
+      leave the Tuner tab and when the app goes to the background, and listening resumes
+      on return.
+- [ ] iOS: after using the Tuner, audio elsewhere on the phone (music, a call) isn't
+      left quieter or routed to the earpiece.
 
 **Performance and power**
 

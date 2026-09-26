@@ -331,7 +331,6 @@ export const MxlScore = forwardRef<
         disableCursor: true,
       });
       const transposer = new KeyAwareTransposeCalculator(osmdModule);
-      transposer.targetKey = targetKey ?? null;
       transposerRef.current = transposer;
       osmd.TransposeCalculator = transposer;
       const rules = STAVE_SPACING_RULES[staveSpacing];
@@ -350,7 +349,7 @@ export const MxlScore = forwardRef<
         await osmd.load(blob);
         if (cancelled || !hostRef.current) return;
         onInstrumentsChange?.(osmd.Sheet.Instruments.map((i) => ({ id: String(i.Id), name: i.Name })));
-        osmd.Sheet.Transpose = transpose;
+        transposer.apply(osmd.Sheet, transpose, targetKey ?? null);
         osmd.Zoom = engravingZoom;
         for (const inst of osmd.Sheet.Instruments) inst.Visible = !hiddenParts?.has(String(inst.Id));
         osmd.render();
@@ -373,8 +372,7 @@ export const MxlScore = forwardRef<
   useEffect(() => {
     const osmd = osmdRef.current;
     if (!osmd || status !== "ready") return;
-    if (transposerRef.current) transposerRef.current.targetKey = targetKey ?? null;
-    osmd.Sheet.Transpose = transpose;
+    transposerRef.current?.apply(osmd.Sheet, transpose, targetKey ?? null);
     osmd.updateGraphic();
     osmd.render();
     // The one re-render `onRerendered` fires from — a transpose is the only

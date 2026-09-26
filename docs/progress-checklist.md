@@ -9,10 +9,12 @@ Cross-check sources: [review-findings.md](review-findings.md) (senior review, re
 Everything below is detailed further down; this is the short list.
 
 - **iOS native build** — scaffolded, never built in Xcode (see Shell & persistence).
-- **Tuner on a real device** — only tried in the browser so far.
+- **Tuner on a real device** — only tried in the browser so far. Native mic permissions
+  are in place; the pass to run is in `docs/device-testing.md` ("Tuner (real microphone)").
 - **Capo** — cut; needs its own design pass against transpose/keys (see Nice-to-have).
 - **Pure respelling on scores** — C♯ → D♭ changes the chart but not a score, because OSMD
   skips 0-semitone transposes (see Enharmonic keys).
+- **MusicXML export can't re-key scores**; **annotations aren't exported** in any format.
 - **Crash-restore onboarding** from the source design is unwired.
 - **OMR (PDF/photo → `.mxl`)** — R&D spike only.
 - **Annotate:** per-song stave spacing; reprojecting marks across an
@@ -55,9 +57,11 @@ working tree on 2026-09-19.
       nearest way (−5…+6). Scores use `utils/scoreTranspose.ts` in place of OSMD's
       calculator, so the key signature follows the chip and notes match it. Old `A#`/`D#`/`G#`
       keys load as B♭/E♭/A♭. Offsets on the chips are off by default (Settings → Keys).
-      Spec: `docs/superpowers/specs/2026-09-25-enharmonic-key-picker-design.md`. Known limit:
-      OSMD skips transposing at 0 semitones, so a pure respelling (C♯ → D♭) changes the
-      chart but leaves a score as written.
+      Spec: `docs/superpowers/specs/2026-09-25-enharmonic-key-picker-design.md`. A pure
+      respelling (C♯ → D♭) re-spells a score too: OSMD skips transposing at 0 semitones,
+      so `KeyAwareTransposeCalculator.apply` hands it an octave and takes it back out.
+      Switching spellings at the same shift also re-keys the opening key signature, which
+      OSMD used to leave as it was.
 - [x] **Song & Set Library.** Song CRUD is complete (`ADD_SONG`/`UPDATE_SONG`/
       `DUPLICATE_SONG`/`DELETE_SONGS` in `store.ts`, wired from `Library.tsx`). Setlist CRUD
       is now complete too: sections and items within a setlist have full
@@ -200,7 +204,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       tuning reference frequencies; readout computed relative to selected preset
 - [x] Real mic input (`getUserMedia`) with McLeod pitch detection (`utils/pitch.ts`,
       `screens/tuner/useMicPitch.ts`); Auto string follow or tap-to-lock; denied/unavailable mic
-      states. Not yet tried on a real iOS or Android device.
+      states. Android declares `RECORD_AUDIO`/`MODIFY_AUDIO_SETTINGS` and iOS has
+      `NSMicrophoneUsageDescription`. Not yet tried on a real iOS or Android device; the
+      checklist for that run is in `docs/device-testing.md`.
 
 ### Export
 - [x] Real files (`utils/exportSet.ts`): PDF via pdf-lib (charts, copied PDF attachments,
