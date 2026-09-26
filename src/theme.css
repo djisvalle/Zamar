@@ -107,6 +107,12 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  /* A flex item's default min-width is its content's min-content width, and
+     a nowrap chip row's min-content is every chip side by side (its own
+     overflow-x: auto doesn't change that). Without this, a long row on Add/
+     Edit Song widened the whole app past the screen on a real device, pushing
+     Save off to the right and making the page scroll sideways. */
+  min-width: 0;
 }
 button {
   font: inherit;
