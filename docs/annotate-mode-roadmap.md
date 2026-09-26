@@ -1,6 +1,6 @@
 # Live Stage Annotate Mode — Improvement Roadmap
 
-Snapshot date: 2026-09-22; status re-checked against `main` on 2026-09-25.
+Snapshot date: 2026-09-22; status re-checked against `main` on 2026-09-26.
 
 Captures where annotate mode stands after the initial build-out + Phase 1 UI
 pass, and a prioritized backlog for a future session to pick up. Nothing in
@@ -42,6 +42,17 @@ discussion" items (done 2026-09-25).
   needed just to move down the page. A second finger cancels whatever the
   first started; Sticky note, Text and Eraser act on release so the first
   finger of a scroll never places or erases anything.
+- **Sharper, steadier ink** (2026-09-26): canvases size their backing store
+  by the screen's pixel density (and by Live Stage's magnification), the
+  stroke in progress draws on its own layer once per frame, every coalesced
+  touch sample is kept, and strokes go through their exact points. The
+  canvas measures the chart content, so it no longer leaves blank space
+  below a chart or score. Tapping existing text or a note with its tool
+  edits it instead of stacking a new one.
+- **Marks survive rotation** (2026-09-26): Live Stage lays the chart out at
+  one fixed width and magnifies it to fill the pane, so marks stay put in
+  portrait and landscape. Pointer-to-content code divides by
+  `screenScaleOf` (`src/utils/screenScale.ts`).
 - **Quick wins 1–3** (collapsible tool panel, canvas selection highlight,
   stronger Clear-page vs. Clear-all distinction) — done.
 - **Persisted annotations per song** (was tracked as backlog item 4 below).

@@ -531,24 +531,33 @@ each platform, phone and tablet sizes:
 - [ ] Status bar text is dark in Light and light in Stage Dark, and switches when the
       appearance setting changes.
 - [ ] Rotating the device doesn't lose the current screen or scroll position.
+- [ ] Live Stage: rotating keeps the chart's layout and magnifies it to fill the screen;
+      annotations stay on the notes and lyrics they were drawn over.
+- [ ] Modal screens (Add/Edit Song, Import) and every tablet screen stay clear of
+      Android's navigation bar.
 - [ ] Android: the system back gesture/button behaves sensibly on pushed screens and
       modals (the app is iOS-first, so note anything odd rather than assuming a bug).
 
 **Touch and gestures**
 
 - [ ] Tab bar, sheets, list rows and buttons are easy to hit; nothing needs a double tap.
-- [ ] PDF pages: pinch-zoom and pan are smooth and don't also zoom the whole page.
+- [ ] PDF pages: pinch-zoom and pan are smooth and don't also zoom the whole page; a
+      zoomed-in PDF can't be panned off into blank space.
+- [ ] MusicXML: pinch-zoom tracks the fingers and settles once on release.
+- [ ] In a set, one-finger swipes move between songs over chord charts, PDFs and scores.
 - [ ] Annotate: pen strokes follow the finger (and Apple Pencil on iPad) without lag;
-      scrolling vs. drawing doesn't fight.
-- [ ] Live Stage chrome hides after ~6 s idle and comes back on tap.
-- [ ] On-screen keyboard in Add/Edit Song doesn't cover the field being typed in.
+      two fingers scroll while a tool is active, and ink stays sharp on a high-density screen.
+- [ ] Live Stage chrome hides after ~6 s idle, and a tap on empty chart space hides or
+      shows it right away.
+- [ ] On-screen keyboard in Add/Edit Song doesn't cover the field being typed in; the
+      caret keys and undo/redo bar sit just above it and don't dismiss it.
 
 **Files and rendering**
 
 - [ ] Import each type (PDF, photo, MusicXML) through the native file picker. On iOS,
       try both Files and the photo library.
 - [ ] MusicXML renders and re-engraves when the key changes, including a pure respelling
-      (C♯ ↔ D♭, F♯ ↔ G♭, B ↔ C♭): the key signature and notes follow the chip.
+      (C♯ ↔ D♭, F♯ ↔ G♭, G♯ ↔ A♭): the key signature and notes follow the chip.
 - [ ] Large PDFs render all pages without running out of memory.
 
 **Tuner (real microphone)**

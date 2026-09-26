@@ -1,7 +1,7 @@
 # Zamar — Senior Review Findings
 
 Originally reviewed: 2026-09-12 (branch `mockup-to-implementation`)
-Last re-checked against `main`: 2026-09-25
+Last re-checked against `main`: 2026-09-26
 
 Scope: full codebase (architecture, persistence, navigation) + UI/UX design review, benchmarked against modern iOS conventions.
 
@@ -11,7 +11,7 @@ This list only carries what is still open or only partly fixed. Findings that ar
 
 ## 🟡 Low priority / polish
 
-1. **Heavy use of ad-hoc inline `style={{...}}` objects** instead of shared CSS classes (about 235 left across `src/`). This makes theming and spacing changes harder than they need to be.
+1. **Heavy use of ad-hoc inline `style={{...}}` objects** instead of shared CSS classes (about 235 left across `src/`). This makes theming and spacing changes harder than they need to be. A spec for the cleanup is written (`docs/superpowers/specs/2026-09-26-inline-styles-to-css-design.md`); the work itself hasn't started.
 
 ---
 
