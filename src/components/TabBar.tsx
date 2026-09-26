@@ -36,7 +36,6 @@ export function useTabPlacement(): "top" | "bottom" {
 export function useTabBarVisible() {
   const { state } = useStore();
   const nav = useNavigator();
-  if (!nav.booted) return false;
   if (MODAL_SCREENS.has(nav.top.screen)) return false;
   if (nav.activeTab === "live-stage") {
     if (state.stage.chromeHidden) return false;
@@ -57,7 +56,7 @@ export function useTabBarClasses() {
   const visible = useTabBarVisible();
   const placement = useTabPlacement();
   if (placement === "top") {
-    return nav.booted && !MODAL_SCREENS.has(nav.top.screen) ? " tabs-top" : "";
+    return !MODAL_SCREENS.has(nav.top.screen) ? " tabs-top" : "";
   }
   return visible ? " has-tab-bar" : "";
 }

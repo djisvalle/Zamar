@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useStore, activeSetlistSlots, activeSetlistSongIds, resolveDefaultView } from "../../state/store";
-import { useNavigator } from "../../navigation/Navigator";
+import { useFrame, useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
 import { MxlScore, type MxlScoreHandle, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
@@ -72,6 +72,7 @@ function openingVersionId(song: Song | undefined): string | undefined {
 export function LiveStage() {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
+  const { showing } = useFrame();
   const { stage } = state;
   const [stageToolsOpen, setStageToolsOpen] = useState(false);
   // The slot's band note shows one line until tapped open.
@@ -199,14 +200,18 @@ export function LiveStage() {
     }
   };
 
+  // Live Stage stays mounted behind other tabs. Its idle timer only runs
+  // while it's on screen, and coming back shows the chrome again, as
+  // opening it fresh does.
   useEffect(() => {
+    if (!showing) return;
     resetIdle();
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (tapTimer.current) clearTimeout(tapTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage.songId, stage.drawer]);
+  }, [stage.songId, stage.drawer, showing]);
 
   // Marks saved before Song.annotationWidths existed have no recorded width.
   // This is the device they're being used on, so the width they show at now

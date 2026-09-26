@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../../state/store";
-import { useNavigator } from "../../navigation/Navigator";
+import { useFrame, useNavigator } from "../../navigation/Navigator";
 import { Header } from "../../components/Header";
 import { Sheet, Dialog } from "../../components/Overlays";
 import { Icon } from "../../components/Icon";
@@ -15,17 +15,18 @@ import type { SetlistItem, SetlistSection, Song } from "../../state/types";
 export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
+  const { frame } = useFrame();
   const setlist = state.setlists.find((sl) => sl.id === setlistId);
   const [menuOpen, setMenuOpen] = useState(false);
   // Which section "Add songs" targets; undefined means the set's last section.
   const [addFor, setAddFor] = useState<{ sectionId?: string } | null>(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(Boolean((nav.top.params as any)?.openDetails));
+  const [detailsOpen, setDetailsOpen] = useState(Boolean((frame.params as any)?.openDetails));
   // openDetails is a one-shot request from "New setlist": drop it from the
   // frame so coming back to this screen (from Export, or another tab)
   // doesn't open Set details again.
   useEffect(() => {
-    if ((nav.top.params as any)?.openDetails) nav.replace("setlist-detail", { setlistId });
+    if ((frame.params as any)?.openDetails) nav.replace("setlist-detail", { setlistId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [slot, setSlot] = useState<{ item: SetlistItem; song: Song; index: number } | null>(null);

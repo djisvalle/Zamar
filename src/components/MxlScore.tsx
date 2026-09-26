@@ -577,7 +577,10 @@ export const MxlScore = forwardRef<
           // non-zero width to lay the score out correctly while it's loading
           // — display:none collapses the box to zero width, which is why
           // this rendered incorrectly the first time.
-          visibility: status === "ready" ? "visible" : "hidden",
+          // Inherited once ready rather than "visible": an explicit
+          // "visible" would show through the hidden layer of a tab that
+          // isn't on screen (see .screen-layer in theme.css).
+          visibility: status === "ready" ? undefined : "hidden",
           width: "100%",
           touchAction: "pan-y",
           borderRadius: 8,

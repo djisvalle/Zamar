@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar as CapacitorStatusBar, Style } from "@capacitor/status-bar";
 import { useStore } from "./state/store";
-import { useNavigator } from "./navigation/Navigator";
+import { FrameContext, useNavigator, type Frame, type FrameValue, type TabName } from "./navigation/Navigator";
 import { StatusBar } from "./components/StatusBar";
 import { DeviceNotch } from "./components/DeviceNotch";
 import { TabBar, useTabBarClasses } from "./components/TabBar";
-import { Splash } from "./screens/onboarding/Splash";
 import { LiveStage } from "./screens/live-stage/LiveStage";
 import { Library } from "./screens/library/Library";
 import { Setlists } from "./screens/setlists/Setlists";
@@ -25,9 +24,9 @@ const VIEWPORT_VARS = {
   ipadAir13: { fw: "1024px", fh: "1366px", statusH: "24px" },
 };
 
-function ScreenHost() {
-  const nav = useNavigator();
-  switch (nav.top.screen) {
+function renderScreen(frame: Frame) {
+  const params = frame.params as any;
+  switch (frame.screen) {
     case "live-stage":
       return <LiveStage />;
     case "library":
@@ -35,19 +34,17 @@ function ScreenHost() {
     case "setlists":
       return <Setlists />;
     case "setlist-detail":
-      return <SetlistDetail setlistId={nav.top.params?.setlistId as string} />;
+      return <SetlistDetail setlistId={params?.setlistId as string} />;
     case "add-edit-song":
-      return <AddEditSong songId={nav.top.params?.songId as string | undefined} />;
-    case "import-song": {
-      const p = nav.top.params as any;
+      return <AddEditSong songId={params?.songId as string | undefined} />;
+    case "import-song":
       return (
         <ImportSong
-          method={(p?.method as ImportMethod) ?? "pdf"}
-          target={p?.target as ImportTarget | undefined}
-          formDraft={p?.formDraft as ImportFormDraft | undefined}
+          method={(params?.method as ImportMethod) ?? "pdf"}
+          target={params?.target as ImportTarget | undefined}
+          formDraft={params?.formDraft as ImportFormDraft | undefined}
         />
       );
-    }
     case "tuner":
       return <Tuner />;
     case "settings":
@@ -55,10 +52,51 @@ function ScreenHost() {
     case "appearance":
       return <Appearance />;
     case "export":
-      return <Export setlistId={nav.top.params?.setlistId as string | undefined} songId={nav.top.params?.songId as string | undefined} />;
+      return <Export setlistId={params?.setlistId as string | undefined} songId={params?.songId as string | undefined} />;
     default:
       return null;
   }
+}
+
+/** One screen, kept mounted for as long as its frame is on its stack. Only
+ * the active tab's top frame shows; the rest are hidden with `visibility`
+ * (not `display: none`, which would collapse them to zero width and make the
+ * score, PDF and annotation layers lay themselves out again) and made inert. */
+function FrameLayer({ frame, previous, canPop, showing }: FrameValue) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    // React 18 doesn't know the `inert` attribute, so it's set directly.
+    if (ref.current) ref.current.inert = !showing;
+  }, [showing]);
+  const value = useMemo<FrameValue>(() => ({ frame, previous, canPop, showing }), [frame, previous, canPop, showing]);
+  return (
+    <div ref={ref} className="screen-layer" data-showing={showing}>
+      <FrameContext.Provider value={value}>{renderScreen(frame)}</FrameContext.Provider>
+    </div>
+  );
+}
+
+/** Every frame of every visited tab stays mounted, so leaving a tab and
+ * coming back finds it exactly as it was (Live Stage's score, scroll and
+ * zoom; Library's search), the way UITabBarController keeps each tab. */
+function ScreenHost() {
+  const nav = useNavigator();
+  return (
+    <div className="screen-host">
+      {nav.visited.flatMap((tab: TabName) => {
+        const stack = nav.stacks[tab];
+        return stack.map((frame, i) => (
+          <FrameLayer
+            key={frame.id}
+            frame={frame}
+            previous={stack[i - 1]}
+            canPop={i > 0}
+            showing={tab === nav.activeTab && i === stack.length - 1}
+          />
+        ));
+      })}
+    </div>
+  );
 }
 
 /** Tells the person when their edits aren't being saved: once when the boot read failed (the
@@ -66,12 +104,11 @@ function ScreenHost() {
  * only trace is a console warning and a whole session of edits can vanish on relaunch. */
 function StorageAlert() {
   const { storageProblem } = useStore();
-  const nav = useNavigator();
   const [dismissed, setDismissed] = useState<typeof storageProblem>(null);
   useEffect(() => {
     if (storageProblem === null) setDismissed(null);
   }, [storageProblem]);
-  if (!nav.booted || storageProblem === null || dismissed === storageProblem) return null;
+  if (storageProblem === null || dismissed === storageProblem) return null;
   return (
     <Dialog>
       <div className="dialog-title">{storageProblem === "load" ? "Storage Unavailable" : "Couldn't Save Changes"}</div>
@@ -91,7 +128,6 @@ function StorageAlert() {
 
 export default function App() {
   const { state, dispatch } = useStore();
-  const nav = useNavigator();
   const vp = VIEWPORT_VARS[state.viewport];
   const tabBarClasses = useTabBarClasses();
 
@@ -108,7 +144,7 @@ export default function App() {
         data-platform={Capacitor.getPlatform()}
         style={{ "--status-h": vp.statusH } as React.CSSProperties}
       >
-        {nav.booted ? <ScreenHost /> : <Splash />}
+        <ScreenHost />
         <TabBar />
         <StorageAlert />
       </div>
@@ -176,7 +212,7 @@ export default function App() {
           }
         >
           <StatusBar />
-          {nav.booted ? <ScreenHost /> : <Splash />}
+          <ScreenHost />
           <TabBar />
           <StorageAlert />
           <DeviceNotch viewport={state.viewport} />
