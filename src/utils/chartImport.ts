@@ -159,21 +159,37 @@ async function getOcrWorker() {
   if (!ocrWorkerPromise) {
     ocrWorkerPromise = (async () => {
       const { createWorker, PSM } = await import("tesseract.js");
-      const worker = await createWorker("eng", 1, {
+      // tesseract.js only rejects `createWorker` when the engine fails to
+      // load; if the model then fails to load or initialize it reports that
+      // to `errorHandler` and leaves the promise pending forever, which left
+      // import stuck on "Preparing text recognition…". Race the two so any
+      // setup failure surfaces as an error instead.
+      let fail!: (err: Error) => void;
+      const failed = new Promise<never>((_, reject) => (fail = reject));
+      const created = createWorker("eng", 1, {
         workerPath: ocrWorkerUrl,
         corePath: ocrCoreUrl,
         // A blob-URL worker can't importScripts the bundled core from the
         // app's own scheme (capacitor://, https://localhost) in every web
         // view, so the worker script is loaded by URL directly.
         workerBlobURL: false,
-        // Tesseract fetches `${langPath}/eng.traineddata.gz`, so the bundled
-        // model keeps its real file name (see vite.config.ts) and only its
-        // folder is passed here.
+        // Tesseract fetches `${langPath}/eng.traineddata[.gz]`, so the
+        // bundled model keeps its real file name (see vite.config.ts) and
+        // only its folder is passed here. The build ships it without the
+        // ".gz" suffix, because Android's asset packaging doesn't reliably
+        // serve a ".gz" file under its own name; Tesseract spots the gzip
+        // data by its header and unpacks it either way.
         langPath: new URL(ocrEngUrl, location.href).href.replace(/\/[^/]*$/, ""),
+        gzip: ocrEngUrl.endsWith(".gz"),
         cacheMethod: "none",
         logger: (m: { status: string; progress: number }) => {
           if (m.status === "recognizing text") ocrProgress?.("Reading text…", m.progress);
         },
+        errorHandler: (err: unknown) => fail(new Error(`Text recognition failed: ${String(err)}`)),
+      });
+      const worker = await Promise.race([created, failed]).catch((err) => {
+        created.then((w) => w.terminate()).catch(() => {});
+        throw err;
       });
       // "Single column of text of variable sizes": keeps each chord line
       // and lyric line as its own row instead of splitting a sparse chord
