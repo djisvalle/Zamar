@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import type { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import type { MusicalAnchor, StaveSpacing } from "../state/types";
 import { KeyAwareTransposeCalculator } from "../utils/scoreTranspose";
+import { screenScaleOf } from "../utils/screenScale";
 
 const MIN_ENGRAVING_ZOOM = 0.5;
 const MAX_ENGRAVING_ZOOM = 2.5;
@@ -152,7 +153,10 @@ function useEngravingZoom(onCommit: (zoom: number, focus: ZoomFocus | null) => v
     const node = previewRef.current;
     if (!node) return;
     const rect = node.getBoundingClientRect();
-    node.style.transformOrigin = `${clientX - rect.left}px ${clientY - rect.top}px`;
+    // The origin is in the node's own pixels, not the (possibly magnified,
+    // see screenScaleOf) screen pixels the pointer reports.
+    const k = screenScaleOf(node);
+    node.style.transformOrigin = `${(clientX - rect.left) / k}px ${(clientY - rect.top) / k}px`;
     focus.current = { ratio: rect.height ? (clientY - rect.top) / rect.height : 0, clientY };
   };
 
@@ -389,7 +393,7 @@ export const MxlScore = forwardRef<
         const el = ez.el;
         if (!osmd || !el || status !== "ready") return null;
         const rect = el.getBoundingClientRect();
-        const f = unitInPixelsRef.current * osmd.Zoom;
+        const f = unitInPixelsRef.current * osmd.Zoom * screenScaleOf(el);
         return findNearestMeasureAnchor(osmd, { x: (clientX - rect.left) / f, y: (clientY - rect.top) / f });
       },
       clientPointForAnchor(anchor) {
@@ -404,7 +408,7 @@ export const MxlScore = forwardRef<
         const pos = box.AbsolutePosition;
         const size = box.Size;
         const rect = el.getBoundingClientRect();
-        const f = unitInPixelsRef.current * osmd.Zoom;
+        const f = unitInPixelsRef.current * osmd.Zoom * screenScaleOf(el);
         return {
           clientX: (pos.x + anchor.fx * size.width) * f + rect.left,
           clientY: (pos.y + anchor.fy * size.height) * f + rect.top,
