@@ -164,7 +164,7 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Chord chart rendering with real transpose math (not hand-placed spacing)
 - [x] One consolidated Stage Tools sheet (Add-Song, Quick-edit, annotate mode, view picker,
       lyrics/zoom-or-instrument controls) opened from a slim one-row bottom bar
-- [x] Idle auto-hide chrome (6s); advancing past a setlist's last song is a no-op
+- [x] Idle auto-hide chrome (6s), or tap empty chart space to hide/show it right away; advancing past a setlist's last song is a no-op
 - [x] A song can persist a default Live Stage view (chords, or a specific attachment kind),
       set from Add/Edit Song
 - [x] Chord/Sheet toggle renders the real attached file — MusicXML via OpenSheetMusicDisplay,
