@@ -131,6 +131,17 @@ export default function App() {
   const vp = VIEWPORT_VARS[state.viewport];
   const tabBarClasses = useTabBarClasses();
 
+  // index.html's boot splash can't read settings before the library loads,
+  // so it takes its theme from here. Only a convenience: without it the
+  // splash follows the system setting.
+  useEffect(() => {
+    try {
+      localStorage.setItem("zamar.theme", state.settings.theme);
+    } catch {
+      // Storage unavailable (private mode, blocked site data).
+    }
+  }, [state.settings.theme]);
+
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     CapacitorStatusBar.setStyle({ style: state.settings.theme === "dark" ? Style.Light : Style.Dark }).catch(() => {});

@@ -2,12 +2,13 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { defineCustomElements } from "jeep-sqlite/loader";
 import App from "./App";
-import { StoreProvider, initialState, hydrateState, type AppState } from "./state/store";
+import { StoreProvider, initialState, hydrateState, resolveDefaultView, type AppState } from "./state/store";
 import * as songsRepo from "./data/songsRepo";
 import * as setlistsRepo from "./data/setlistsRepo";
 import * as settingsRepo from "./data/settingsRepo";
 import { EMPTY_SNAPSHOT, type PersistedSnapshot } from "./data/persistPlan";
 import { NavigatorProvider } from "./navigation/Navigator";
+import { preloadStageSong } from "./data/attachmentData";
 import "./theme.css";
 
 defineCustomElements(window);
@@ -60,6 +61,8 @@ async function loadInitial(): Promise<LoadResult> {
 }
 
 loadInitial().then(({ state: initial, persistEnabled, persisted }) => {
+  const stageSong = initial.songs.find((s) => s.id === initial.stage.songId);
+  preloadStageSong(stageSong, resolveDefaultView(stageSong));
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <StoreProvider initial={initial} persisted={persisted} persistEnabled={persistEnabled}>

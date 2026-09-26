@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getDb } from "./db";
 import type { Song } from "../state/types";
 import type { Statement } from "./songsRepo";
+import { openingAttachment } from "../utils/attachments";
 
 /** Attachment bytes (a data URL, or a plain URL for the bundled seed score),
  * kept out of the song rows so saving a song or loading the library doesn't
@@ -67,6 +68,19 @@ export function putAttachmentData(versionId: string, data: string) {
 /** Starts reading these versions so they're in memory when shown. */
 export function prefetchAttachmentData(versionIds: (string | undefined)[]) {
   for (const id of versionIds) if (id) getAttachmentData(id).catch(() => {});
+}
+
+/** Starts loading what the song on stage opens to, as soon as the state is
+ * known and before the first render: its attachment's bytes, and the renderer
+ * for its kind. The dynamic imports share the module cache, so MxlScore's and
+ * PdfPages' own `import()` pick up the request already in flight. Nothing is
+ * awaited; a failure here just leaves the screen to load as usual. */
+export function preloadStageSong(song: Song | undefined, view: "chords" | "sheet") {
+  const opening = openingAttachment(song, view);
+  if (!opening) return;
+  prefetchAttachmentData([opening.version.id]);
+  if (opening.kind === "musicxml") import("opensheetmusicdisplay").catch(() => {});
+  else if (opening.kind === "pdf") import("pdfjs-dist").catch(() => {});
 }
 
 export type AttachmentDataStatus = "loading" | "ready" | "error";

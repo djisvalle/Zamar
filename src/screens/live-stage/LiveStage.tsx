@@ -9,7 +9,7 @@ import { AnnotateCanvas } from "../../components/AnnotateCanvas";
 import { Icon } from "../../components/Icon";
 import { syncAnnotationWidths } from "../../utils/annotations";
 import { activeKeyChange, keySemitoneShift } from "../../utils/keys";
-import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
+import { CATEGORY_PRIORITY, firstAvailableCategory, openingAttachment, selectedVersion } from "../../utils/attachments";
 import type { AnnotationObject, AnnotationView, AttachmentKind, Song } from "../../state/types";
 import { AddSongSheet } from "./AddSongSheet";
 import { QuickEditSheet } from "./QuickEditSheet";
@@ -57,16 +57,6 @@ function usePortraitWidth(scrollRef: React.RefObject<HTMLDivElement | null>, mou
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
   return widths;
-}
-
-/** The attachment version a song opens to on stage, if it opens to one:
- * its saved default kind while still attached, else the highest-priority
- * one, and that bucket's default version (as the effect in LiveStage picks). */
-function openingVersionId(song: Song | undefined): string | undefined {
-  if (!song || resolveDefaultView(song) !== "sheet") return undefined;
-  const saved = song.defaultView && song.defaultView !== "chords" ? song.defaultView : undefined;
-  const kind = saved && song.attachments[saved] ? saved : firstAvailableCategory(song.attachments);
-  return kind ? selectedVersion(song.attachments[kind]!).id : undefined;
 }
 
 export function LiveStage() {
@@ -153,7 +143,7 @@ export function LiveStage() {
   // it doesn't wait on storage.
   const nextSong = setlist ? state.songs.find((s) => s.id === setlistSongIds[stage.setlistIndex + 1]) : undefined;
   useEffect(() => {
-    prefetchAttachmentData([openingVersionId(nextSong)]);
+    prefetchAttachmentData([openingAttachment(nextSong, resolveDefaultView(nextSong))?.version.id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextSong?.id]);
 

@@ -66,9 +66,20 @@ the tension rather than silently picking one.
   `820×1180`, iPad Air 13″ `1024×1366`) controls. On native (`Capacitor.isNativePlatform()`)
   it renders full-screen with no frame or toggle bar.
 - **Tabbed stack navigator, no URL routing.** `src/navigation/Navigator.tsx` keeps one
-  `{ screen, params }` stack per tab (Live Stage, Library, Setlists, Tuner, Settings —
+  `{ id, screen, params }` stack per tab (Live Stage, Library, Setlists, Tuner, Settings —
   `TabBar.tsx`) with `push`/`pop`/`replace`/`reset`/`switchTab`. `MODAL_SCREENS`
   (`add-edit-song`, `import-song`) hide the tab bar, per iOS modal convention.
+- **Tabs stay mounted.** A tab mounts on its first visit, and `ScreenHost` (`App.tsx`) then
+  keeps every frame of every visited tab mounted in its own `.screen-layer`, keyed by frame
+  id; all but the active tab's top are `visibility: hidden` + `inert`. So Live Stage keeps
+  its score, scroll and zoom across tab switches, and Library its search. `replace`,
+  `reset` and `resetTab` keep a frame's id when the screen stays the same, so they update it
+  rather than remount it. See
+  `docs/superpowers/specs/2026-09-26-tab-persistence-and-fast-start-design.md`.
+- **Boot.** `index.html` shows a static splash (themed from `localStorage`'s `zamar.theme`,
+  else the system setting) while JS and the database load; the first React render replaces
+  it, straight into Live Stage. `main.tsx` starts loading the stage song's attachment and
+  its renderer (`preloadStageSong`) before that render.
 - **One global reducer, persisted to SQLite.** `src/state/store.ts` is one `useReducer`
   (`songs`, `setlists`, `settings`, `stage`, `viewport`). `songs`/`setlists`/`settings` are
   written to the DB via `src/data/{db,songsRepo,setlistsRepo,settingsRepo}.ts` in one
@@ -117,7 +128,6 @@ the tension rather than silently picking one.
 
 | Area | Reached from | Notable pieces |
 |---|---|---|
-| `onboarding/` | app boot | Splash only; auto-advances (650ms) into Live Stage |
 | `live-stage/` | tab | chords or attachment view, key chips + Stage Tools sheet (Add to Setlist, Quick edit, Annotate, view/version picker, capo/lyrics/zoom), idle auto-hide chrome (6s) plus tap-empty-space to toggle it, per-song default view, setlist strip (next song, progress, slot notes), song-to-song swipes (also over PDFs and scores), each song opens at the top |
 | `library/` | tab | A–Z list, search, filter chips, multi-select delete, row context sheet, header "+" menu (New song / Import a chart) |
 | `setlists/` | tab | Upcoming/Past/Templates, run-sheet detail (sections, derived start times, per-slot key/note overrides), drag-to-reorder slots and sections (`useDragReorder.ts`), toolbar "+" (Add songs / Add section), Start/Resume/Restart/Stop set, Add-to-set sheet, Set-details sheet |
@@ -146,6 +156,12 @@ Shared primitives are in `src/components/`.
 
 ## Gotchas
 
+- **Screens read their own frame with `useFrame()`**, not `useNavigator().top`, which
+  describes the active tab and is wrong for a screen kept mounted behind another. Anything
+  that runs on a timer or holds a device resource pauses while `useFrame().showing` is
+  false (Live Stage's idle timer, the Tuner's mic).
+- **Never set `visibility: visible` explicitly** inside a screen; leave it unset to inherit.
+  An explicit `visible` shows through the hidden layer of a tab that isn't on screen.
 - **Gate contextual permission/onboarding sheets in the destination screen**, not at the
   call site. The Tuner's mic sheet lives in `Tuner.tsx` so it fires however the screen is
   reached.

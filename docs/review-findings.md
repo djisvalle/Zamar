@@ -12,26 +12,7 @@ This list only carries what is still open or only partly fixed. Findings that ar
 
 ## 🔴 Performance: bottlenecks that grow with use
 
-1. **Live Stage is torn down on every tab switch.** `ScreenHost` (`src/App.tsx`) renders only the
-   top frame of the active tab, so leaving Live Stage unmounts it. Coming back re-fetches, unzips,
-   parses and engraves the score in OSMD, or re-renders every PDF page in pdf.js, and loses scroll
-   position and zoom. Checking the Library mid-service and returning costs a full re-render, often
-   seconds on a tablet. The same unmounting loses Library's scroll position and search after a push
-   to Add/Edit Song and back.
-   *Direction:* keep each tab's stack mounted and hide the inactive ones (`hidden`/`display: none`
-   per tab), or at least keep Live Stage's root mounted. iOS `UITabBarController` keeps each tab's
-   state this way.
-
-2. **A MusicXML score is laid out four times when it loads.** `MxlScore.tsx`'s load effect already
-   applies transpose, zoom and part visibility and calls `render()`. Setting `status` to `"ready"`
-   then fires the transpose, hidden-parts and zoom effects, which each run their own
-   `updateGraphic()` + `render()`. OSMD layout is the most expensive thing in the app, so the first
-   paint of a score takes about four times as long as it needs to. The transpose effect also fires
-   `onRerendered` on load, which reprojects annotations for nothing.
-   *Direction:* remember what the load already applied (transpose/key, hidden set, zoom) in refs and
-   skip each effect when its value hasn't changed.
-
-3. **PDFs show nothing until every page is rendered, at up to 2.5× screen density.**
+1. **PDFs show nothing until every page is rendered, at up to 2.5× screen density.**
    `PdfPages.tsx` renders pages one after another and keeps the container `visibility: hidden`
    until the last one is done, so a 6-page chart shows "Loading pages…" for the whole run. Each
    page is oversampled to `devicePixelRatio × 2.5` (capped at 2600px wide), which is about 9 MP and
@@ -40,66 +21,60 @@ This list only carries what is still open or only partly fixed. Findings that ar
    sharper render only for pages on screen after a zoom commits, and skip or release pages far
    off-screen.
 
-4. **Cold start waits on a fixed splash, then loads the heaviest screen.** `Splash.tsx` holds for
-   650 ms after the DB has already loaded, and Live Stage only mounts after it. The seeded
-   resting song (`s11`, As The Deer) opens to its score, so the 1.3 MB OSMD chunk is only requested
-   once the splash is gone.
-   *Direction:* drop or shorten the timer (the native launch screen already covers boot), and
-   start `import("opensheetmusicdisplay")` (and the stage song's attachment) during the splash.
-
 ## 🟠 Smoothness and feel
 
-5. **Chrome appears and disappears with no transition.** The tab bar (`TabBar.tsx`) and
+2. **Chrome appears and disappears with no transition.** The tab bar (`TabBar.tsx`) and
    `MusicToolbar` unmount when Live Stage's chrome hides (idle timer or tap), so they pop instead of
    fading or sliding as iOS chrome does. Keeping them mounted and animating `opacity`/`transform`
    with `pointer-events: none` when hidden would make this feel native.
 
-6. **Sheets slide in but vanish on close, and can't be swiped down.** `.sheet` has a `sheet-in`
+3. **Sheets slide in but vanish on close, and can't be swiped down.** `.sheet` has a `sheet-in`
    animation, but `Sheet` (`components/Overlays.tsx`) unmounts at once on close, with no exit
    animation and no drag-to-dismiss on the grabber. iOS users will expect to pull a sheet down.
 
-7. **Navigation has no push/pop motion, no edge-swipe back, and Android Back isn't handled.** Screens
+4. **Navigation has no push/pop motion, no edge-swipe back, and Android Back isn't handled.** Screens
    swap instantly in `ScreenHost`. There's no swipe-from-left-edge to go back (a core iOS habit).
    On Android, the only platform actually run so far, `@capacitor/app` isn't installed, so the
    hardware/gesture Back leaves the app from any depth instead of popping the stack or closing a
    sheet.
 
-8. **Song-to-song swipes jump with no motion.** `LiveStage`'s swipe acts only on pointer-up
+5. **Song-to-song swipes jump with no motion.** `LiveStage`'s swipe acts only on pointer-up
    (`SWIPE_THRESHOLD`), with no page following the finger and no slide into the next song, and
    the next song's PDF/score starts loading only once it's on screen. A page that tracks the finger
    and a preloaded next setlist song would make changing songs between numbers feel instant.
 
-9. **Chart text can be selected on stage.** Nothing sets `user-select: none` or
+6. **Chart text can be selected on stage.** Nothing sets `user-select: none` or
     `-webkit-touch-callout: none` on `.chord-chart` or the stage image, so a resting finger or long
     press during a set starts text selection (with the loupe) or shows the Save Image callout.
     Related: `-webkit-tap-highlight-color` isn't set anywhere, so Android's WebView flashes its
     default highlight on every tap.
 
-10. **Native iPads get the phone layout for lists, sheets and key buttons.** The iPad rules in
+7. **Native iPads get the phone layout for lists, sheets and key buttons.** The iPad rules in
     `theme.css` (`.ios-list` insets, centered 540px `.sheet`, `.sheet--large`, `.key-row-btn`) key
     off `[data-viewport="ipadAir…"]`, which only the browser dev frame sets. On a real iPad only the
     tab bar adapts (by width, in `useTabPlacement`), so sheets stretch edge to edge. A width-based
     class or media query on the native device would carry these over.
 
-11. **Every store change re-renders the whole app.** One context holds all state and few components
+8. **Every store change re-renders the whole app.** One context holds all state and few components
     are memoized, so the 6 s idle-hide, each Zoom +/- tap or a favourite toggle re-renders Live
     Stage, and `ChordChart` re-parses the whole ChordPro chart every time (no `useMemo`). Memoizing
     the parse in `ChordChart`, and wrapping `ChordChart`/`MxlScore`/`PdfPages` in `React.memo`,
-    removes most of it without changing the store's shape.
+    removes most of it without changing the store's shape. Since tabs stay mounted, this now covers every
+    visited tab's screens too, not just the one on display.
 
-12. **Drag-to-reorder re-renders and re-measures on every move, and can't scroll.**
+9. **Drag-to-reorder re-renders and re-measures on every move, and can't scroll.**
     `useDragReorder.ts` queries every row and reads its rect, then sets a new `target` object, on
     each `pointermove`, re-rendering all of Setlist Detail even when the drop spot hasn't changed. The
     dragged row stays put (it only dims), with no lifted row following the finger, and there's no
     auto-scroll near the edges, so a slot can't be dragged past what's on screen in a long set.
 
-13. **Two page-sized canvases stay allocated whether or not anyone is drawing.** `AnnotateCanvas`
+10. **Two page-sized canvases stay allocated whether or not anyone is drawing.** `AnnotateCanvas`
     always mounts the committed and live canvases at `devicePixelRatio × screenScale`, and caps only
     each edge (16384px), not the area. A long chart in landscape on an iPad reaches well over
     iOS's ~16.7 MP per-canvas limit (the canvas then renders blank) and uses 100+ MB for two
     layers. Mounting the live layer only while drawing, and capping by area, bounds this.
 
-14. **Smaller per-frame costs in gestures.**
+11. **Smaller per-frame costs in gestures.**
     - Dragging a text mark with snap on calls `snapTargets`, which queries and measures every
       `.chart-line`, on every move (`AnnotateCanvas.tsx`). Measuring once at gesture start is enough.
     - `PdfPages`' pinch and pan set React state on every `pointermove`, and `clampY` walks ancestors
