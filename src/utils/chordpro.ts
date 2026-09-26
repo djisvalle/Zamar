@@ -61,6 +61,24 @@ function isSectionLabel(line: string): boolean {
   return SECTION_LABEL_RE.test(line.trim());
 }
 
+const COMMENT_DIRECTIVE_RE = /^\{\s*(?:comment|c|comment_italic|ci|comment_box|cb|highlight)\s*:\s*(.*?)\s*\}$/i;
+const START_SECTION_RE = /^\{\s*(?:start_of_(verse|chorus|bridge|tab|grid)|(sov|soc|sob|sot|sog))\s*(?::\s*(.*?))?\s*\}$/i;
+const SECTION_SHORTHAND: Record<string, string> = { sov: "verse", soc: "chorus", sob: "bridge", sot: "tab", sog: "grid" };
+
+/** The section label a ChordPro directive stands for, or null for directives
+ * that aren't one (metadata, `{end_of_chorus}` and the like). A comment
+ * (`{comment: Verse 1}`, `{c: ...}`) shows its text; `{start_of_chorus}` /
+ * `{soc}` shows its own label if it has one, else the section's name. */
+function directiveSectionLabel(directive: string): string | null {
+  const comment = directive.match(COMMENT_DIRECTIVE_RE);
+  if (comment) return comment[1] || null;
+  const start = directive.match(START_SECTION_RE);
+  if (!start) return null;
+  if (start[3]) return start[3];
+  const kind = (start[1] ?? SECTION_SHORTHAND[start[2].toLowerCase()]).toLowerCase();
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
 /** Merges a standalone chord line with the lyric line beneath it (or an
  * empty lyric, for a floating instrumental chord line), preserving each
  * chord's real column offset the same way bracket notation does. */
@@ -142,7 +160,10 @@ export function parseChordPro(text: string, change: KeyChange | null = null): Ch
       continue;
     }
     if (DIRECTIVE_RE.test(line.trim())) {
-      result.push({ lyric: line, chords: [], isDirective: true, isSection: false });
+      const label = directiveSectionLabel(line.trim());
+      result.push(
+        label ? { lyric: label, chords: [], isDirective: false, isSection: true } : { lyric: line, chords: [], isDirective: true, isSection: false }
+      );
       i++;
       continue;
     }
@@ -152,7 +173,7 @@ export function parseChordPro(text: string, change: KeyChange | null = null): Ch
       continue;
     }
     if (isSectionLabel(line)) {
-      result.push({ lyric: line.trim(), chords: [], isDirective: false, isSection: true });
+      result.push({ lyric: line.trim().replace(/\s*:$/, ""), chords: [], isDirective: false, isSection: true });
       i++;
       continue;
     }
@@ -228,4 +249,41 @@ export function findChordProIssues(text: string): ChordProIssue[] {
     }
   });
   return issues;
+}
+
+/** Song fields a chart can carry as ChordPro metadata directives. */
+export type ChartMetaField = "title" | "artist" | "key" | "tempo" | "timeSig";
+
+const META_DIRECTIVE_NAMES: Record<ChartMetaField, string[]> = {
+  title: ["title", "t"],
+  artist: ["artist"],
+  key: ["key"],
+  tempo: ["tempo"],
+  timeSig: ["time"],
+};
+
+function metaDirectiveRe(field: ChartMetaField): RegExp {
+  return new RegExp(`^([ \\t]*\\{[ \\t]*(?:${META_DIRECTIVE_NAMES[field].join("|")})[ \\t]*:)([^}\\n]*)(\\}[ \\t]*)$`, "im");
+}
+
+/** The metadata directives (`{title: ...}`, `{artist: ...}`, `{key: ...}`,
+ * `{tempo: ...}`, `{time: ...}`) a chart carries, first occurrence of each.
+ * A directive with an empty value is left out, so inserting a bare
+ * `{title: }` doesn't blank the song's title. */
+export function readChartMeta(text: string): Partial<Record<ChartMetaField, string>> {
+  const meta: Partial<Record<ChartMetaField, string>> = {};
+  (Object.keys(META_DIRECTIVE_NAMES) as ChartMetaField[]).forEach((field) => {
+    const m = text.match(metaDirectiveRe(field));
+    const value = m?.[2].trim();
+    if (!value) return;
+    meta[field] = field === "tempo" ? value.match(/\d+/)?.[0] ?? value : value;
+  });
+  return meta;
+}
+
+/** Rewrites the value of a metadata directive the chart already has, so an
+ * edit to the song's field and the chart's header stay the same. A chart
+ * without that directive is returned unchanged; one isn't added. */
+export function writeChartMeta(text: string, field: ChartMetaField, value: string): string {
+  return text.replace(metaDirectiveRe(field), (_all, open: string, _old: string, close: string) => `${open} ${value.trim()}${close}`);
 }

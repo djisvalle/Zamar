@@ -10,14 +10,20 @@ import { Icon } from "../../components/Icon";
 import { Section } from "../../components/List";
 import { PullDown } from "../../components/PullDown";
 import { useDragReorder } from "../../components/useDragReorder";
-import { extractBracketChords, extractChordLineChords, findChordProIssues } from "../../utils/chordpro";
+import {
+  extractBracketChords,
+  extractChordLineChords,
+  findChordProIssues,
+  readChartMeta,
+  writeChartMeta,
+  type ChartMetaField,
+} from "../../utils/chordpro";
 import { ATTACHMENT_LABEL, CATEGORY_PRIORITY, moveVersion, removeVersion, renameVersion, selectVersion, selectedVersion } from "../../utils/attachments";
 import type { ImportMethod } from "../import/ImportSong";
 import type { AttachmentKind, Attachments, ChartFormat, Song, SongSource } from "../../state/types";
 import { canonicalKey } from "../../utils/keys";
 
 const KEY_RE = /^[A-G](#|b)?$/;
-const KEY_DIRECTIVE_RE = /\{key:\s*([^}]+)\}/i;
 type DefaultViewChoice = "auto" | NonNullable<Song["defaultView"]>;
 const CHORDPRO_DIRECTIVES = ["title", "artist", "key", "capo", "tempo", "comment"];
 
@@ -36,12 +42,17 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const prefillAttachments = params?.prefillAttachments as Attachments | undefined;
   const hadPrefillAttachments = "prefillAttachments" in (params ?? {});
 
-  const [title, setTitle] = useState(prefillTitle ?? existing?.title ?? "");
-  const [artist, setArtist] = useState(prefillArtist ?? existing?.artist ?? "");
-  const [tempo, setTempo] = useState(prefillTempo ?? (existing ? String(existing.tempo) : ""));
-  const [timeSig, setTimeSig] = useState(prefillTimeSig ?? existing?.timeSig ?? "4/4");
-  const [manualKey, setManualKey] = useState(prefillManualKey ?? existing?.defaultKey ?? "");
-  const [chordpro, setChordpro] = useState(prefillChordpro ?? existing?.chordpro ?? "");
+  // Metadata directives in the chart ({title: ...}, {key: ...}, etc.) win
+  // over the stored fields, and from then on the two are kept in step (see
+  // editChart and editField).
+  const initialChordpro = prefillChordpro ?? existing?.chordpro ?? "";
+  const initialMeta = readChartMeta(initialChordpro);
+  const [title, setTitle] = useState(initialMeta.title ?? prefillTitle ?? existing?.title ?? "");
+  const [artist, setArtist] = useState(initialMeta.artist ?? prefillArtist ?? existing?.artist ?? "");
+  const [tempo, setTempo] = useState(initialMeta.tempo ?? prefillTempo ?? (existing ? String(existing.tempo) : ""));
+  const [timeSig, setTimeSig] = useState(initialMeta.timeSig ?? prefillTimeSig ?? existing?.timeSig ?? "4/4");
+  const [manualKey, setManualKey] = useState(initialMeta.key ?? prefillManualKey ?? existing?.defaultKey ?? "");
+  const [chordpro, setChordpro] = useState(initialChordpro);
   const [chartFormat, setChartFormat] = useState<ChartFormat>(prefillChartFormat ?? existing?.chartFormat ?? "chords-over-lyrics");
   const [attachments, setAttachments] = useState<Attachments>(hadPrefillAttachments ? prefillAttachments ?? {} : existing?.attachments ?? {});
   const [defaultView, setDefaultView] = useState<Song["defaultView"]>(existing?.defaultView);
@@ -56,12 +67,33 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const [confirmDeleteVersion, setConfirmDeleteVersion] = useState<{ kind: AttachmentKind; id: string; label: string } | null>(null);
   const chartRef = useRef<HTMLTextAreaElement>(null);
 
+  const FIELD_SETTERS: Record<ChartMetaField, (v: string) => void> = {
+    title: setTitle,
+    artist: setArtist,
+    key: setManualKey,
+    tempo: setTempo,
+    timeSig: setTimeSig,
+  };
+
+  /** Chart edits carry their metadata directives into the fields above. */
+  const editChart = (next: string) => {
+    setChordpro(next);
+    const meta = readChartMeta(next);
+    (Object.keys(meta) as ChartMetaField[]).forEach((field) => FIELD_SETTERS[field](meta[field]!));
+  };
+
+  /** Field edits rewrite the matching directive when the chart has one. */
+  const editField = (field: ChartMetaField, value: string) => {
+    FIELD_SETTERS[field](value);
+    setChordpro((text) => writeChartMeta(text, field, value));
+  };
+
   const insertAtCursor = (snippet: string, cursorOffset?: number) => {
     const el = chartRef.current;
     const start = el?.selectionStart ?? chordpro.length;
     const end = el?.selectionEnd ?? chordpro.length;
     const next = chordpro.slice(0, start) + snippet + chordpro.slice(end);
-    setChordpro(next);
+    editChart(next);
     const pos = start + (cursorOffset ?? snippet.length);
     requestAnimationFrame(() => {
       el?.focus();
@@ -74,18 +106,13 @@ export function AddEditSong({ songId }: { songId?: string }) {
     [chordpro, chartFormat]
   );
 
-  const detectedKey = useMemo(() => {
-    const m = chordpro.match(KEY_DIRECTIVE_RE);
-    return m ? m[1].trim() : null;
-  }, [chordpro]);
-
   const versionDrag = useDragReorder((versionId, to) =>
     setAttachments((prev) => moveVersion(prev, to.group as AttachmentKind, versionId, to.index))
   );
 
   const chordProIssues = useMemo(() => findChordProIssues(chordpro), [chordpro]);
 
-  const effectiveKey = detectedKey ?? manualKey;
+  const effectiveKey = manualKey.trim();
   const keyValid = !effectiveKey || KEY_RE.test(effectiveKey);
   const titleValid = title.trim().length > 0;
   const dirty =
@@ -194,29 +221,25 @@ export function AddEditSong({ songId }: { songId?: string }) {
             <div className="list-group">
               <div className="form-row">
                 <div className={"form-cell" + (showErrors && !titleValid ? " invalid" : "")} style={{ flex: 3 }}>
-                  <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" aria-label="Title" />
+                  <input value={title} onChange={(e) => editField("title", e.target.value)} placeholder="Title" aria-label="Title" />
                 </div>
                 <label className={"form-cell" + (showErrors && !keyValid ? " invalid" : "")} style={{ flex: 1.3 }}>
                   <span className="form-label" style={{ color: "var(--mut)" }}>
                     Key
                   </span>
-                  {detectedKey ? (
-                    <span className="form-static">Auto</span>
-                  ) : (
-                    <input value={manualKey} onChange={(e) => setManualKey(e.target.value)} placeholder="G" style={{ textAlign: "right" }} />
-                  )}
+                  <input value={manualKey} onChange={(e) => editField("key", e.target.value)} placeholder="G" style={{ textAlign: "right" }} />
                 </label>
               </div>
               <div className="form-row">
                 <div className="form-cell" style={{ flex: 2 }}>
-                  <input value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Artist" aria-label="Artist" />
+                  <input value={artist} onChange={(e) => editField("artist", e.target.value)} placeholder="Artist" aria-label="Artist" />
                 </div>
                 <label className="form-cell" style={{ flex: 1.1 }}>
-                  <input value={tempo} onChange={(e) => setTempo(e.target.value)} placeholder="Tempo" aria-label="Tempo" inputMode="numeric" />
+                  <input value={tempo} onChange={(e) => editField("tempo", e.target.value)} placeholder="Tempo" aria-label="Tempo" inputMode="numeric" />
                   {tempo && <span className="form-suffix">BPM</span>}
                 </label>
                 <div className="form-cell" style={{ flex: 0.9 }}>
-                  <input value={timeSig} onChange={(e) => setTimeSig(e.target.value)} placeholder="4/4" aria-label="Time signature" />
+                  <input value={timeSig} onChange={(e) => editField("timeSig", e.target.value)} placeholder="4/4" aria-label="Time signature" />
                 </div>
               </div>
               {(chordpro.trim() || CATEGORY_PRIORITY.some((k) => attachments[k])) && (
@@ -308,7 +331,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
             ref={chartRef}
             className="form-textarea"
             value={chordpro}
-            onChange={(e) => setChordpro(e.target.value)}
+            onChange={(e) => editChart(e.target.value)}
             aria-label="Chart"
             placeholder={
               chartFormat === "chordpro"
