@@ -326,6 +326,12 @@ function scrollParentOf(node: HTMLElement): HTMLElement | null {
   return null;
 }
 
+/** A hidden-parts set as a comparable value, so a new Set with the same ids
+ * doesn't count as a change. */
+function hiddenKey(hidden: ReadonlySet<string> | undefined): string {
+  return hidden ? [...hidden].sort().join("\n") : "";
+}
+
 export interface ScoreInstrument {
   id: string;
   name: string;
@@ -380,6 +386,11 @@ export const MxlScore = forwardRef<
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [engravingZoom, setEngravingZoom] = useState(1);
   const pendingFocus = useRef<ZoomFocus | null>(null);
+  // What the score's last layout was drawn with. The load lays the score out
+  // with the current key, parts and zoom, so when it turns "ready" the
+  // effects below compare against this and skip a layout that would only
+  // repeat it (each one is OSMD's most expensive call).
+  const applied = useRef<{ transpose: number; targetKey: string | null; hidden: string; zoom: number } | null>(null);
   const ez = useEngravingZoom((zoom, focus) => {
     pendingFocus.current = focus;
     setEngravingZoom(zoom);
@@ -420,6 +431,7 @@ export const MxlScore = forwardRef<
 
   useEffect(() => {
     let cancelled = false;
+    applied.current = null;
     setStatus("loading");
 
     (async () => {
@@ -463,6 +475,7 @@ export const MxlScore = forwardRef<
         for (const inst of osmd.Sheet.Instruments) inst.Visible = !hiddenParts?.has(String(inst.Id));
         osmd.render();
         if (cancelled || !hostRef.current) return;
+        applied.current = { transpose, targetKey: targetKey ?? null, hidden: hiddenKey(hiddenParts), zoom: engravingZoom };
         setStatus("ready");
       } catch {
         if (!cancelled) setStatus("error");
@@ -481,9 +494,18 @@ export const MxlScore = forwardRef<
   useEffect(() => {
     const osmd = osmdRef.current;
     if (!osmd || status !== "ready") return;
-    transposerRef.current?.apply(osmd.Sheet, transpose, targetKey ?? null);
-    osmd.updateGraphic();
-    osmd.render();
+    const a = applied.current;
+    if (!a || a.transpose !== transpose || a.targetKey !== (targetKey ?? null)) {
+      transposerRef.current?.apply(osmd.Sheet, transpose, targetKey ?? null);
+      osmd.updateGraphic();
+      osmd.render();
+      if (a) Object.assign(a, { transpose, targetKey: targetKey ?? null });
+    }
+    // Called on load too, when the layout above is skipped: a score can open
+    // in a key other than the one its marks were placed in (a setlist slot's
+    // key, or another version while a key chip is picked), and this is what
+    // moves anchored marks onto the new layout.
+    //
     // The one re-render `onRerendered` fires from — a transpose is the only
     // control here a parent is expected to reproject rather than lock, per
     // the Annotate freeze rule (see the `onRerendered` prop doc above).
@@ -494,9 +516,13 @@ export const MxlScore = forwardRef<
   useEffect(() => {
     const osmd = osmdRef.current;
     if (!osmd || status !== "ready") return;
+    const a = applied.current;
+    const hidden = hiddenKey(hiddenParts);
+    if (a && a.hidden === hidden) return;
     for (const inst of osmd.Sheet.Instruments) inst.Visible = !hiddenParts?.has(String(inst.Id));
     osmd.updateGraphic();
     osmd.render();
+    if (a) a.hidden = hidden;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hiddenParts, status]);
 
@@ -505,9 +531,16 @@ export const MxlScore = forwardRef<
   useEffect(() => {
     const osmd = osmdRef.current;
     if (!osmd || status !== "ready") return;
+    const a = applied.current;
+    if (a && a.zoom === engravingZoom) {
+      ez.clearPreview();
+      pendingFocus.current = null;
+      return;
+    }
     osmd.Zoom = engravingZoom;
     osmd.updateGraphic();
     osmd.render();
+    if (a) a.zoom = engravingZoom;
     ez.clearPreview();
     // Scroll so the part of the score the gesture was aimed at lands back
     // under the fingers, instead of wherever the reflow happened to put it.
