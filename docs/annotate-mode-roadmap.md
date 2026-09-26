@@ -5,8 +5,8 @@ Snapshot date: 2026-09-22; status re-checked against `main` on 2026-09-25.
 Captures where annotate mode stands after the initial build-out + Phase 1 UI
 pass, and a prioritized backlog for a future session to pick up. Nothing in
 this file has been implemented yet unless noted as "done" below. As of 2026-09-25 every
-backlog item (1–11) is done; only the "Deferred from the reference-image discussion" items
-are still open.
+backlog item (1–11) is done, and so are the two "Deferred from the reference-image
+discussion" items (done 2026-09-25).
 
 ## Done so far
 
@@ -46,12 +46,16 @@ are still open.
 These were explicitly scoped out of Phase 1 by the user's own call, not
 forgotten:
 
-- **Full multi-page notation symbol library** (~50-60 curated symbols across
+Both done (2026-09-25): 59 symbols in `src/utils/notation.ts`, and favorites in a row
+above the grid (press and hold to star). See
+`docs/superpowers/specs/2026-09-25-priority-2-design.md`.
+
+- ~~**Full multi-page notation symbol library**~~ (~50-60 curated symbols across
   dynamics, accidentals, articulation, ornaments, clefs, repeat signs,
   noteheads, rests, bowing — see the reference screenshots shared in this
   session for the full source material) to replace the current 16-symbol
   placeholder set.
-- **Persisted favorites** for notation symbols (star-toggle, survives
+- ~~**Persisted favorites**~~ for notation symbols (star-toggle, survives
   reload) — needs a small addition to `src/data/settingsRepo.ts` and
   `Settings` in `src/state/types.ts`. Only worth wiring once the full
   symbol library above exists to favorite from.
@@ -123,6 +127,5 @@ All five are **done (2026-09-25)**. Design and decisions:
 
 ## Suggested sequencing for the next session
 
-The backlog above is finished. What's left is the deferred pair: build the full notation
-symbol library first (currently 25 symbols in `src/utils/notation.ts`), then persisted
-favorites on top of it.
+Everything on this roadmap is finished. What's left for Annotate is in the progress
+checklist: per-song stave spacing, and reprojecting marks across an engraving-zoom change.

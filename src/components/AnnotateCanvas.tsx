@@ -21,6 +21,7 @@ import {
   snapRotation,
   STROKE_WIDTH,
   textMarkHalfExtents,
+  traceSmooth,
   translateObject,
   unionBounds,
   type Bounds,
@@ -65,7 +66,7 @@ const SNAP_DISTANCE = 12;
 const SNAP_GAP = 2;
 
 /** A light haptic tick on iOS/Android; nothing in the browser. */
-function hapticTick() {
+export function hapticTick() {
   if (!Capacitor.isNativePlatform()) return;
   Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
 }
@@ -88,21 +89,6 @@ function marksOf(annotations: AnnotationObject[]): (TextMark | ShapeMark)[] {
 /** Traces a freehand polyline as quadratic curves through the midpoints
  * between samples (each sample is the control point), so a simplified
  * stroke still reads as a smooth line instead of visible straight segments. */
-function traceSmooth(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  if (pts.length < 3) {
-    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
-    return;
-  }
-  for (let i = 1; i < pts.length - 1; i++) {
-    const mid = { x: (pts[i].x + pts[i + 1].x) / 2, y: (pts[i].y + pts[i + 1].y) / 2 };
-    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
-  }
-  const last = pts[pts.length - 1];
-  ctx.lineTo(last.x, last.y);
-}
-
 function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvasElement, offset?: { x: number; y: number }) {
   ctx.strokeStyle = s.color ?? resolveAccentColor(canvas);
   ctx.lineWidth = s.size ?? STROKE_WIDTH;
@@ -1254,16 +1240,16 @@ function PinEditor({
           background: "none",
           resize: "none",
           font: "inherit",
-          fontSize: 12,
+          fontSize: 13,
           color: "var(--fg)",
           outline: "none",
         }}
       />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 4 }}>
-        <button onClick={onDelete} style={{ fontSize: 10, fontWeight: 700, border: "none", background: "none", color: "var(--acc-deep)", padding: "2px 4px" }}>
+        <button onClick={onDelete} style={{ fontSize: 13, fontWeight: 700, border: "none", background: "none", color: "var(--acc-deep)", padding: "2px 4px" }}>
           Delete
         </button>
-        <button onClick={onDone} style={{ fontSize: 10, fontWeight: 700, border: "none", background: "none", color: "var(--acc-deep)", padding: "2px 4px" }}>
+        <button onClick={onDone} style={{ fontSize: 13, fontWeight: 700, border: "none", background: "none", color: "var(--acc-deep)", padding: "2px 4px" }}>
           Done
         </button>
       </div>

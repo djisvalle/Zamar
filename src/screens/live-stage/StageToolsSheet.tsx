@@ -167,7 +167,7 @@ export function StageToolsSheet({
             />
           </div>
           {chordsLocked && (
-            <div style={{ fontSize: 11, color: "var(--mut)", padding: "0 2px 6px" }}>
+            <div style={{ fontSize: 13, color: "var(--mut)", padding: "0 2px 6px" }}>
               Clear marks in Annotate to change these controls.
             </div>
           )}
@@ -190,7 +190,7 @@ export function StageToolsSheet({
             ))}
           </div>
           {instrumentsLocked && (
-            <div style={{ fontSize: 11, color: "var(--mut)", padding: "0 2px 6px" }}>
+            <div style={{ fontSize: 13, color: "var(--mut)", padding: "0 2px 6px" }}>
               Clear marks in Annotate to show/hide parts.
             </div>
           )}
@@ -232,7 +232,7 @@ function ToolIcon({
       <span style={{ fontSize: 19, lineHeight: 1, display: "flex", color: active ? "var(--acc-deep)" : "var(--acc)" }}>
         {icon ? <Icon name={icon} size={19} strokeWidth={1.8} /> : glyph}
       </span>
-      <span style={{ fontSize: 10, fontWeight: 600, color: "var(--mut)" }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--mut)" }}>{label}</span>
     </button>
   );
 }

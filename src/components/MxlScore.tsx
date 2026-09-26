@@ -441,12 +441,12 @@ export const MxlScore = forwardRef<
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
       {status === "loading" && (
-        <div className="muted" style={{ fontSize: 12, padding: "20px 0", textAlign: "center" }}>
+        <div className="muted" style={{ fontSize: 13, padding: "20px 0", textAlign: "center" }}>
           Loading score…
         </div>
       )}
       {status === "error" && (
-        <div className="muted" style={{ fontSize: 12, padding: "20px 0", textAlign: "center" }}>
+        <div className="muted" style={{ fontSize: 13, padding: "20px 0", textAlign: "center" }}>
           Couldn't read this score.
         </div>
       )}

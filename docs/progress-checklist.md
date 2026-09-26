@@ -12,16 +12,15 @@ Everything below is detailed further down; this is the short list.
 - **Tuner on a real device** — only tried in the browser so far. Native mic permissions
   are in place; the pass to run is in `docs/device-testing.md` ("Tuner (real microphone)").
 - **Capo** — cut; needs its own design pass against transpose/keys (see Nice-to-have).
+- **Pure respelling on scores** — C♯ → D♭ changes the chart but not a score, because OSMD
+  skips 0-semitone transposes (see Enharmonic keys).
 - **MusicXML export can't re-key scores**; **annotations aren't exported** in any format.
 - **Crash-restore onboarding** from the source design is unwired.
 - **OMR (PDF/photo → `.mxl`)** — R&D spike only.
-- **Annotate:** full notation symbol library (25 symbols today, target ~50–60) and
-  persisted symbol favorites; per-song stave spacing; reprojecting marks across an
+- **Annotate:** per-song stave spacing; reprojecting marks across an
   engraving-zoom change. See the roadmap and the pins spec's "Future work / TODO".
 - **Inline styles** — about 235 `style={{...}}` objects left in `src/`; needs its own
   spec/plan.
-- **Small UI copy** — some surrounding text is still set inline at 10–13px, below iOS's
-  ~13–17pt range.
 
 This app has moved past the original CLAUDE.md description of an in-memory mockup into a
 real Capacitor + SQLite app, with a few pieces still deliberately simulated. See notes on
@@ -211,9 +210,14 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 
 ### Export
 - [x] Real files (`utils/exportSet.ts`): PDF via pdf-lib (charts, copied PDF attachments,
-      photos, OSMD-engraved scores in the set key, optional note names on noteheads), multi-song ChordPro, MusicXML scores as-is
-      (zipped when several). Shared through the OS share sheet (`utils/shareFile.ts`,
-      Capacitor Share + Filesystem) or downloaded in the browser. Annotations aren't exported.
+      photos, OSMD-engraved scores in the set key, optional note names on noteheads), multi-song ChordPro, MusicXML scores
+      re-keyed to the set key (`utils/musicxmlTranspose.ts`; zipped when several). Shared
+      through the OS share sheet (`utils/shareFile.ts`, Capacitor Share + Filesystem) or
+      downloaded in the browser.
+- [x] Annotate marks print in the PDF export ("Include annotations"), over chord charts,
+      photos, PDF pages and scores. Each view's marked width is recorded
+      (`Song.annotationWidths`) so marks land where they were drawn. ChordPro and MusicXML
+      can't carry them. Spec: `docs/superpowers/specs/2026-09-25-priority-2-design.md`.
 - [x] Single-song export from the Library row sheet ("Export…"): the same screen and
       formats, with a key picker for that export only (starts at the saved key, never saved)
       and an Up/Down choice for which way a score moves.
@@ -321,5 +325,6 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       that render `ChordChart` (Live Stage, Add/Edit Song preview, the Appearance specimen)
       pick this up automatically; the existing zoom/text-scale sliders still scale from these
       new bases.
-- [ ] Some surrounding UI copy is still set inline at 10–13px, below iOS's ~13–17pt range
-      (the chart itself and the iOS-look lists/forms are already fixed).
+- [x] Small surrounding UI copy: fixed by snapping to iOS text styles with an 11pt floor.
+      Descriptions and status lines went up to 13, 10px labels to 11. Tab bar labels stay at
+      iOS's own 10pt.

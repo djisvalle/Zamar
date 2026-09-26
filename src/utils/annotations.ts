@@ -1,6 +1,50 @@
-import type { AnnotateRecents, AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
+import type { AnnotateRecents, AnnotationObject, AnnotationView, Pin, ShapeId, ShapeMark, Song, Stroke, TextMark } from "../state/types";
 
 export const STROKE_WIDTH = 3;
+
+/** Content width assumed for marks saved before `Song.annotationWidths`
+ * existed and never shown on Live Stage since: the phone layout. */
+export const DEFAULT_MARKED_WIDTH = 402;
+
+/** Keeps `song.annotationWidths` in step with its marks: a view that has
+ * marks but no recorded width gets `width` (the content width on screen
+ * now), and a view with no marks loses its width. Returns `song` itself when
+ * nothing changes. */
+export function syncAnnotationWidths(song: Song, width: number | null): Song {
+  const current = song.annotationWidths ?? {};
+  const next: Partial<Record<AnnotationView, number>> = {};
+  for (const view of Object.keys(song.annotations) as AnnotationView[]) {
+    if (!song.annotations[view]?.length) continue;
+    const w = current[view] ?? (width && width > 0 ? Math.round(width) : undefined);
+    if (w) next[view] = w;
+  }
+  const same =
+    Object.keys(next).length === Object.keys(current).length &&
+    (Object.keys(next) as AnnotationView[]).every((v) => next[v] === current[v]);
+  if (same) return song;
+  if (Object.keys(next).length === 0) {
+    const { annotationWidths: _dropped, ...rest } = song;
+    return rest;
+  }
+  return { ...song, annotationWidths: next };
+}
+
+/** Draws a smoothed polyline through `pts` (quadratic curves through the
+ * midpoints), the way finished pen and highlighter strokes are shown. */
+export function traceSmooth(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length < 3) {
+    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+    return;
+  }
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mid = { x: (pts[i].x + pts[i + 1].x) / 2, y: (pts[i].y + pts[i + 1].y) / 2 };
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last.x, last.y);
+}
 export const ERASE_RADIUS = 14;
 /** Pin badges are bigger than a stroke's hit radius (see `AnnotateCanvas.tsx`'s
  * `.pin-badge`-equivalent sizing), so the eraser needs a matching bigger

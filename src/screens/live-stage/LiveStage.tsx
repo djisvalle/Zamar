@@ -5,6 +5,7 @@ import { ChordChart } from "../../components/ChordChart";
 import { MxlScore, type MxlScoreHandle, type ScoreInstrument } from "../../components/MxlScore";
 import { PdfPages } from "../../components/PdfPages";
 import { AnnotateCanvas } from "../../components/AnnotateCanvas";
+import { syncAnnotationWidths } from "../../utils/annotations";
 import { activeKeyChange, keySemitoneShift } from "../../utils/keys";
 import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
 import type { AnnotationObject, AnnotationView, AttachmentKind } from "../../state/types";
@@ -39,6 +40,9 @@ export function LiveStage() {
 
   const dockOpen = stage.drawer === "annotate";
   const annotationView: AnnotationView = stage.view === "chords" ? "chords" : activeKind ?? "chords";
+  // The chart's scroll container: its width is the content width marks
+  // are laid out against (see Song.annotationWidths).
+  const chartScrollRef = useRef<HTMLDivElement | null>(null);
   const annotateSession = useAnnotateSession({
     song: song ?? null,
     open: dockOpen,
@@ -47,6 +51,7 @@ export function LiveStage() {
     // fallback in `content` below — there's no real chart to attribute
     // marks to then.
     noAnnotationTarget: stage.view === "sheet" && activeKind === undefined,
+    contentWidth: () => chartScrollRef.current?.clientWidth ?? null,
     onClose: () => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null }),
   });
 
@@ -94,6 +99,15 @@ export function LiveStage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage.songId, stage.drawer]);
+
+  // Marks saved before Song.annotationWidths existed have no recorded width.
+  // This is the device they're being used on, so the width they show at now
+  // is the best guess, recorded once so export can place them.
+  useEffect(() => {
+    if (!song) return;
+    const synced = syncAnnotationWidths(song, chartScrollRef.current?.clientWidth ?? null);
+    if (synced !== song) dispatch({ type: "UPDATE_SONG", song: synced });
+  }, [song, dispatch]);
 
   if (!song) {
     return (
@@ -244,7 +258,7 @@ export function LiveStage() {
           ) : (
             <PdfPages src={activeVersion.dataUrl} disableZoom={dockOpen} />
           )}
-          <span style={{ fontSize: 11, color: "var(--sheet-mut)" }}>
+          <span style={{ fontSize: 12, color: "var(--sheet-mut)" }}>
             {activeKind === "musicxml"
               ? `${activeVersion.name} · engraved from the score, no chords detected`
               : `${activeVersion.name} · saved as-is, no chords detected`}
@@ -265,7 +279,7 @@ export function LiveStage() {
 
       {setlist && (
         <div style={{ padding: "8px 14px 0" }}>
-          <div className="muted" style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
             {songIndex + 1 < setlistSongIds.length
               ? `Next: ${state.songs.find((s) => s.id === setlistSongIds[songIndex + 1])?.title ?? ""}`
               : "Last song"}
@@ -289,7 +303,7 @@ export function LiveStage() {
           means the chart below doesn't shift. */}
       <div style={{ padding: "10px 14px 8px", visibility: dockOpen ? "hidden" : undefined }}>
         <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 19 }}>{song.title}</div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+        <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
           {song.artist}
         </div>
       </div>
@@ -299,6 +313,7 @@ export function LiveStage() {
           viewport rather than taking space from it, so opening it changes
           nothing in here. */}
       <div
+        ref={chartScrollRef}
         className="flex-1 hidden-scroll scroll-under-tabs no-tab-spacer"
         style={{ paddingBottom: 150, touchAction: "pan-y" }}
         onPointerDown={onChartPointerDown}

@@ -115,8 +115,9 @@ Shared primitives are in `src/components/`.
 - **Sheet-vs-chords is declared, not detected.** Import asks "What's in this file?".
   "Chords & lyrics" conversion is real (`utils/chartImport.ts`: pdf.js text layer, else
   bundled offline Tesseract OCR), but OCR'd charts usually need touching up.
-- **MusicXML export can't re-key scores.** Scores go out as imported; the PDF export does
-  engrave them in the set key. Annotations aren't exported in any format.
+- **Annotations only export to PDF.** ChordPro and MusicXML can't carry ink. Marks on a chord
+  chart print over a replica of the stage layout (see
+  `docs/superpowers/specs/2026-09-25-priority-2-design.md`), so they need chords included.
 - **One global theme**, not the source's scoped "dark on stage, light elsewhere".
 - **Unwired source micro-state:** crash-restore onboarding.
 - **Capo is cut** (TODO): it needs its own design pass against the transpose/key system

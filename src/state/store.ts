@@ -81,6 +81,7 @@ export function initialState(): AppState {
       annotateSnap: true,
       showKeyOffsets: false,
       strictSpelling: false,
+      notationFavorites: [],
     },
     stage: makeEmptyStage(),
     viewport: "ipadAir13",
@@ -123,6 +124,7 @@ export type Action =
   | { type: "SET_TEXT_SCALE"; value: number }
   | { type: "SET_ANNOTATE_RECENTS"; recents: AnnotateRecents }
   | { type: "SET_ANNOTATE_SNAP"; value: boolean }
+  | { type: "TOGGLE_NOTATION_FAVORITE"; symbolId: string }
   | { type: "SET_SHOW_KEY_OFFSETS"; value: boolean }
   | { type: "SET_STRICT_SPELLING"; value: boolean }
   | { type: "SET_MIC_ASKED" }
@@ -172,6 +174,11 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, settings: { ...state.settings, annotateRecents: action.recents } };
     case "SET_ANNOTATE_SNAP":
       return { ...state, settings: { ...state.settings, annotateSnap: action.value } };
+    case "TOGGLE_NOTATION_FAVORITE": {
+      const favs = state.settings.notationFavorites;
+      const next = favs.includes(action.symbolId) ? favs.filter((id) => id !== action.symbolId) : [...favs, action.symbolId];
+      return { ...state, settings: { ...state.settings, notationFavorites: next } };
+    }
     case "SET_SHOW_KEY_OFFSETS":
       return { ...state, settings: { ...state.settings, showKeyOffsets: action.value } };
     case "SET_STRICT_SPELLING":

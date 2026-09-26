@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -185,6 +185,16 @@ async function openDb(): Promise<SQLiteDBConnection> {
       statements: [
         "ALTER TABLE settings ADD COLUMN showKeyOffsets INTEGER NOT NULL DEFAULT 0;",
         "ALTER TABLE settings ADD COLUMN strictSpelling INTEGER NOT NULL DEFAULT 0;",
+      ],
+    },
+    {
+      // Additive columns — starred notation symbols (JSON id list, empty by
+      // default), and the content width each song's views were marked at
+      // (see Song.annotationWidths). NULL for songs with no marks yet.
+      toVersion: 10,
+      statements: [
+        "ALTER TABLE settings ADD COLUMN notationFavorites_json TEXT NOT NULL DEFAULT '[]';",
+        "ALTER TABLE songs ADD COLUMN annotationWidths_json TEXT;",
       ],
     },
   ]);
