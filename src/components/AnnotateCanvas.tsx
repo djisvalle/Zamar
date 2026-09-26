@@ -237,6 +237,7 @@ export function AnnotateCanvas({
   children: ReactNode;
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const draft = useRef<Stroke | null>(null);
   const activePointer = useRef<number | null>(null);
@@ -282,10 +283,15 @@ export function AnnotateCanvas({
   // exempt from the lock (it reprojects instead) and can itself change a
   // score's line-wrap height, so staying attached also keeps the canvas
   // sized correctly across a transpose, not just at mount.
+  //
+  // Measures the content box, not the wrapper: the wrapper's scrollHeight
+  // includes the canvas itself, so the canvas could only ever grow — a
+  // taller earlier layout (another viewport, a mid-engrave score) left a
+  // screen or more of blank space below the chart.
   useEffect(() => {
-    const el = wrapperRef.current;
+    const el = contentRef.current;
     if (!el) return;
-    const measure = () => setSize({ width: el.clientWidth, height: el.scrollHeight });
+    const measure = () => setSize({ width: el.clientWidth, height: el.offsetHeight });
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -702,7 +708,7 @@ export function AnnotateCanvas({
 
   return (
     <div ref={wrapperRef} style={{ position: "relative" }}>
-      {children}
+      <div ref={contentRef}>{children}</div>
       <canvas
         ref={canvasRef}
         width={size.width}
@@ -712,6 +718,7 @@ export function AnnotateCanvas({
           top: 0,
           left: 0,
           width: "100%",
+          height: size.height,
           touchAction: interactive && !scrollMode ? "none" : "auto",
           pointerEvents: interactive && !scrollMode && !overlayTool ? "auto" : "none",
         }}
