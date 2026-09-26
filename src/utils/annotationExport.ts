@@ -1,5 +1,5 @@
-import type { AnnotationObject, MusicalAnchor, ShapeMark, Stroke, TextMark } from "../state/types";
-import { isLineShape, isPin, isShapeMark, isStroke, SHAPE_ASPECT, STROKE_WIDTH, traceSmooth } from "./annotations";
+import type { AnnotationObject, MusicalAnchor, Pin, ShapeMark, Stroke, TextMark } from "../state/types";
+import { isLineShape, isPin, isShapeMark, isStroke, noteBox, SHAPE_ASPECT, stickyColor, STICKY_TEXT_COLOR, STROKE_WIDTH, tracePath } from "./annotations";
 import { notationSymbol, SMUFL_SIZE_SCALE } from "./notation";
 
 /** Draws a song's marks onto an export canvas the way Live Stage shows
@@ -64,7 +64,7 @@ function paintStroke(g: CanvasRenderingContext2D, s: Stroke, map: PointMap, scal
     const [a, b] = pts;
     g.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   } else {
-    traceSmooth(g, pts);
+    tracePath(g, pts);
     g.stroke();
   }
   g.restore();
@@ -96,50 +96,38 @@ function wrapText(g: CanvasRenderingContext2D, text: string, maxWidth: number): 
   return lines;
 }
 
-/** On stage a pin is a small badge that opens its note when tapped; on
- * paper the note is printed in a tag beside the badge instead. */
-function paintPin(g: CanvasRenderingContext2D, at: Point, text: string, scale: number, colors: MarkColors) {
-  const badge = 24 * scale;
-  const x = at.x - 6 * scale;
-  const y = at.y - 6 * scale;
+/** A sticky note as it looks on stage: its colour, edge and wrapped text,
+ * clipped to the box. Paper can't fade out like the stage does, so the last
+ * line that fits ends in an ellipsis when there's more. */
+function paintStickyNote(g: CanvasRenderingContext2D, pin: Pin, at: Point, scale: number, colors: MarkColors) {
+  const box = noteBox(pin);
+  const c = stickyColor(pin);
+  const w = box.width * scale;
+  const h = box.height * scale;
+  const pad = 10 * scale;
+  const size = 15 * scale;
+  const lineH = size * 1.3;
   g.save();
-  g.fillStyle = "#ffffff";
-  roundRect(g, x, y, badge, badge, 7 * scale);
+  roundRect(g, at.x, at.y, w, h, 10 * scale);
+  g.fillStyle = c.fill;
   g.fill();
-  g.fillStyle = colors.tint;
-  g.fill();
-  g.lineWidth = 1.5 * scale;
-  g.strokeStyle = colors.accDeep;
+  g.lineWidth = 1 * scale;
+  g.strokeStyle = c.edge;
   g.stroke();
-  // Three text lines, standing in for the badge's note icon.
-  g.lineCap = "round";
-  for (let i = 0; i < 3; i++) {
-    const ly = y + (8 + i * 4) * scale;
-    g.beginPath();
-    g.moveTo(x + 7 * scale, ly);
-    g.lineTo(x + (i === 2 ? 13 : 17) * scale, ly);
-    g.stroke();
+  g.font = `${size}px ${colors.fontBody}`;
+  g.fillStyle = STICKY_TEXT_COLOR;
+  g.textBaseline = "top";
+  const lines = wrapText(g, pin.text, w - pad * 2);
+  const fit = Math.max(1, Math.floor((h - pad * 2 + (lineH - size)) / lineH));
+  const shown = lines.slice(0, fit);
+  if (lines.length > fit) {
+    let last = shown[fit - 1];
+    while (last && g.measureText(`${last}…`).width > w - pad * 2) last = last.slice(0, -1);
+    shown[fit - 1] = `${last.trimEnd()}…`;
   }
-  const note = text.trim();
-  if (note) {
-    const size = 12 * scale;
-    const pad = 5 * scale;
-    g.font = `${size}px ${colors.fontBody}`;
-    const lines = wrapText(g, note, 160 * scale);
-    const w = Math.max(...lines.map((l) => g.measureText(l).width)) + pad * 2;
-    const lineH = size * 1.3;
-    const h = lines.length * lineH + pad * 2 - (lineH - size);
-    const tx = x + badge + 3 * scale;
-    g.fillStyle = "rgba(255, 255, 255, 0.92)";
-    roundRect(g, tx, y, w, h, 5 * scale);
-    g.fill();
-    g.lineWidth = 1 * scale;
-    g.strokeStyle = colors.accDeep;
-    g.stroke();
-    g.fillStyle = "#000000";
-    g.textBaseline = "top";
-    lines.forEach((l, i) => g.fillText(l, tx + pad, y + pad + i * lineH));
-  }
+  roundRect(g, at.x, at.y, w, h, 10 * scale);
+  g.clip();
+  shown.forEach((l, i) => g.fillText(l, at.x + pad, at.y + pad + i * lineH));
   g.restore();
 }
 
@@ -227,16 +215,21 @@ function paintShape(g: CanvasRenderingContext2D, m: ShapeMark, at: Point, scale:
 }
 
 /** Paints `items` the way Live Stage stacks them: ink strokes on the canvas
- * underneath, then pins and marks in the layer above, each in saved order.
- * `scale` is canvas px per stage CSS px, for line widths and mark sizes. */
+ * underneath, then marks in the layer above, then sticky notes on top, each
+ * in saved order. `scale` is canvas px per stage CSS px, for line widths and
+ * mark sizes. */
 export function paintAnnotations(g: CanvasRenderingContext2D, items: AnnotationObject[], map: PointMap, scale: number, colors: MarkColors) {
   for (const item of items) if (isStroke(item)) paintStroke(g, item, map, scale, colors);
   for (const item of items) {
-    if (isStroke(item)) continue;
+    if (isStroke(item) || isPin(item)) continue;
     const at = map(item.position, item.anchor);
     if (!at) continue;
-    if (isPin(item)) paintPin(g, at, item.text, scale, colors);
-    else if (isShapeMark(item)) paintShape(g, item, at, scale);
+    if (isShapeMark(item)) paintShape(g, item, at, scale);
     else paintText(g, item, at, scale, colors);
+  }
+  for (const item of items) {
+    if (!isPin(item)) continue;
+    const at = map(item.position, item.anchor);
+    if (at) paintStickyNote(g, item, at, scale, colors);
   }
 }

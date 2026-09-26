@@ -23,14 +23,41 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
   const claimed = useRef(false);
 
   const clampScale = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
-  // Only the horizontal axis is bounded — vertical pan is left free (the
-  // page stack can be arbitrarily tall) since native scroll is disabled
-  // while zoomed in; "Reset zoom" always gets you back.
   const clampX = (x: number, s: number) => {
     const width = hostRef.current?.clientWidth ?? 0;
     const max = (width * (s - 1)) / 2;
     return Math.min(max, Math.max(-max, x));
   };
+  /** Keeps the zoomed page stack covering the part of it that's on screen.
+   * Vertical pan used to be left unbounded, which let a drag carry the
+   * pages off-screen into an endless blank area. Bounds come from the
+   * visible slice of the stack (it usually sits in a scrolled pane and is
+   * taller than the screen), measured in the stack's own unscaled
+   * coordinates: with the transform origin at the top, a content point y
+   * lands at ty + s·y. */
+  const clampY = (y: number, s: number) => {
+    const host = hostRef.current;
+    const frame = host?.parentElement;
+    if (!host || !frame) return y;
+    const height = host.offsetHeight;
+    const frameTop = frame.getBoundingClientRect().top;
+    let viewTop = 0;
+    let viewBottom = window.innerHeight;
+    for (let p = frame.parentElement; p; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if (oy === "auto" || oy === "scroll" || oy === "hidden") {
+        const r = p.getBoundingClientRect();
+        viewTop = r.top;
+        viewBottom = r.bottom;
+        break;
+      }
+    }
+    const top = Math.max(0, viewTop - frameTop);
+    const bottom = Math.min(height, viewBottom - frameTop);
+    const min = bottom - s * height;
+    return Math.min(top, Math.max(min, y));
+  };
+  const clampT = (t: { x: number; y: number }, s: number) => ({ x: clampX(t.x, s), y: clampY(t.y, s) });
 
   const reset = () => {
     setScale(1);
@@ -38,8 +65,19 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // A primary pointer starts a new touch sequence, so anything still
+    // tracked is a finger whose up/cancel was lost. Left in place it would
+    // turn the next one-finger drag into a phantom pinch.
+    if (e.isPrimary) {
+      pointers.current.clear();
+      pinchStart.current = null;
+      panStart.current = null;
+      claimed.current = false;
+    }
     try {
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      // On the container, not e.target: a page canvas can be swapped out
+      // mid-gesture, and capture on a removed node loses the up event.
+      e.currentTarget.setPointerCapture?.(e.pointerId);
     } catch {
       // Nice-to-have only.
     }
@@ -73,10 +111,10 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       const next = clampScale(pinchStart.current.scale * (dist / pinchStart.current.dist));
       setScale(next);
-      setTranslate((t) => ({ x: clampX(t.x, next), y: t.y }));
+      setTranslate((t) => clampT(t, next));
     } else if (pointers.current.size === 1 && panStart.current) {
       const next = { x: panStart.current.tx + (e.clientX - panStart.current.x), y: panStart.current.ty + (e.clientY - panStart.current.y) };
-      setTranslate({ x: clampX(next.x, scale), y: next.y });
+      setTranslate(clampT(next, scale));
     }
   };
 
@@ -101,7 +139,7 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
       e.preventDefault();
       const next = clampScale(scale * Math.exp(-e.deltaY * 0.01));
       setScale(next);
-      setTranslate((t) => ({ x: clampX(t.x, next), y: t.y }));
+      setTranslate((t) => clampT(t, next));
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
@@ -216,7 +254,9 @@ export function PdfPages({ src, disableZoom = false }: { src: string; disableZoo
   }, [src]);
 
   return (
-    <div style={{ width: "100%" }}>
+    // Clips the zoomed stack to its own footprint, so its transform can't
+    // grow the surrounding pane's scroll area.
+    <div style={{ width: "100%", overflow: "hidden" }}>
       {status === "loading" && (
         <div className="muted" style={{ fontSize: 13, padding: "20px 0", textAlign: "center" }}>
           Loading pages…

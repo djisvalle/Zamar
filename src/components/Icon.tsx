@@ -16,6 +16,7 @@ export type IconName =
   | "tuner"
   | "settings"
   | "note"
+  | "sticky"
   | "grip"
   | "home"
   | "play"
@@ -164,6 +165,13 @@ const ICON_PATHS: Record<IconName, JSX.Element> = {
     </>
   ),
   note: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+  sticky: (
+    <>
+      <path d="M4 4h16v10l-6 6H4z" />
+      <path d="M20 14h-6v6" />
+      <path d="M8 9h8M8 12.5h4" />
+    </>
+  ),
   grip: (
     <g fill="currentColor" stroke="none">
       <circle cx="9" cy="5" r="1.5" />

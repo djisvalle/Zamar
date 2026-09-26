@@ -6,16 +6,18 @@ import { NOTATION_SYMBOLS, notationSymbol, type NotationSymbol } from "../../uti
 import { Toggle } from "../../components/Toggle";
 import { Sheet } from "../../components/Overlays";
 import { hapticTick, ShapeGlyph, type AnnotateTool, type ArmedSymbol } from "../../components/AnnotateCanvas";
-import { isMark, isStroke, PALETTE_PAGES, recordRecents, STROKE_WIDTH, syncAnnotationWidths } from "../../utils/annotations";
+import { isMark, isPin, isStroke, PALETTE_PAGES, recordRecents, STICKY_COLOR_IDS, STICKY_COLORS, STROKE_WIDTH, syncAnnotationWidths } from "../../utils/annotations";
 import type {
   AnnotateRecents,
   AnnotationObject,
   AnnotationView,
   AttachmentKind,
   ChartView,
+  Pin,
   ShapeId,
   ShapeMark,
   Song,
+  StickyColor,
   Stroke,
   TextMark,
 } from "../../state/types";
@@ -139,6 +141,7 @@ export function useAnnotateSession({
   const [eraserSize, setEraserSize] = useState(16);
   const [armedSymbol, setArmedSymbol] = useState<NotationSymbol>(NOTATION_SYMBOLS[0]);
   const [armedShape, setArmedShape] = useState<ShapeId>("hairpin-cresc");
+  const [noteColor, setNoteColor] = useState<StickyColor>("yellow");
   const [editingId, setEditingId] = useState<string | null>(null);
   // Decoupled from editingId so the Select tool's first tap on a ShapeMark
   // can select it (showing AnnotateCanvas's resize/rotate handles) without
@@ -261,6 +264,7 @@ export function useAnnotateSession({
     shapeStyle,
     armedSymbol: armed,
     armedShape,
+    noteColor,
     eraserSize,
   };
 
@@ -290,6 +294,8 @@ export function useAnnotateSession({
     setArmedSymbol,
     armedShape,
     setArmedShape,
+    noteColor,
+    setNoteColor,
     editingId,
     setEditingId,
     setSelectedId,
@@ -313,7 +319,7 @@ const TOOLS: { id: AnnotateTool; icon: IconName; label: string }[] = [
   { id: "pen", icon: "edit", label: "Pen" },
   { id: "highlighter", icon: "highlighter", label: "Highlighter" },
   { id: "square", icon: "square", label: "Rectangle" },
-  { id: "pin", icon: "note", label: "Pin" },
+  { id: "pin", icon: "sticky", label: "Sticky note" },
   { id: "text", icon: "text", label: "Text" },
   { id: "notation", icon: "music", label: "Notation" },
   { id: "shapes", icon: "shapes", label: "Shapes" },
@@ -401,11 +407,13 @@ export function AnnotateToolbar({ session, title }: { session: AnnotateSession; 
     if (t === "highlighter") return s.highlighterStyle.color;
     if (t === "text" || t === "notation") return s.markStyle.color;
     if (t === "shapes") return s.shapeStyle.color;
+    if (t === "pin") return STICKY_COLORS[s.noteColor].fill;
     return undefined;
   };
 
   const editingStroke = annotations.find((a): a is Stroke => a.id === editingId && isStroke(a));
   const editingMark = annotations.find((a): a is TextMark | ShapeMark => a.id === editingId && isMark(a));
+  const editingNote = annotations.find((a): a is Pin => a.id === editingId && isPin(a));
 
   const duplicateStroke = (item: Stroke) => {
     const copy: Stroke = { ...item, id: `stroke-${Date.now()}`, points: item.points.map((p) => ({ x: p.x + 14, y: p.y + 14 })), anchors: undefined };
@@ -501,6 +509,8 @@ export function AnnotateToolbar({ session, title }: { session: AnnotateSession; 
                 onArmSymbol={s.setArmedSymbol}
                 armedShape={s.armedShape}
                 onArmShape={s.setArmedShape}
+                noteColor={s.noteColor}
+                onNoteColorChange={s.setNoteColor}
                 recents={s.recents}
                 favorites={s.favorites}
                 onToggleFavorite={s.toggleFavorite}
@@ -594,7 +604,7 @@ export function AnnotateToolbar({ session, title }: { session: AnnotateSession; 
       {editingStroke && (
         <EditInkSheet
           item={editingStroke}
-          onColorChange={(color) => commit(annotations.map((a) => (a.id === editingStroke.id ? { ...a, color } : a)))}
+          onColorChange={(color) => commit(annotations.map((a) => (a.id === editingStroke.id ? { ...editingStroke, color } : a)))}
           onSizeChange={(size) => commit(annotations.map((a) => (a.id === editingStroke.id ? { ...a, size } : a)))}
           onOpacityChange={(opacity) => commit(annotations.map((a) => (a.id === editingStroke.id ? { ...a, opacity } : a)))}
           onDuplicate={() => duplicateStroke(editingStroke)}
@@ -613,16 +623,33 @@ export function AnnotateToolbar({ session, title }: { session: AnnotateSession; 
       {editingMark && (
         <EditMarkSheet
           item={editingMark}
-          onColorChange={(color) => commit(annotations.map((a) => (a.id === editingMark.id ? { ...a, color } : a)))}
+          onColorChange={(color) => commit(annotations.map((a) => (a.id === editingMark.id ? { ...editingMark, color } : a)))}
           onSizeChange={(size) => commit(annotations.map((a) => (a.id === editingMark.id ? { ...a, size } : a)))}
-          onTextChange={
-            editingMark.kind === "text" && !editingMark.symbolId
-              ? (text) => commit(annotations.map((a) => (a.id === editingMark.id ? { ...a, text } : a)))
-              : undefined
-          }
           onDuplicate={() => duplicateMark(editingMark)}
           onDelete={() => {
             commit(annotations.filter((a) => a.id !== editingMark.id));
+            setEditingId(null);
+            setSelectedId(null);
+          }}
+          onClose={() => {
+            setEditingId(null);
+            setSelectedId(null);
+          }}
+        />
+      )}
+
+      {editingNote && (
+        <EditNoteSheet
+          item={editingNote}
+          onColorChange={(color) => commit(annotations.map((a) => (a.id === editingNote.id ? { ...editingNote, color } : a)))}
+          onDuplicate={() => {
+            const copy: Pin = { ...editingNote, id: `pin-${Date.now()}`, position: { x: editingNote.position.x + 16, y: editingNote.position.y + 16 }, anchor: undefined };
+            commit([...annotations, copy]);
+            setSelectedId(copy.id);
+            setEditingId(copy.id);
+          }}
+          onDelete={() => {
+            commit(annotations.filter((a) => a.id !== editingNote.id));
             setEditingId(null);
             setSelectedId(null);
           }}
@@ -686,6 +713,8 @@ function ToolSettings({
   onArmSymbol,
   armedShape,
   onArmShape,
+  noteColor,
+  onNoteColorChange,
   recents,
   favorites,
   onToggleFavorite,
@@ -707,6 +736,8 @@ function ToolSettings({
   onArmSymbol: (s: NotationSymbol) => void;
   armedShape: ShapeId;
   onArmShape: (s: ShapeId) => void;
+  noteColor: StickyColor;
+  onNoteColorChange: (c: StickyColor) => void;
   recents: AnnotateRecents;
   favorites: string[];
   onToggleFavorite: (symbolId: string) => void;
@@ -852,7 +883,12 @@ function ToolSettings({
     return <NumberField label="Eraser size" value={eraserSize} unit="pt" min={8} max={40} onChange={onEraserSizeChange} />;
   }
   if (tool === "pin") {
-    return <div className="popover-hint">Tap the chart to drop a pin.</div>;
+    return (
+      <>
+        <NoteColors value={noteColor} onChange={onNoteColorChange} />
+        <div className="popover-hint">Tap the chart to place a note and start typing.</div>
+      </>
+    );
   }
   return null;
 }
@@ -1153,11 +1189,62 @@ function EditInkSheet({
   );
 }
 
+/** The four sticky-note colours as a row of swatches. */
+function NoteColors({ value, onChange }: { value: StickyColor; onChange: (c: StickyColor) => void }) {
+  return (
+    <div className="note-colors" role="radiogroup" aria-label="Note colour">
+      {STICKY_COLOR_IDS.map((id) => (
+        <button
+          key={id}
+          className="note-swatch"
+          role="radio"
+          aria-checked={value === id}
+          aria-label={STICKY_COLORS[id].label}
+          style={{ "--note-fill": STICKY_COLORS[id].fill, "--note-edge": STICKY_COLORS[id].edge } as React.CSSProperties}
+          onClick={() => onChange(id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function EditNoteSheet({
+  item,
+  onColorChange,
+  onDuplicate,
+  onDelete,
+  onClose,
+}: {
+  item: Pin;
+  onColorChange: (c: StickyColor) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet onClose={onClose}>
+      <div className="sheet-title">Edit note</div>
+      <NoteColors value={item.color ?? "yellow"} onChange={onColorChange} />
+      <div className="popover-hint">Tap the note on the chart to change its text.</div>
+      <button className="btn btn-block" onClick={onClose}>
+        Done
+      </button>
+      <div className="btn-row">
+        <button className="btn" onClick={onDuplicate}>
+          <Icon name="duplicate" size={15} strokeWidth={1.8} /> Duplicate
+        </button>
+        <button className="btn btn-danger" onClick={onDelete}>
+          <Icon name="trash" size={15} strokeWidth={1.8} /> Delete
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
 function EditMarkSheet({
   item,
   onColorChange,
   onSizeChange,
-  onTextChange,
   onDuplicate,
   onDelete,
   onClose,
@@ -1165,23 +1252,16 @@ function EditMarkSheet({
   item: TextMark | ShapeMark;
   onColorChange: (c: string) => void;
   onSizeChange: (s: number) => void;
-  onTextChange?: (t: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
+  // Plain text is typed into on the chart itself (tap the selected text), so
+  // this sheet only styles it.
   const isFreeText = item.kind === "text" && !item.symbolId;
   return (
     <Sheet onClose={onClose}>
       <div className="sheet-title">{item.kind === "shape" ? "Edit shape" : isFreeText ? "Edit text" : "Edit mark"}</div>
-      {isFreeText && onTextChange && (
-        <input
-          autoFocus
-          value={(item as TextMark).text}
-          onChange={(e) => onTextChange(e.target.value)}
-          style={{ height: 38, borderRadius: 8, border: "1px solid var(--line)", padding: "0 10px", fontSize: 14, background: "var(--bg)", color: "var(--fg)" }}
-        />
-      )}
       <ColorGrid value={item.color} onChange={onColorChange} />
       <NumberField label="Size" value={item.size} unit="pt" min={10} max={64} onChange={onSizeChange} />
       <button className="btn btn-block" onClick={onClose}>
