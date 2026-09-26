@@ -155,6 +155,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       verified with an actual Xcode build
 - [x] SQLite persistence for songs, setlists, and settings (survives reload, native + web
       sql.js/jeep-sqlite fallback)
+- [x] Screens keep clear of the bottom safe area when no bottom tab bar is showing (modal
+      screens, and every screen on a tablet), so Android's navigation bar no longer covers
+      the end of the app (`--screen-bottom` in `theme.css`). Needs an on-device recheck
 
 ### Live Stage
 - [x] Chord chart rendering with real transpose math (not hand-placed spacing)
@@ -177,6 +180,13 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       events, so it works with touch in the iOS/Android web views; `useDragReorder.ts`).
       Attachment versions in Add/Edit Song reorder the same way
 - [x] Per-slot key/note override sheet, Add-to-set sheet (was a side drawer)
+- [x] Drag a section's header grip to reorder sections (`MOVE_SECTION`), or Move up/down
+      from its `⋯` sheet; songs keep their order within it and a live set stays on its song
+- [x] Adding lives in the detail toolbar ("+" → Add songs / Add section) so it stays in
+      reach on a long set; an empty section's row is an "Add songs here" button, and a
+      section's `⋯` sheet can add songs to that section
+- [x] The set loaded on Live Stage shows "Resume Set" instead of "Start Set"; its `⋯` menu
+      adds "Restart set from the top" and "Stop set"
 
 ### Add/Edit Song
 - [x] Combined new/edit screen, ChordPro-vs-Chords-over-Lyrics editing
