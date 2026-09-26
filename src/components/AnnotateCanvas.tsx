@@ -132,6 +132,33 @@ function drawSelectionHalo(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTM
   ctx.restore();
 }
 
+/** Largest backing-store edge the canvas is allowed, in device pixels — a
+ * long score times a 3x screen can otherwise pass the browser's canvas
+ * limits and render nothing at all. */
+const MAX_CANVAS_EDGE = 16384;
+
+/** Backing-store pixels per CSS pixel: the screen's density, scaled down
+ * only as far as needed to keep both edges under MAX_CANVAS_EDGE. */
+function canvasScale(size: { width: number; height: number }): number {
+  const dpr = Math.max(window.devicePixelRatio || 1, 1);
+  const longest = Math.max(size.width, size.height, 1);
+  return Math.min(dpr, MAX_CANVAS_EDGE / longest);
+}
+
+/** Clears the canvas and maps drawing to CSS pixels. Stroke points are
+ * stored in CSS pixels, while the backing store is `canvasScale` times
+ * larger so ink stays sharp on high-density screens instead of being drawn
+ * at 1x and stretched. */
+function beginPaint(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const scale = canvas.width / Math.max(canvas.clientWidth, 1);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  return ctx;
+}
+
 /** Wraps `children` (the real chart/attachment content) in a canvas overlay
  * that turns pointer drags into `Stroke`s, plus a sibling DOM layer of pin
  * badges and text/shape marks — the canvas is sized to the wrapped content's
@@ -294,9 +321,8 @@ export function AnnotateCanvas({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
+    const ctx = canvas && beginPaint(canvas);
     if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     const offsetFor = (id: string) => (dragPreview && dragPreview.ids.includes(id) ? { x: dragPreview.dx, y: dragPreview.dy } : undefined);
     for (const s of strokesOf(annotations)) {
       if (selection.includes(s.id)) drawSelectionHalo(ctx, s, canvas, offsetFor(s.id));
@@ -559,9 +585,8 @@ export function AnnotateCanvas({
     // `annotations`/`size` haven't changed, so the effect above won't
     // re-run on its own until the gesture finishes.
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
+    const ctx = canvas && beginPaint(canvas);
     if (canvas && ctx && draft.current) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const s of strokesOf(annotations)) drawStroke(ctx, s, canvas);
       drawStroke(ctx, draft.current, canvas);
     }
@@ -696,6 +721,7 @@ export function AnnotateCanvas({
   };
 
   const wrapWidth = wrapperRef.current?.clientWidth ?? size.width;
+  const pixelScale = canvasScale(size);
   // Canvas ignores pointer events for tools that place/select via the
   // transparent overlay below (pin/select/text/notation/shapes) so it
   // doesn't also try to start an ink stroke.
@@ -706,13 +732,14 @@ export function AnnotateCanvas({
       {children}
       <canvas
         ref={canvasRef}
-        width={size.width}
-        height={size.height}
+        width={Math.round(size.width * pixelScale)}
+        height={Math.round(size.height * pixelScale)}
         style={{
           position: "absolute",
           top: 0,
           left: 0,
           width: "100%",
+          height: size.height,
           touchAction: interactive && !scrollMode ? "none" : "auto",
           pointerEvents: interactive && !scrollMode && !overlayTool ? "auto" : "none",
         }}
