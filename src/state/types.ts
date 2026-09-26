@@ -70,14 +70,28 @@ export interface Stroke {
   opacity?: number;
 }
 
+/** The sticky-note colours. Fills and edges live in `STICKY_COLORS`
+ * (utils/annotations.ts). */
+export type StickyColor = "yellow" | "pink" | "blue" | "green";
+
+/** A sticky note (placed with the "Sticky note" tool — still `kind: "pin"`
+ * and tool id "pin" so notes saved as pins before the redesign keep
+ * working). Always shows its text on the page. */
 export interface Pin {
   id: string;
   kind: "pin";
-  /** Same role as Stroke.points — kept in sync by reprojection. */
+  /** Top-left corner of the note. Same role as Stroke.points — kept in sync
+   * by reprojection. */
   position: { x: number; y: number };
   text: string;
   /** Present only when placed on the `musicxml` view. */
   anchor?: MusicalAnchor;
+  /** Note size in content CSS px. Undefined (every pin saved before sticky
+   * notes) means the default NOTE_WIDTH × NOTE_HEIGHT. */
+  width?: number;
+  height?: number;
+  /** Undefined means yellow. */
+  color?: StickyColor;
 }
 
 export type ShapeId =

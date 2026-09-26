@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
-import type { AnnotationObject, Pin, ShapeId, ShapeMark, Stroke, TextMark } from "../state/types";
+import type { AnnotationObject, Pin, ShapeId, ShapeMark, StickyColor, Stroke, TextMark } from "../state/types";
 import {
   boundsIntersect,
   hitsAt,
@@ -10,6 +10,11 @@ import {
   isMark,
   isPin,
   isStroke,
+  noteBox,
+  NOTE_HEIGHT,
+  NOTE_MIN_HEIGHT,
+  NOTE_MIN_WIDTH,
+  NOTE_WIDTH,
   objectBounds,
   PALETTE_PAGES,
   resolveAccentColor,
@@ -19,6 +24,7 @@ import {
   simplifyStroke,
   SHAPE_ASPECT,
   snapRotation,
+  stickyColor,
   STROKE_WIDTH,
   textMarkHalfExtents,
   traceSmooth,
@@ -76,6 +82,44 @@ interface SnapTarget {
   centerY: number;
   /** Where to draw the guide. */
   guideY: number;
+}
+
+/** Space kept between an open note/text field and the top of the keyboard,
+ * enough to clear Annotate's floating tool bar. */
+const KEYBOARD_CLEARANCE = 96;
+
+/** A sticky note being typed into. A new note isn't in `annotations` until
+ * it's committed with some text, so it rides along here as `draft`. */
+interface NoteEdit {
+  id: string;
+  isNew: boolean;
+  draft?: Pin;
+}
+
+/** A plain text mark being typed into. A new field's left edge sits at the
+ * tap (`centered` false); an existing mark's field is centred on it. */
+interface TextEdit {
+  id: string;
+  isNew: boolean;
+  x: number;
+  y: number;
+  centered: boolean;
+  color: string;
+  size: number;
+  initial: string;
+}
+
+function isFreeText(obj: AnnotationObject): obj is TextMark {
+  return isMark(obj) && obj.kind === "text" && !obj.symbolId;
+}
+
+/** Nearest ancestor that scrolls vertically. */
+function scrollParentOf(node: HTMLElement): HTMLElement | null {
+  for (let p = node.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
 }
 
 function strokesOf(annotations: AnnotationObject[]): Stroke[] {
@@ -186,6 +230,7 @@ export function AnnotateCanvas({
   shapeStyle = { color: PALETTE_PAGES[0][0], size: 22 },
   armedSymbol = { id: "" },
   armedShape = "line",
+  noteColor = "yellow",
   eraserSize = 16,
   children,
 }: {
@@ -260,6 +305,8 @@ export function AnnotateCanvas({
   armedSymbol?: ArmedSymbol;
   /** Which shape the Shapes tool places next. */
   armedShape?: ShapeId;
+  /** Colour the Sticky note tool gives new notes. */
+  noteColor?: StickyColor;
   eraserSize?: number;
   children: ReactNode;
 }) {
@@ -287,9 +334,25 @@ export function AnnotateCanvas({
   // finger, snapping to lyric lines, until release).
   const [placeGhost, setPlaceGhost] = useState<{ x: number; y: number } | null>(null);
   const selection = interactive && tool === "select" ? (multiSelectedIds.length > 0 ? multiSelectedIds : selectedId ? [selectedId] : []) : [];
-  const [editingPin, setEditingPin] = useState<{ id: string; x: number; y: number; text: string; anchor: Pin["anchor"]; isNew: boolean } | null>(
-    null
-  );
+  // The sticky note or text field being typed into, if any. Mirrored in refs
+  // so closing is idempotent: a tap outside closes it on pointerdown and the
+  // field's own blur follows right after.
+  const [noteEdit, setNoteEditState] = useState<NoteEdit | null>(null);
+  const noteEditRef = useRef<NoteEdit | null>(null);
+  const [textEdit, setTextEditState] = useState<TextEdit | null>(null);
+  const textEditRef = useRef<TextEdit | null>(null);
+  const fieldRef = useRef<HTMLTextAreaElement | HTMLDivElement | null>(null);
+  const fieldOpenedAt = useRef(0);
+  const setNoteEdit = (v: NoteEdit | null) => {
+    noteEditRef.current = v;
+    setNoteEditState(v);
+  };
+  const setTextEdit = (v: TextEdit | null) => {
+    textEditRef.current = v;
+    setTextEditState(v);
+  };
+  // Live size for the note being resized by its handle, committed on release.
+  const [notePreview, setNotePreview] = useState<{ id: string; width: number; height: number } | null>(null);
   // Live values for the ShapeMark currently being resized/rotated via
   // ShapeHandles — applied on top of the real mark for rendering only,
   // committed to `annotations` via onCommit on pointer-up (see ShapeHandles).
@@ -456,19 +519,46 @@ export function AnnotateCanvas({
   const onPointerDown = (e: React.PointerEvent) => {
     if (!interactive || scrollMode) return;
     e.stopPropagation();
+    // With a note or text field open, a tap anywhere else only closes it.
+    // The document-level listener below usually got there first.
+    if (closedBy.current === e.nativeEvent || noteEditRef.current || textEditRef.current) {
+      e.preventDefault();
+      closeField();
+      return;
+    }
     const p = toContentPoint(e);
     if (tool === "eraser") {
       eraseAt(p);
       return;
     }
     if (tool === "pin") {
-      setEditingPin({
+      e.preventDefault();
+      const x = Math.max(0, Math.min(p.x, size.width - NOTE_WIDTH));
+      const y = Math.max(0, Math.min(p.y, size.height - NOTE_HEIGHT));
+      const wrapRect = wrapperRef.current?.getBoundingClientRect();
+      const draft: Pin = {
         id: `pin-${Date.now()}`,
-        x: p.x,
-        y: p.y,
+        kind: "pin",
+        position: { x, y },
         text: "",
-        anchor: scoreRef?.current?.anchorAtClientPoint(e.clientX, e.clientY) ?? undefined,
+        color: noteColor,
+        anchor: (wrapRect && scoreRef?.current?.anchorAtClientPoint(wrapRect.left + x, wrapRect.top + y)) ?? undefined,
+      };
+      openNote({ id: draft.id, isNew: true, draft });
+      return;
+    }
+    if (tool === "text") {
+      e.preventDefault();
+      const y = snapY(p.y, markStyle.size * 0.9);
+      setTextEdit({
+        id: `mark-${Date.now()}`,
         isNew: true,
+        x: Math.max(0, Math.min(p.x, size.width - 40)),
+        y,
+        centered: false,
+        color: markStyle.color,
+        size: markStyle.size,
+        initial: "",
       });
       return;
     }
@@ -497,12 +587,12 @@ export function AnnotateCanvas({
       selectGesture.current = { kind: "press", start: p, hits, long: false, timer };
       return;
     }
-    if (tool === "text" || tool === "notation" || tool === "shapes") {
+    if (tool === "notation" || tool === "shapes") {
       capture(e);
       activePointer.current = e.pointerId;
       placeStart.current = p;
-      // Text and notation marks follow the finger until release, so they can
-      // be lined up (and snapped) before they land.
+      // Notation stamps follow the finger until release, so they can be
+      // lined up (and snapped) before they land.
       if (tool !== "shapes") setPlaceGhost({ x: p.x, y: snapY(p.y, armedHalfH()) });
       return;
     }
@@ -561,7 +651,7 @@ export function AnnotateCanvas({
       setDragPreview({ ids: d.ids, dx: d.dx, dy: d.dy });
       return;
     }
-    if (tool === "text" || tool === "notation") {
+    if (tool === "notation") {
       if (placeStart.current) setPlaceGhost({ x: p.x, y: snapY(p.y, armedHalfH()) });
       return;
     }
@@ -612,7 +702,7 @@ export function AnnotateCanvas({
           lastTap.current = null;
           return;
         }
-        selectMany(annotations.filter((a) => !isPin(a) && boundsIntersect(objectBounds(a), rect)).map((a) => a.id));
+        selectMany(annotations.filter((a) => boundsIntersect(objectBounds(a), rect)).map((a) => a.id));
         return;
       }
       if (g.kind === "drag") {
@@ -622,9 +712,9 @@ export function AnnotateCanvas({
           annotations.map((a) => {
             if (!g.ids.includes(a.id)) return a;
             const moved = translateObject(a, g.dx, g.dy);
-            // Marks on a score re-anchor to the measure under their new
-            // spot; strokes and pins stay pixel-positioned once moved.
-            if (isMark(moved) && scoreRef?.current && wrapRect) {
+            // Marks and notes on a score re-anchor to the measure under their
+            // new spot; strokes stay pixel-positioned once moved.
+            if ((isMark(moved) || isPin(moved)) && scoreRef?.current && wrapRect) {
               const anchor = scoreRef.current.anchorAtClientPoint(wrapRect.left + moved.position.x, wrapRect.top + moved.position.y) ?? undefined;
               return { ...moved, anchor };
             }
@@ -637,6 +727,16 @@ export function AnnotateCanvas({
       if (g.long) return;
       // A plain tap. Tapping the same spot again soon after walks down the
       // stack of objects under it.
+      // A note or plain text: the first tap selects it, a tap on it once
+      // it's selected types into it. Notes are opaque, so a tap on one
+      // never cycles down to whatever is hidden underneath.
+      const top = annotations.find((a) => a.id === g.hits[0]);
+      if (top && (isPin(top) || (g.hits.length === 1 && isFreeText(top)))) {
+        lastTap.current = null;
+        if (selectedId === top.id && multiSelectedIds.length === 0) startInlineEdit(top);
+        else selectOnly(top.id);
+        return;
+      }
       const key = g.hits.join(",");
       const prev = lastTap.current;
       const again = prev && prev.hits === key && Date.now() - prev.at < CYCLE_WINDOW_MS && Math.hypot(p.x - prev.p.x, p.y - prev.p.y) < CYCLE_SLOP;
@@ -656,7 +756,7 @@ export function AnnotateCanvas({
       return;
     }
 
-    if (tool === "text" || tool === "notation" || tool === "shapes") {
+    if (tool === "notation" || tool === "shapes") {
       const start = placeStart.current;
       const ghost = placeGhost;
       placeStart.current = null;
@@ -671,10 +771,6 @@ export function AnnotateCanvas({
       if (tool === "shapes") {
         const mark: ShapeMark = { id, kind: "shape", position: start, shapeId: armedShape, color: shapeStyle.color, size: shapeStyle.size, anchor };
         onCommit([...annotations, mark]);
-      } else if (tool === "text") {
-        const mark: TextMark = { id, kind: "text", position: at, text: "Note", color: markStyle.color, size: markStyle.size, anchor };
-        onCommit([...annotations, mark]);
-        onEditRequest?.(id);
       } else {
         const mark: TextMark = {
           id,
@@ -697,28 +793,157 @@ export function AnnotateCanvas({
     draft.current = null;
   };
 
-  // ---------- pins ----------
-  const finishEditingPin = () => {
-    if (!editingPin) return;
-    const text = editingPin.text.trim();
-    if (!text) {
-      // Empty text discards a new pin instead of creating one, and deletes
-      // an existing pin edited down to nothing — an empty sticky note isn't
-      // worth keeping either way.
-      if (!editingPin.isNew) onCommit(annotations.filter((a) => !(isPin(a) && a.id === editingPin.id)));
-      setEditingPin(null);
-      return;
-    }
-    const pin: Pin = { id: editingPin.id, kind: "pin", position: { x: editingPin.x, y: editingPin.y }, text, anchor: editingPin.anchor };
-    onCommit(editingPin.isNew ? [...annotations, pin] : annotations.map((a) => (isPin(a) && a.id === pin.id ? pin : a)));
-    setEditingPin(null);
+  // ---------- sticky notes and text fields ----------
+  const openNote = (edit: NoteEdit) => {
+    setTextEdit(null);
+    setNoteEdit(edit);
   };
 
-  const deleteEditingPin = () => {
-    if (!editingPin) return;
-    if (!editingPin.isNew) onCommit(annotations.filter((a) => !(isPin(a) && a.id === editingPin.id)));
-    setEditingPin(null);
+  const startInlineEdit = (obj: Pin | TextMark) => {
+    if (isPin(obj)) {
+      openNote({ id: obj.id, isNew: false });
+      return;
+    }
+    setNoteEdit(null);
+    setTextEdit({ id: obj.id, isNew: false, x: obj.position.x, y: obj.position.y, centered: true, color: obj.color, size: obj.size, initial: obj.text });
   };
+
+  const finishNote = (edit: NoteEdit, raw: string) => {
+    const text = raw.replace(/\s+$/, "");
+    if (edit.isNew) {
+      // A note left blank is dropped rather than kept empty.
+      if (text.trim() && edit.draft) onCommit([...annotations, { ...edit.draft, text }]);
+      return;
+    }
+    const current = annotations.find((a): a is Pin => a.id === edit.id && isPin(a));
+    if (!current) return;
+    if (!text.trim()) {
+      onCommit(annotations.filter((a) => a.id !== edit.id));
+      selectOnly(null);
+    } else if (text !== current.text) {
+      onCommit(annotations.map((a) => (a.id === edit.id ? { ...current, text } : a)));
+    }
+  };
+
+  const finishText = (edit: TextEdit, raw: string, rect: DOMRect | undefined) => {
+    clearSnap();
+    const text = raw.replace(/\s+/g, " ").trim();
+    if (edit.isNew) {
+      if (!text) return;
+      // Centre the mark on the field as it was drawn, so it lands exactly
+      // where it was typed.
+      const wrapRect = wrapperRef.current?.getBoundingClientRect();
+      const at =
+        rect && wrapRect
+          ? { x: rect.left + rect.width / 2 - wrapRect.left, y: rect.top + rect.height / 2 - wrapRect.top }
+          : { x: edit.x, y: edit.y };
+      const anchor = (wrapRect && scoreRef?.current?.anchorAtClientPoint(wrapRect.left + at.x, wrapRect.top + at.y)) ?? undefined;
+      const mark: TextMark = { id: edit.id, kind: "text", position: at, text, color: edit.color, size: edit.size, anchor };
+      onCommit([...annotations, mark]);
+      return;
+    }
+    const current = annotations.find((a): a is TextMark => a.id === edit.id && isMark(a) && a.kind === "text");
+    if (!current) return;
+    if (!text) {
+      onCommit(annotations.filter((a) => a.id !== edit.id));
+      selectOnly(null);
+    } else if (text !== current.text) {
+      onCommit(annotations.map((a) => (a.id === edit.id ? { ...current, text } : a)));
+    }
+  };
+
+  /** Commits whichever field is open. Safe to call more than once. */
+  const closeField = () => {
+    const el = fieldRef.current;
+    const note = noteEditRef.current;
+    const text = textEditRef.current;
+    if (note) {
+      setNoteEdit(null);
+      finishNote(note, el instanceof HTMLTextAreaElement ? el.value : "");
+    } else if (text) {
+      setTextEdit(null);
+      finishText(text, el ? el.innerText : "", el?.getBoundingClientRect());
+    }
+  };
+
+  const onFieldBlur = () => {
+    // The tap that opened the field can still move focus off it on some
+    // WebViews; take focus back rather than closing a field that was never
+    // really left.
+    if (Date.now() - fieldOpenedAt.current < 350) {
+      setTimeout(() => fieldRef.current?.focus(), 0);
+      return;
+    }
+    closeField();
+  };
+
+  // Focus a newly opened field inside the same tap, so the keyboard comes
+  // up, with the caret after any existing text.
+  const openFieldId = noteEdit?.id ?? textEdit?.id ?? null;
+  useLayoutEffect(() => {
+    const el = fieldRef.current;
+    if (!openFieldId || !el) return;
+    fieldOpenedAt.current = Date.now();
+    el.focus();
+    if (el instanceof HTMLTextAreaElement) {
+      el.setSelectionRange(el.value.length, el.value.length);
+    } else {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  }, [openFieldId]);
+
+  // Keeps the open field above the on-screen keyboard (and the floating tool
+  // bar over it) by scrolling the chart's pane. visualViewport reports the
+  // area the keyboard leaves visible on Android and iOS WebViews.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!openFieldId || !vv) return;
+    const keepVisible = () => {
+      const el = fieldRef.current;
+      if (!el) return;
+      const over = el.getBoundingClientRect().bottom - (vv.offsetTop + vv.height - KEYBOARD_CLEARANCE);
+      if (over <= 0) return;
+      const scroller = scrollParentOf(el);
+      if (scroller) scroller.scrollTop += over;
+    };
+    const timer = setTimeout(keepVisible, 300);
+    vv.addEventListener("resize", keepVisible);
+    return () => {
+      clearTimeout(timer);
+      vv.removeEventListener("resize", keepVisible);
+    };
+  }, [openFieldId]);
+
+  // A tap anywhere outside the open field closes it: on the chart, on the
+  // tool bar (so Done and Undo see the committed text), or on parts of the
+  // stage that swallow the tap without moving focus. Remembers the event so
+  // the chart's own pointerdown doesn't treat the same tap as a new placement.
+  const closedBy = useRef<Event | null>(null);
+  const closeFieldRef = useRef(closeField);
+  closeFieldRef.current = closeField;
+  useEffect(() => {
+    if (!openFieldId) return;
+    const onDown = (e: PointerEvent) => {
+      const el = fieldRef.current;
+      if (el && e.target instanceof Node && el.contains(e.target)) return;
+      closedBy.current = e;
+      closeFieldRef.current();
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [openFieldId]);
+
+  // Switching tools, leaving draw mode or pausing for scroll closes the
+  // field the same way a tap outside does.
+  useEffect(() => {
+    closeField();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool, interactive, scrollMode]);
 
   const wrapWidth = wrapperRef.current?.clientWidth ?? size.width;
   const pixelScale = canvasScale(size);
@@ -755,6 +980,9 @@ export function AnnotateCanvas({
       {interactive && overlayTool && !scrollMode && (
         <div
           style={{ position: "absolute", inset: 0, touchAction: "none" }}
+          // This layer never takes focus: without this, the mousedown that
+          // follows a tap would pull focus off the field that tap just opened.
+          onMouseDown={(e) => e.preventDefault()}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -762,27 +990,13 @@ export function AnnotateCanvas({
         />
       )}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-        {annotations.filter(isPin).map((pin) => (
-          <PinBadge
-            key={pin.id}
-            pin={pin}
-            tool={tool}
-            canvasInteractive={interactive}
-            onErase={() => onCommit(annotations.filter((a) => a.id !== pin.id))}
-            onOpen={() => setEditingPin({ id: pin.id, x: pin.position.x, y: pin.position.y, text: pin.text, anchor: pin.anchor, isNew: false })}
-            onDrag={(x, y, clientX, clientY) => {
-              const anchor = scoreRef?.current?.anchorAtClientPoint(clientX, clientY) ?? undefined;
-              onCommit(annotations.map((a) => (isPin(a) && a.id === pin.id ? { ...a, position: { x, y }, anchor } : a)));
-              if (editingPin?.id === pin.id) setEditingPin(null);
-            }}
-          />
-        ))}
         {marksOf(annotations).map((mark) => {
           let displayMark: TextMark | ShapeMark =
             mark.kind === "shape" && shapePreview && shapePreview.id === mark.id
               ? { ...mark, ...shapePreview }
               : mark;
           if (dragPreview && dragPreview.ids.includes(mark.id)) displayMark = translateObject(displayMark, dragPreview.dx, dragPreview.dy);
+          if (textEdit && textEdit.id === mark.id) return null;
           return (
             <Fragment key={mark.id}>
               <MarkBadge
@@ -804,14 +1018,80 @@ export function AnnotateCanvas({
             </Fragment>
           );
         })}
-        {placeGhost && (tool === "text" || tool === "notation") && (
+        {/* Notes draw above ink and marks, like paper stuck on the page. */}
+        {annotations.filter(isPin).map((pin) => {
+          let shown: Pin = notePreview && notePreview.id === pin.id ? { ...pin, width: notePreview.width, height: notePreview.height } : pin;
+          if (dragPreview && dragPreview.ids.includes(pin.id)) shown = translateObject(shown, dragPreview.dx, dragPreview.dy);
+          const editing = noteEdit?.id === pin.id;
+          return (
+            <Fragment key={pin.id}>
+              <StickyNote
+                pin={shown}
+                selected={selection.includes(pin.id) && !editing}
+                editing={editing}
+                fieldRef={fieldRef}
+                onBlur={onFieldBlur}
+                onClose={closeField}
+              />
+              {interactive && tool === "select" && selectedId === pin.id && multiSelectedIds.length === 0 && !dragPreview && !editing && (
+                <NoteHandle
+                  pin={shown}
+                  maxRight={size.width}
+                  maxBottom={size.height}
+                  onPreview={(p) => setNotePreview(p ? { id: pin.id, ...p } : null)}
+                  onResize={(width, height) => onCommit(annotations.map((a) => (a.id === pin.id ? { ...a, width, height } : a)))}
+                />
+              )}
+            </Fragment>
+          );
+        })}
+        {noteEdit?.isNew && noteEdit.draft && (
+          <StickyNote pin={noteEdit.draft} selected={false} editing fieldRef={fieldRef} onBlur={onFieldBlur} onClose={closeField} />
+        )}
+        {textEdit && (
+          <div
+            ref={(el) => {
+              fieldRef.current = el;
+            }}
+            className="text-field"
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-label="Text"
+            style={{
+              left: textEdit.x,
+              top: textEdit.y,
+              transform: textEdit.centered ? "translate(-50%, -50%)" : "translateY(-50%)",
+              color: textEdit.color,
+              fontSize: textEdit.size,
+              maxWidth: Math.max(80, wrapWidth - (textEdit.centered ? 0 : textEdit.x)),
+            }}
+            onBlur={onFieldBlur}
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === "Escape") {
+                e.preventDefault();
+                closeField();
+              }
+            }}
+            onPaste={(e) => {
+              // Plain text only: a pasted rich-text run would carry its own
+              // fonts and colours into the field.
+              e.preventDefault();
+              document.execCommand("insertText", false, e.clipboardData.getData("text/plain").replace(/\s+/g, " "));
+            }}
+          >
+            {textEdit.initial}
+          </div>
+        )}
+        {placeGhost && tool === "notation" && (
           <MarkBadge
             mark={{
               id: "ghost",
               kind: "text",
               position: placeGhost,
-              text: tool === "notation" ? armedSymbol.glyph ?? "" : "Note",
-              symbolId: tool === "notation" ? armedSymbol.id : undefined,
+              text: armedSymbol.glyph ?? "",
+              symbolId: armedSymbol.id,
               color: markStyle.color,
               size: markStyle.size,
             }}
@@ -823,7 +1103,7 @@ export function AnnotateCanvas({
         )}
         {guideY !== null && <div className="snap-guide" style={{ top: guideY }} />}
         {box && <div className="select-box" style={{ left: box.left, top: box.top, width: box.right - box.left, height: box.bottom - box.top }} />}
-        {selection.length > 0 && !dragPreview && !box && (
+        {selection.length > 0 && !dragPreview && !box && !openFieldId && (
           <SelectionMenu
             bounds={unionBounds(annotations.filter((a) => selection.includes(a.id)).map(objectBounds))}
             wrapWidth={wrapWidth}
@@ -840,17 +1120,6 @@ export function AnnotateCanvas({
               onCommit(annotations.filter((a) => !selection.includes(a.id)));
               selectOnly(null);
             }}
-          />
-        )}
-        {editingPin && (
-          <PinEditor
-            x={editingPin.x}
-            y={editingPin.y}
-            text={editingPin.text}
-            maxLeft={wrapWidth - 176}
-            onChange={(text) => setEditingPin((cur) => (cur ? { ...cur, text } : cur))}
-            onDone={finishEditingPin}
-            onDelete={deleteEditingPin}
           />
         )}
       </div>
@@ -1149,137 +1418,114 @@ function ShapeHandles({
   );
 }
 
-function PinBadge({
+/** A sticky note: always shows its text, clipped with a fade when it runs
+ * past the box. Hit-tested by the canvas overlay like every other object,
+ * so it takes pointer events only while its text is being edited. */
+function StickyNote({
   pin,
-  tool,
-  canvasInteractive,
-  onErase,
-  onOpen,
-  onDrag,
+  selected,
+  editing,
+  fieldRef,
+  onBlur,
+  onClose,
 }: {
   pin: Pin;
-  tool: AnnotateTool;
-  /** Same role as MarkBadge's `canvasInteractive` — `false` makes the pin a
-   * static badge with no drag/tap handling, for the read-only overlay. */
-  canvasInteractive: boolean;
-  onErase: () => void;
-  onOpen: () => void;
-  onDrag: (x: number, y: number, clientX: number, clientY: number) => void;
+  selected: boolean;
+  editing: boolean;
+  fieldRef: React.MutableRefObject<HTMLTextAreaElement | HTMLDivElement | null>;
+  onBlur: () => void;
+  onClose: () => void;
 }) {
-  const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
-
+  const b = noteBox(pin);
+  const c = stickyColor(pin);
   return (
     <div
-      style={{
-        position: "absolute",
-        left: pin.position.x,
-        top: pin.position.y,
-        width: 24,
-        height: 24,
-        borderRadius: "7px 7px 7px 2px",
-        background: "var(--tint)",
-        border: "1.5px solid var(--acc-deep)",
-        color: "var(--acc-deep)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        pointerEvents: canvasInteractive ? "auto" : "none",
-        transform: "translate(-6px, -6px)",
-        boxShadow: "0 2px 5px rgba(29,31,32,0.18)",
-        touchAction: "none",
-      }}
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        if (tool === "eraser") {
-          onErase();
-          return;
-        }
-        dragState.current = { startX: e.clientX, startY: e.clientY, origX: pin.position.x, origY: pin.position.y, moved: false };
-        (e.target as Element).setPointerCapture?.(e.pointerId);
-      }}
-      onPointerMove={(e) => {
-        const d = dragState.current;
-        if (!d) return;
-        const dx = e.clientX - d.startX;
-        const dy = e.clientY - d.startY;
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true;
-      }}
-      onPointerUp={(e) => {
-        const d = dragState.current;
-        dragState.current = null;
-        if (!d) return;
-        if (d.moved) {
-          const dx = e.clientX - d.startX;
-          const dy = e.clientY - d.startY;
-          onDrag(d.origX + dx, d.origY + dy, e.clientX, e.clientY);
-        } else {
-          onOpen();
-        }
-      }}
+      className={"sticky-note" + (selected ? " selected" : "")}
+      style={
+        {
+          left: b.left,
+          top: b.top,
+          width: b.width,
+          height: b.height,
+          "--note-fill": c.fill,
+          "--note-edge": c.edge,
+          pointerEvents: editing ? "auto" : "none",
+        } as React.CSSProperties
+      }
+      onPointerDown={editing ? (e) => e.stopPropagation() : undefined}
     >
-      <Icon name="note" size={13} strokeWidth={2} />
+      {editing ? (
+        <textarea
+          ref={(el) => {
+            fieldRef.current = el;
+          }}
+          defaultValue={pin.text}
+          placeholder="Type a note"
+          aria-label="Note text"
+          onBlur={onBlur}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              onClose();
+            }
+          }}
+        />
+      ) : (
+        <>
+          {pin.text}
+          <div className="sticky-note-fade" />
+        </>
+      )}
     </div>
   );
 }
 
-function PinEditor({
-  x,
-  y,
-  text,
-  maxLeft,
-  onChange,
-  onDone,
-  onDelete,
+/** Bottom-right resize handle for the selected sticky note. Reports a live
+ * size while dragging and commits it on release, like ShapeHandles. */
+function NoteHandle({
+  pin,
+  maxRight,
+  maxBottom,
+  onPreview,
+  onResize,
 }: {
-  x: number;
-  y: number;
-  text: string;
-  maxLeft: number;
-  onChange: (text: string) => void;
-  onDone: () => void;
-  onDelete: () => void;
+  pin: Pin;
+  maxRight: number;
+  maxBottom: number;
+  onPreview: (size: { width: number; height: number } | null) => void;
+  onResize: (width: number, height: number) => void;
 }) {
+  const drag = useRef<{ x: number; y: number; width: number; height: number; current: { width: number; height: number } } | null>(null);
+  const b = noteBox(pin);
   return (
     <div
-      style={{
-        position: "absolute",
-        left: Math.max(0, Math.min(x + 6, maxLeft)),
-        top: y + 10,
-        width: 176,
-        background: "var(--surface)",
-        border: "1px solid var(--line)",
-        borderRadius: 8,
-        padding: 8,
-        boxShadow: "0 6px 16px rgba(29,31,32,0.22)",
-        pointerEvents: "auto",
-        zIndex: 20,
+      className="note-handle"
+      aria-label="Resize note"
+      style={{ left: b.left + b.width, top: b.top + b.height }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        drag.current = { x: e.clientX, y: e.clientY, width: b.width, height: b.height, current: { width: b.width, height: b.height } };
+        e.currentTarget.setPointerCapture?.(e.pointerId);
       }}
-    >
-      <textarea
-        autoFocus
-        value={text}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Bowing, chord fingering, a cue…"
-        style={{
-          width: "100%",
-          minHeight: 52,
-          border: "none",
-          background: "none",
-          resize: "none",
-          font: "inherit",
-          fontSize: 13,
-          color: "var(--fg)",
-          outline: "none",
-        }}
-      />
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 4 }}>
-        <button onClick={onDelete} style={{ fontSize: 13, fontWeight: 700, border: "none", background: "none", color: "var(--acc-deep)", padding: "2px 4px" }}>
-          Delete
-        </button>
-        <button onClick={onDone} style={{ fontSize: 13, fontWeight: 700, border: "none", background: "none", color: "var(--acc-deep)", padding: "2px 4px" }}>
-          Done
-        </button>
-      </div>
-    </div>
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d) return;
+        const width = Math.max(NOTE_MIN_WIDTH, Math.min(d.width + e.clientX - d.x, Math.max(NOTE_MIN_WIDTH, maxRight - b.left)));
+        const height = Math.max(NOTE_MIN_HEIGHT, Math.min(d.height + e.clientY - d.y, Math.max(NOTE_MIN_HEIGHT, maxBottom - b.top)));
+        d.current = { width, height };
+        onPreview(d.current);
+      }}
+      onPointerUp={() => {
+        const d = drag.current;
+        drag.current = null;
+        if (!d) return;
+        onPreview(null);
+        if (d.current.width !== d.width || d.current.height !== d.height) onResize(d.current.width, d.current.height);
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+        onPreview(null);
+      }}
+    />
   );
 }

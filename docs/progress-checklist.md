@@ -80,9 +80,10 @@ working tree on 2026-09-19.
 - [x] **Annotate / custom notes on a song.** Three real capabilities, not the old
       decorative shell: freeform typed cues (`Song.notes`, UI-labeled "Cues" — editable
       from both Add/Edit Song's Cues tab and Live Stage's Annotate overlay), real
-      canvas-drawn ink (pen/rectangle via `AnnotateCanvas.tsx`), and pins — short typed
-      notes dropped at a point, rendered as their own DOM layer (not canvas pixels) so
-      they stay individually tappable/draggable after placement. Ink and pins share one
+      canvas-drawn ink (pen/rectangle via `AnnotateCanvas.tsx`), and sticky notes (stored
+      as `Pin`) — always-visible, coloured, resizable typed notes, rendered as their own
+      DOM layer (not canvas pixels) so they stay individually selectable/draggable after
+      placement (see `docs/superpowers/specs/2026-09-26-sticky-notes-and-text-entry-design.md`). Ink and pins share one
       `Song.annotations` array per view (`AnnotationObject = Stroke | Pin`), rendered on
       Live Stage's normal (non-annotate) view at all times — not just while drawing — over
       whichever chart type is on screen: chords, image, PDF, or MusicXML, not just the

@@ -126,15 +126,16 @@ around the badge point).
 
 ## Text tool interaction
 
-**Placing.** With the Text tool active, a tap puts an empty single-line-growing text
+**Placing.** With the Text tool active, a tap puts an empty text
 field at the tap point, in the tool's current colour and size, cursor blinking, keyboard
 up. The existing lyric-line snap still applies to where the field lands. The
 press-and-drag "ghost" placement for text is dropped (it stays for notation stamps).
 
-**Typing.** The field auto-grows horizontally as you type and wraps at the content
-width. Return inserts a new line.
+**Typing.** The field auto-grows horizontally as you type. Text marks stay single-line
+(they render unwrapped and hit-test by text length), so Return finishes the field
+rather than inserting a line break. Pasted text is inserted as plain text.
 
-**Finishing.** Tap outside, switch tools or press Done. If the trimmed text is empty,
+**Finishing.** Tap outside, press Return, switch tools or press Done. If the trimmed text is empty,
 nothing is added. Otherwise one `TextMark` is committed (one undo step).
 
 **Editing later.** In the Select tool, tapping an already-selected text mark opens the

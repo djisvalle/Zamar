@@ -31,6 +31,12 @@ discussion" items (done 2026-09-25).
   Shapes tool (slur, crescendo/decrescendo hairpins, arrow, line, bracket,
   outline/filled rectangle and ellipse) sharing the same mark-object model
   as text/notation stamps.
+- **Sticky notes and direct text entry** (2026-09-26): the Pin tool became
+  "Sticky note". Notes always show their text, come in yellow/pink/blue/green,
+  move and resize with the Select tool, are typed into in place, and print in
+  PDF exports. The Text tool opens an empty field at the tap instead of
+  placing a "Note" placeholder. Saved pins show as default-size yellow notes.
+  See `docs/superpowers/specs/2026-09-26-sticky-notes-and-text-entry-design.md`.
 - **Quick wins 1–3** (collapsible tool panel, canvas selection highlight,
   stronger Clear-page vs. Clear-all distinction) — done.
 - **Persisted annotations per song** (was tracked as backlog item 4 below).

@@ -1,4 +1,4 @@
-import type { AnnotateRecents, AnnotationObject, AnnotationView, Pin, ShapeId, ShapeMark, Song, Stroke, TextMark } from "../state/types";
+import type { AnnotateRecents, AnnotationObject, AnnotationView, Pin, ShapeId, ShapeMark, Song, StickyColor, Stroke, TextMark } from "../state/types";
 
 export const STROKE_WIDTH = 3;
 
@@ -235,9 +235,36 @@ export function hitTestStroke(stroke: Stroke, point: Point, radius: number = ERA
   return strokeSegments(stroke).some(([a, b]) => distanceToSegment(point, a, b) <= effective);
 }
 
-/** True if `point` lands within `radius` of `pin`'s position. */
-export function hitTestPin(pin: Pin, point: Point, radius: number = PIN_ERASE_RADIUS): boolean {
-  return Math.hypot(point.x - pin.position.x, point.y - pin.position.y) <= Math.max(radius, PIN_ERASE_RADIUS);
+/** Sticky-note colours: paper tones that stay the same in Stage Dark (a
+ * note sits on the page, like the score's white paper), dark enough at the
+ * edge to separate from white and light enough for black text. */
+export const STICKY_COLORS: Record<StickyColor, { fill: string; edge: string; label: string }> = {
+  yellow: { fill: "#FFE680", edge: "#E6C84A", label: "Yellow" },
+  pink: { fill: "#FFC2D6", edge: "#E89AB4", label: "Pink" },
+  blue: { fill: "#BFE0FF", edge: "#8DBFEA", label: "Blue" },
+  green: { fill: "#C8F0B8", edge: "#98CF84", label: "Green" },
+};
+export const STICKY_COLOR_IDS = Object.keys(STICKY_COLORS) as StickyColor[];
+export const STICKY_TEXT_COLOR = "#1c1c1e";
+export const NOTE_WIDTH = 160;
+export const NOTE_HEIGHT = 120;
+export const NOTE_MIN_WIDTH = 96;
+export const NOTE_MIN_HEIGHT = 64;
+
+/** A note's box in content coordinates. Pins saved before sticky notes
+ * have no size and get the default. */
+export function noteBox(pin: Pin): { left: number; top: number; width: number; height: number } {
+  return { left: pin.position.x, top: pin.position.y, width: pin.width ?? NOTE_WIDTH, height: pin.height ?? NOTE_HEIGHT };
+}
+
+export function stickyColor(pin: Pin): { fill: string; edge: string; label: string } {
+  return STICKY_COLORS[pin.color ?? "yellow"] ?? STICKY_COLORS.yellow;
+}
+
+/** True if `point` lands on the note, or within `radius` of its edge. */
+export function hitTestPin(pin: Pin, point: Point, radius: number = 0): boolean {
+  const b = noteBox(pin);
+  return point.x >= b.left - radius && point.x <= b.left + b.width + radius && point.y >= b.top - radius && point.y <= b.top + b.height + radius;
 }
 
 /** True if `point` lands within a text/shape mark's rough bounding box —
@@ -285,12 +312,16 @@ export function topStrokeHit(point: Point, items: AnnotationObject[], radius: nu
   return null;
 }
 
-/** Every ink stroke and text/shape mark under a point, topmost first — the
- * Select tool's hit list. A repeated tap walks down it to reach marks
- * stacked under the top one. Pins aren't included: they handle their own
- * taps (open the note) and drags. */
+/** Every sticky note, ink stroke and text/shape mark under a point, topmost
+ * first — the Select tool's hit list. Notes draw above everything else, so
+ * they come first. A repeated tap walks down the list to reach objects
+ * stacked under the top one. */
 export function hitsAt(point: Point, items: AnnotationObject[], radius: number = ERASE_RADIUS): string[] {
   const ids: string[] = [];
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (isPin(item) && hitTestPin(item, point)) ids.push(item.id);
+  }
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
     if (isPin(item)) continue;
@@ -309,7 +340,10 @@ export interface Bounds {
 /** Axis-aligned bounds of a stroke, mark or pin in content coordinates,
  * for box selection and for placing the selection's edit menu. */
 export function objectBounds(obj: AnnotationObject): Bounds {
-  if (isPin(obj)) return { left: obj.position.x - 12, top: obj.position.y - 12, right: obj.position.x + 12, bottom: obj.position.y + 12 };
+  if (isPin(obj)) {
+    const b = noteBox(obj);
+    return { left: b.left, top: b.top, right: b.left + b.width, bottom: b.top + b.height };
+  }
   if (isMark(obj)) {
     let { halfW, halfH } = obj.kind === "shape" ? shapeHalfExtents(obj) : textMarkHalfExtents(obj);
     if (obj.kind === "shape" && isLineShape(obj.shapeId) && obj.rotation) {
