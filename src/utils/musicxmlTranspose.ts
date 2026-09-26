@@ -1,4 +1,4 @@
-import { keyFifths, keyFromFifths, letterSteps, parseNote, spellInKey } from "./keys";
+import { keyFromFifths, keySignatureFifths, letterSteps, parseNote, spellInKey } from "./keys";
 
 /** Re-keys a MusicXML file for export, the way `KeyAwareTransposeCalculator`
  * re-keys a score on screen: key signatures take the picked spelling, and
@@ -22,7 +22,7 @@ function mod(n: number, m: number): number {
  * C#); any other key stays as written. */
 function transposedFifths(fifths: number, halftones: number, targetKey: string): number {
   const pitch = mod(fifths * 7 + halftones, 12);
-  const picked = keyFifths(targetKey);
+  const picked = keySignatureFifths(targetKey);
   if (picked !== null && mod(picked * 7, 12) === pitch) return picked;
   return halftones % 12 === 0 ? fifths : DEFAULT_FIFTHS[pitch];
 }
