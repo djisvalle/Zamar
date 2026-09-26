@@ -5,6 +5,7 @@ import { activeKeyChange, keySemitoneShift, type KeyChange } from "./keys";
 import { KeyAwareTransposeCalculator } from "./scoreTranspose";
 import { transposeMusicXmlFile } from "./musicxmlTranspose";
 import { firstAvailableCategory, selectedVersion } from "./attachments";
+import { getAttachmentData } from "../data/attachmentData";
 import { flattenSetlist } from "./setlistCalc";
 import bravuraUrl from "../assets/fonts/Bravura.woff2?url";
 import { DEFAULT_MARKED_WIDTH, objectBounds } from "./annotations";
@@ -159,7 +160,7 @@ export async function buildMusicXml(setlist: Setlist, plan: PlannedSong[], onPro
     const version = selectedVersion(p.song.attachments.musicxml!);
     const ext = version.name.match(/\.(mxl|musicxml|xml)$/i)?.[1].toLowerCase() ?? "musicxml";
     const safeTitle = p.song.title.replace(/[\\/:*?"<>|]+/g, "-");
-    let bytes = await dataUrlBytes(version.dataUrl);
+    let bytes = await dataUrlBytes(await getAttachmentData(version.id));
     // Same test the PDF uses to engrave a score in the set key.
     if (p.semitones !== 0 || p.key !== p.song.defaultKey) {
       const rekeyed = await transposeMusicXmlFile(bytes, p.semitones, p.key).catch(() => null);
@@ -860,16 +861,16 @@ export async function buildPdf(setlist: Setlist, plan: PlannedSong[], opts: Expo
       songHeader(ctx, p);
       drawChart(ctx, p, opts.includeChords);
     } else if (p.view === "pdf") {
-      const src = await PDFDocument.load(await dataUrlBytes(selectedVersion(p.song.attachments.pdf!).dataUrl), { ignoreEncryption: true });
+      const src = await PDFDocument.load(await dataUrlBytes(await getAttachmentData(selectedVersion(p.song.attachments.pdf!).id)), { ignoreEncryption: true });
       const pages = await doc.copyPages(src, src.getPageIndices());
       pages.forEach((pg) => doc.addPage(pg));
       if (marks) await overlayPdfMarks(doc, pages, marks);
       ctx.page = null;
     } else if (p.view === "image") {
-      await drawImagePages(ctx, p, [await imageToJpeg(selectedVersion(p.song.attachments.image!).dataUrl, marks)]);
+      await drawImagePages(ctx, p, [await imageToJpeg(await getAttachmentData(selectedVersion(p.song.attachments.image!).id), marks)]);
     } else if (p.view === "musicxml") {
       const area = { w: ctx.size[0] - SCORE_MARGIN * 2, h: ctx.size[1] - MARGIN * 2 };
-      const pages = await renderScorePages(selectedVersion(p.song.attachments.musicxml!).dataUrl, p.semitones, p.key, area, opts.noteNames, marks);
+      const pages = await renderScorePages(await getAttachmentData(selectedVersion(p.song.attachments.musicxml!).id), p.semitones, p.key, area, opts.noteNames, marks);
       await drawImagePages(ctx, p, pages, SCORE_MARGIN);
     }
   }

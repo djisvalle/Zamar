@@ -1,10 +1,9 @@
 import { createContext, useContext, useEffect, useReducer, useRef, useState, type Dispatch, type ReactNode, createElement } from "react";
 import type { AnnotateRecents, Setlist, SetlistItem, Settings, Song, StageState, StaveSpacing, ThemeMode, Viewport } from "./types";
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
-import * as songsRepo from "../data/songsRepo";
-import * as setlistsRepo from "../data/setlistsRepo";
-import * as settingsRepo from "../data/settingsRepo";
 import { getDb, persist } from "../data/db";
+import { buildSaveStatements, type PersistedSnapshot } from "../data/persistPlan";
+import { settleAttachmentData } from "../data/attachmentData";
 import { canonicalKey } from "../utils/keys";
 
 export interface AppState {
@@ -20,7 +19,7 @@ export interface AppState {
  * chosen attachment kind is still attached); otherwise falls back to the
  * automatic guess — chords if the song has any, else its first available
  * attachment, matching the behavior before per-song defaults existed. */
-function resolveDefaultView(song: Song | undefined): StageState["view"] {
+export function resolveDefaultView(song: Song | undefined): StageState["view"] {
   if (!song) return "chords";
   if (song.defaultView === "chords" && song.chordpro.trim()) return "chords";
   if (song.defaultView && song.defaultView !== "chords" && song.attachments[song.defaultView]) return "sheet";
@@ -118,19 +117,24 @@ export function hydrateState(songs: Song[], setlists: Setlist[], settings: Setti
   // (A#, D#, G#); they load as the chip for the same pitch (Bb, Eb, Ab).
   // Songs saved with no artist used to get the placeholder "Unknown"; a
   // missing artist is blank now, so the placeholder loads as blank too.
-  const locked = songs.map((s) =>
-    lockChordsTextScale(
-      { ...s, defaultKey: canonicalKey(s.defaultKey), artist: s.artist === "Unknown" ? "" : s.artist },
-      settings.textScale
-    )
+  // Each song or setlist keeps its identity unless something here changed
+  // it, so the first save after boot (see buildSaveStatements) writes only
+  // the ones that actually differ from what was loaded.
+  const locked = songs.map((s) => {
+    const defaultKey = canonicalKey(s.defaultKey);
+    const artist = s.artist === "Unknown" ? "" : s.artist;
+    const fixed = defaultKey === s.defaultKey && artist === s.artist ? s : { ...s, defaultKey, artist };
+    return lockChordsTextScale(fixed, settings.textScale);
+  });
+  const canonicalOverride = (it: SetlistItem) =>
+    "keyOverride" in it && it.keyOverride && canonicalKey(it.keyOverride) !== it.keyOverride
+      ? { ...it, keyOverride: canonicalKey(it.keyOverride) }
+      : it;
+  const keyed = setlists.map((sl) =>
+    sl.sections.some((sec) => sec.items.some((it) => canonicalOverride(it) !== it))
+      ? { ...sl, sections: sl.sections.map((sec) => ({ ...sec, items: sec.items.map(canonicalOverride) })) }
+      : sl
   );
-  const keyed = setlists.map((sl) => ({
-    ...sl,
-    sections: sl.sections.map((sec) => ({
-      ...sec,
-      items: sec.items.map((it) => ("keyOverride" in it && it.keyOverride ? { ...it, keyOverride: canonicalKey(it.keyOverride) } : it)),
-    })),
-  }));
   return { songs: locked, setlists: keyed, settings, stage: makeEmptyStage(locked), viewport: "ipadAir13" };
 }
 
@@ -434,10 +438,14 @@ const StoreContext = createContext<StoreContextValue | null>(null);
 export function StoreProvider({
   children,
   initial,
+  persisted,
   persistEnabled = true,
 }: {
   children: ReactNode;
   initial: AppState;
+  /** What's already on disk (see main.tsx's loadInitial); each save writes
+   * only what differs from it, then advances it. */
+  persisted: PersistedSnapshot;
   /** False when the initial load from disk failed (see main.tsx's loadInitial) — we can't tell
    * whether that failure means "nothing was ever persisted" or "real data is on disk but
    * unreadable right now," so persistence stays off for the rest of this session rather than
@@ -449,6 +457,13 @@ export function StoreProvider({
 
   const firstRun = useRef(true);
   const persistGen = useRef(0);
+  const latest = useRef(state);
+  latest.current = state;
+  const snapshot = useRef(persisted);
+  // Saves run one after another, and each works out its statements only
+  // when its turn comes: a save computed before the one ahead of it had
+  // committed could miss a row that one wrote (a song added, then deleted).
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     if (!persistEnabled) return;
@@ -458,40 +473,31 @@ export function StoreProvider({
     }
     const t = setTimeout(() => {
       const mine = ++persistGen.current;
-      (async () => {
-        const songIds = new Set(state.songs.map((s) => s.id));
-        const safeSetlists = state.setlists.map((sl) => ({
-          ...sl,
-          sections: sl.sections.map((sec) => ({
-            ...sec,
-            items: sec.items.filter((i) => i.kind !== "song" || (i.songId != null && songIds.has(i.songId))),
-          })),
-        }));
-        // Songs, setlists, and settings all go in ONE atomic transaction. Songs and setlists
-        // are FK-coupled (setlist_items.song_id -> songs.id), so they must be written in
-        // FK-safe order: clear setlist rows first (removes any reference to a song about to be
-        // deleted), then replace songs, then reinsert setlists (safe now, since the songs they
-        // reference already exist). Settings rides along in the same executeSet call rather than
-        // a separate commit — splitting any of this across multiple separately-committed
-        // transactions risks a crash between commits leaving a settings row that disagrees with
-        // the songs/setlists actually on disk (see main.tsx's first-run recovery logic, which
-        // exists to handle exactly that mismatch from before this was atomic).
+      saveChain.current = saveChain.current.then(async () => {
+        // A newer save is queued behind this one and will write everything.
+        if (persistGen.current !== mine) return;
+        const { songs, setlists, settings } = latest.current;
+        const current: PersistedSnapshot = { songs, setlists, settings };
+        // Songs, setlists, and settings all go in ONE atomic transaction, in the FK-safe order
+        // buildSaveStatements lays out. Splitting any of this across multiple
+        // separately-committed transactions risks a crash between commits leaving a settings
+        // row that disagrees with the songs/setlists actually on disk (see main.tsx's first-run
+        // recovery logic, which exists to handle exactly that mismatch from before this was
+        // atomic).
+        const { statements, inserted, deleted } = buildSaveStatements(snapshot.current, current);
+        if (statements.length === 0) return;
         try {
           const db = await getDb();
-          if (persistGen.current !== mine) return;
-          await db.executeSet([
-            ...setlistsRepo.buildDeleteStatements(),
-            songsRepo.buildDeleteStatement(),
-            ...songsRepo.buildInsertStatements(state.songs),
-            ...setlistsRepo.buildInsertStatements(safeSetlists),
-            settingsRepo.buildUpsertStatement(state.settings),
-          ]);
+          await db.executeSet(statements);
         } catch (err) {
           console.warn("Zamar: failed to persist songs/setlists/settings", err);
           if (persistGen.current === mine) setStorageProblem("write");
           return;
         }
-        if (persistGen.current !== mine) return;
+        // Only a committed save moves the snapshot, so after a failure the
+        // next save still carries every change since the last good one.
+        snapshot.current = current;
+        settleAttachmentData(inserted, deleted);
         try {
           await persist();
           setStorageProblem((p) => (p === "write" ? null : p));
@@ -499,7 +505,7 @@ export function StoreProvider({
           console.warn("Zamar: failed to flush persisted state to web store", err);
           if (persistGen.current === mine) setStorageProblem("write");
         }
-      })();
+      });
     }, 250);
     return () => clearTimeout(t);
   }, [state.songs, state.setlists, state.settings, persistEnabled]);

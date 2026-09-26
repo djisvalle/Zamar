@@ -6,6 +6,8 @@ import { Segmented } from "../../components/Toggle";
 import { ChordChart } from "../../components/ChordChart";
 import { PdfPages } from "../../components/PdfPages";
 import { MxlScore } from "../../components/MxlScore";
+import { AttachmentPlaceholder } from "../../components/AttachmentPlaceholder";
+import { useAttachmentData } from "../../data/attachmentData";
 import { Icon } from "../../components/Icon";
 import { Section } from "../../components/List";
 import { PullDown } from "../../components/PullDown";
@@ -158,6 +160,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const activeKind: AttachmentKind | null = tab === "musicxml" || tab === "pdf" || tab === "image" ? tab : null;
   const activeBucket = activeKind ? attachments[activeKind] : undefined;
   const activeVersion = activeBucket ? selectedVersion(activeBucket) : undefined;
+  const activeData = useAttachmentData(activeVersion?.id);
 
   const attemptClose = () => {
     if (dirty) setConfirmDiscard(true);
@@ -466,14 +469,16 @@ export function AddEditSong({ songId }: { songId?: string }) {
       {activeKind && activeBucket && activeVersion && (
         <div className="flex-1 hidden-scroll" style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "var(--list-cell)", flex: "none" }}>
-            {activeKind === "image" ? (
-              <img src={activeVersion.dataUrl} alt={activeVersion.name} style={{ display: "block", width: "100%" }} />
+            {activeData.data === undefined ? (
+              <AttachmentPlaceholder status={activeData.status} />
+            ) : activeKind === "image" ? (
+              <img src={activeData.data} alt={activeVersion.name} style={{ display: "block", width: "100%" }} />
             ) : activeKind === "musicxml" ? (
               <div style={{ padding: 8 }}>
-                <MxlScore src={activeVersion.dataUrl} staveSpacing={state.settings.staveSpacing} />
+                <MxlScore src={activeData.data} staveSpacing={state.settings.staveSpacing} />
               </div>
             ) : (
-              <PdfPages src={activeVersion.dataUrl} />
+              <PdfPages src={activeData.data} />
             )}
           </div>
           <div className="list-section-footer" style={{ paddingTop: 0 }}>

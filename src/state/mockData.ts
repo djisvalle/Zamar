@@ -1,4 +1,5 @@
 import type { Setlist, Song } from "./types";
+import { putAttachmentData } from "../data/attachmentData";
 
 // A fresh install ships with exactly one song — the built-in default — not a
 // bundle of sample content. See src/state/store.ts's makeEmptyStage for how
@@ -20,7 +21,7 @@ export const songs: Song[] = [
     chordpro: "",
     attachments: {
       musicxml: {
-        versions: [{ id: "att-seed-1", label: "As_The_Deer.mxl", dataUrl: "/assets/As_The_Deer.mxl", name: "As_The_Deer.mxl" }],
+        versions: [{ id: "att-seed-1", label: "As_The_Deer.mxl", name: "As_The_Deer.mxl" }],
         selectedVersionId: "att-seed-1",
       },
     },
@@ -28,6 +29,10 @@ export const songs: Song[] = [
     annotations: {},
   },
 ];
+
+// The seed score's file, written with the seed song on a fresh install's
+// first save. Where it's already on disk this is only an in-memory copy.
+putAttachmentData("att-seed-1", "/assets/As_The_Deer.mxl");
 
 export const setlists: Setlist[] = [];
 

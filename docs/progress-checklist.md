@@ -159,6 +159,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       verified with an actual Xcode build
 - [x] SQLite persistence for songs, setlists, and settings (survives reload, native + web
       sql.js/jeep-sqlite fallback)
+- [x] Saves write only the rows that changed, and attachment files live in their own table,
+      read on demand, so edits and boot don't carry every file in the library. Needs an
+      on-device recheck, including the one-time move of files out of existing song rows
 - [x] Screens keep clear of the bottom safe area when no bottom tab bar is showing (modal
       screens, and every screen on a tablet), so Android's navigation bar no longer covers
       the end of the app (`--screen-bottom` in `theme.css`). Needs an on-device recheck

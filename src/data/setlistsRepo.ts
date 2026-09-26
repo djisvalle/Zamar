@@ -65,49 +65,55 @@ export async function loadAll(): Promise<Setlist[]> {
   });
 }
 
-export function buildDeleteStatements(): { statement: string; values: unknown[] }[] {
-  return [
-    { statement: "DELETE FROM setlist_items", values: [] },
-    { statement: "DELETE FROM setlist_sections", values: [] },
-    { statement: "DELETE FROM setlists", values: [] },
-  ];
-}
+type Statement = { statement: string; values: unknown[] };
 
-export function buildInsertStatements(setlists: Setlist[]): { statement: string; values: unknown[] }[] {
-  const statements: { statement: string; values: unknown[] }[] = [];
-  for (const sl of setlists) {
-    statements.push({
-      statement: "INSERT INTO setlists (id, name, date, time, description, status) VALUES (?, ?, ?, ?, ?, ?)",
-      values: [sl.id, sl.name, sl.date, sl.time, sl.description, sl.status],
-    });
-    sl.sections.forEach((sec, secIdx) => {
-      statements.push({
-        statement: "INSERT INTO setlist_sections (id, setlist_id, label, position) VALUES (?, ?, ?, ?)",
-        values: [sec.id, sl.id, sec.label, secIdx],
-      });
-      sec.items.forEach((item, itemIdx) => {
-        statements.push({
-          statement: `INSERT INTO setlist_items
-            (id, section_id, kind, song_id, label, keyOverride, note, position)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          values: [
-            item.id,
-            sec.id,
-            item.kind,
-            item.songId ?? null,
-            item.label ?? null,
-            item.keyOverride ?? null,
-            item.note ?? null,
-            itemIdx,
-          ],
-        });
-      });
-    });
-  }
+/** Removes a setlist's sections and slots, and with `row` the setlist too. */
+export function buildDeleteStatements(setlistId: string, row = true): Statement[] {
+  const statements: Statement[] = [
+    {
+      statement: "DELETE FROM setlist_items WHERE section_id IN (SELECT id FROM setlist_sections WHERE setlist_id = ?)",
+      values: [setlistId],
+    },
+    { statement: "DELETE FROM setlist_sections WHERE setlist_id = ?", values: [setlistId] },
+  ];
+  if (row) statements.push({ statement: "DELETE FROM setlists WHERE id = ?", values: [setlistId] });
   return statements;
 }
 
-export async function replaceAll(setlists: Setlist[]): Promise<void> {
-  const db = await getDb();
-  await db.executeSet([...buildDeleteStatements(), ...buildInsertStatements(setlists)]);
+/** Rewrites one setlist: clears its sections and slots, upserts its row and
+ * inserts them again in order. A song slot whose song isn't in `songIds`
+ * is left out, so the write can't break the setlist_items foreign key. */
+export function buildWriteStatements(sl: Setlist, songIds: ReadonlySet<string>): Statement[] {
+  const statements = buildDeleteStatements(sl.id, false);
+  statements.push({
+    statement: `INSERT INTO setlists (id, name, date, time, description, status) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, date = excluded.date, time = excluded.time,
+        description = excluded.description, status = excluded.status`,
+    values: [sl.id, sl.name, sl.date, sl.time, sl.description, sl.status],
+  });
+  sl.sections.forEach((sec, secIdx) => {
+    statements.push({
+      statement: "INSERT INTO setlist_sections (id, setlist_id, label, position) VALUES (?, ?, ?, ?)",
+      values: [sec.id, sl.id, sec.label, secIdx],
+    });
+    sec.items.forEach((item, itemIdx) => {
+      if (item.kind === "song" && (item.songId == null || !songIds.has(item.songId))) return;
+      statements.push({
+        statement: `INSERT INTO setlist_items
+          (id, section_id, kind, song_id, label, keyOverride, note, position)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        values: [
+          item.id,
+          sec.id,
+          item.kind,
+          item.songId ?? null,
+          item.label ?? null,
+          item.keyOverride ?? null,
+          item.note ?? null,
+          itemIdx,
+        ],
+      });
+    });
+  });
+  return statements;
 }
