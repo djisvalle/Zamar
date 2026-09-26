@@ -172,6 +172,8 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Each song opens at the top of its chart (the scroll position and PDF zoom no longer
       carry over from the previous song), and a reprise's next-song line and progress bar
       follow the slot on stage rather than the song's first slot
+- [x] Swiping between songs works over sheet music and PDFs too: the score and PDF views
+      keep a gesture only when it's a pinch (or a pan on a zoomed-in PDF)
 
 ### Library
 - [x] A–Z grouped list, live search, filter chips
