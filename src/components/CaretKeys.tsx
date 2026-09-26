@@ -34,7 +34,7 @@ export function CaretKeys({ target }: { target: RefObject<HTMLTextAreaElement | 
 
   const keyProps = (dir: -1 | 1) => ({
     type: "button" as const,
-    className: "caret-key",
+    className: "editor-key",
     onPointerDown: (e: React.PointerEvent) => {
       // Keep focus (and the keyboard) on the textarea.
       e.preventDefault();
@@ -55,7 +55,7 @@ export function CaretKeys({ target }: { target: RefObject<HTMLTextAreaElement | 
   });
 
   return (
-    <div className="caret-keys">
+    <div className="editor-key-group">
       <button {...keyProps(-1)} aria-label="Move cursor left">
         <Icon name="chevron-left" size={20} strokeWidth={2.4} />
       </button>

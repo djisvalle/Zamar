@@ -982,14 +982,19 @@ button {
   color: var(--danger-fg);
 }
 
-/* ---- caret keys: ◀ ▶ under the chart editor (CaretKeys.tsx) ---- */
-.caret-keys {
+/* ---- editor keys: undo/redo and ◀ ▶ caret keys under the chart editor
+   (AddEditSong.tsx, CaretKeys.tsx) ---- */
+.editor-keys {
   flex: none;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
 }
-.caret-key {
+.editor-key-group {
+  display: flex;
+  gap: 8px;
+}
+.editor-key {
   width: 56px;
   height: 40px;
   display: flex;
@@ -1004,8 +1009,11 @@ button {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-.caret-key:active {
+.editor-key:active {
   background: var(--fill);
+}
+.editor-key:disabled {
+  opacity: 0.35;
 }
 
 /* ---- chips ---- */

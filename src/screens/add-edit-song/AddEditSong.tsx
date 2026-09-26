@@ -11,6 +11,7 @@ import { Section } from "../../components/List";
 import { PullDown } from "../../components/PullDown";
 import { useDragReorder } from "../../components/useDragReorder";
 import { CaretKeys } from "../../components/CaretKeys";
+import { caretAfterChange, useTextHistory } from "../../components/useTextHistory";
 import {
   extractBracketChords,
   extractChordLineChords,
@@ -76,17 +77,42 @@ export function AddEditSong({ songId }: { songId?: string }) {
     timeSig: setTimeSig,
   };
 
-  /** Chart edits carry their metadata directives into the fields above. */
-  const editChart = (next: string) => {
+  const chartHistory = useTextHistory();
+
+  /** Chart changes carry their metadata directives into the fields above. */
+  const applyChart = (next: string) => {
     setChordpro(next);
     const meta = readChartMeta(next);
     (Object.keys(meta) as ChartMetaField[]).forEach((field) => FIELD_SETTERS[field](meta[field]!));
   };
 
+  /** An edit to the chart, recorded for undo. `group` merges a burst of
+   * typing into one undo step. */
+  const editChart = (next: string, group?: string) => {
+    if (next === chordpro) return;
+    chartHistory.record(chordpro, group);
+    applyChart(next);
+  };
+
   /** Field edits rewrite the matching directive when the chart has one. */
   const editField = (field: ChartMetaField, value: string) => {
     FIELD_SETTERS[field](value);
-    setChordpro((text) => writeChartMeta(text, field, value));
+    const next = writeChartMeta(chordpro, field, value);
+    if (next !== chordpro) {
+      chartHistory.record(chordpro, `field:${field}`);
+      setChordpro(next);
+    }
+  };
+
+  /** Undo/redo only restore the chart text; directives in it bring their
+   * fields back along with it. The caret goes to the end of what changed. */
+  const stepChart = (dir: "undo" | "redo") => {
+    const next = chartHistory[dir](chordpro);
+    if (next === undefined) return;
+    const pos = caretAfterChange(chordpro, next);
+    applyChart(next);
+    const el = chartRef.current;
+    requestAnimationFrame(() => el?.setSelectionRange(pos, pos));
   };
 
   const insertAtCursor = (snippet: string, cursorOffset?: number) => {
@@ -332,7 +358,17 @@ export function AddEditSong({ songId }: { songId?: string }) {
             ref={chartRef}
             className="form-textarea"
             value={chordpro}
-            onChange={(e) => editChart(e.target.value)}
+            onChange={(e) => editChart(e.target.value, "typing")}
+            onKeyDown={(e) => {
+              // Hardware keyboards: the browser's own undo can't see our
+              // inserted snippets, so route the shortcuts to our history.
+              if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+              const k = e.key.toLowerCase();
+              if (k === "z" || k === "y") {
+                e.preventDefault();
+                stepChart(k === "y" || e.shiftKey ? "redo" : "undo");
+              }
+            }}
             aria-label="Chart"
             placeholder={
               chartFormat === "chordpro"
@@ -348,7 +384,33 @@ export function AddEditSong({ songId }: { songId?: string }) {
             }}
           />
           {/* Under the chart so, with the keyboard up, it sits just above it. */}
-          <CaretKeys target={chartRef} />
+          <div className="editor-keys">
+            <div className="editor-key-group">
+              <button
+                type="button"
+                className="editor-key"
+                onPointerDown={(e) => e.preventDefault()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => stepChart("undo")}
+                disabled={!chartHistory.canUndo}
+                aria-label="Undo"
+              >
+                <Icon name="undo" size={20} strokeWidth={2.2} />
+              </button>
+              <button
+                type="button"
+                className="editor-key"
+                onPointerDown={(e) => e.preventDefault()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => stepChart("redo")}
+                disabled={!chartHistory.canRedo}
+                aria-label="Redo"
+              >
+                <Icon name="redo" size={20} strokeWidth={2.2} />
+              </button>
+            </div>
+            <CaretKeys target={chartRef} />
+          </div>
         </div>
       )}
 

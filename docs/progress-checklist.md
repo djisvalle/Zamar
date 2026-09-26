@@ -195,6 +195,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Live `{key: ...}` directive detection, format-aware quick-insert chips, live Preview tab
 - [x] ◀ ▶ caret keys under the chart editor move the cursor one character (repeat on hold)
       without dismissing the keyboard, as in OnSong (`CaretKeys.tsx`)
+- [x] Undo/redo for the chart text (↶ ↷ in the same bar, and Ctrl/⌘+Z, Ctrl/⌘+Shift+Z or
+      Ctrl+Y): typing undoes in bursts, chip inserts and field-driven directive rewrites
+      one at a time (`useTextHistory.ts`). History is per visit; it resets after Import
 - [x] Sheet Music tab appears once a song has an attachment, with remove-attachment action
 
 ### Import
