@@ -193,6 +193,8 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Chart-problem banner in the editor: unbalanced `[`/`]`, unclosed `{directive}`, and
       chord symbols transposition can't move (`findChordProIssues`)
 - [x] Live `{key: ...}` directive detection, format-aware quick-insert chips, live Preview tab
+- [x] ◀ ▶ caret keys under the chart editor move the cursor one character (repeat on hold)
+      without dismissing the keyboard, as in OnSong (`CaretKeys.tsx`)
 - [x] Sheet Music tab appears once a song has an attachment, with remove-attachment action
 
 ### Import

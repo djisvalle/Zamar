@@ -10,6 +10,7 @@ import { Icon } from "../../components/Icon";
 import { Section } from "../../components/List";
 import { PullDown } from "../../components/PullDown";
 import { useDragReorder } from "../../components/useDragReorder";
+import { CaretKeys } from "../../components/CaretKeys";
 import {
   extractBracketChords,
   extractChordLineChords,
@@ -346,6 +347,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
               lineHeight: 1.75,
             }}
           />
+          {/* Under the chart so, with the keyboard up, it sits just above it. */}
+          <CaretKeys target={chartRef} />
         </div>
       )}
 
