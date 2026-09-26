@@ -12,9 +12,7 @@ Everything below is detailed further down; this is the short list.
 - **Tuner on a real device** — only tried in the browser so far. Native mic permissions
   are in place; the pass to run is in `docs/device-testing.md` ("Tuner (real microphone)").
 - **Capo** — cut; needs its own design pass against transpose/keys (see Nice-to-have).
-- **Pure respelling on scores** — C♯ → D♭ changes the chart but not a score, because OSMD
-  skips 0-semitone transposes (see Enharmonic keys).
-- **MusicXML export can't re-key scores**; **annotations aren't exported** in any format.
+- **Annotations export to PDF only** — ChordPro and MusicXML can't carry ink (see Export).
 - **Crash-restore onboarding** from the source design is unwired.
 - **OMR (PDF/photo → `.mxl`)** — R&D spike only.
 - **Annotate:** per-song stave spacing; reprojecting marks across an
