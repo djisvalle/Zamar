@@ -5,7 +5,8 @@ import { KeyAwareTransposeCalculator } from "../utils/scoreTranspose";
 
 const MIN_ENGRAVING_ZOOM = 0.5;
 const MAX_ENGRAVING_ZOOM = 2.5;
-const COMMIT_DEBOUNCE_MS = 110;
+/** How long the wheel has to rest before a wheel zoom re-lays-out. */
+const WHEEL_COMMIT_MS = 180;
 
 /** `osmd.EngravingRules` values for each spacing preset — `StaffDistance` is
  * the vertical gap between staves within one system (e.g. a piano grand
@@ -88,6 +89,16 @@ export interface MxlScoreHandle {
   clientPointForAnchor(anchor: MusicalAnchor): { clientX: number; clientY: number } | null;
 }
 
+/** Where a zoom gesture was aimed, so the committed re-layout can scroll
+ * the same part of the score back under it. `ratio` is the focus point's
+ * position down the score as a 0..1 fraction of its height at gesture start
+ * (a re-engrave reflows measures between lines, so an absolute offset
+ * wouldn't survive it); `clientY` is where on screen it should land. */
+interface ZoomFocus {
+  ratio: number;
+  clientY: number;
+}
+
 /** Pinch/wheel-driven zoom that changes the score's actual engraving size
  * (OSMD's own Zoom factor) rather than magnifying a fixed picture. Zooming
  * out shrinks notation so more measures fit per line at the SAME screen
@@ -95,49 +106,101 @@ export interface MxlScoreHandle {
  * zoom behaves, as opposed to a photo/PDF viewer's camera zoom (which was
  * what the first version of this did: scale + pan over a fixed layout).
  *
- * A real OSMD re-layout (updateGraphic + render) is too expensive to run on
- * every pointermove of a pinch gesture, so gesture deltas update a "target"
- * continuously but the actual commit is debounced; a CSS transform preview
- * fills the gap between gesture frames and the next real layout so the
- * gesture still feels immediate instead of stepping only every ~100ms.
+ * A real OSMD re-layout (updateGraphic + render) is far too expensive to
+ * run during a pinch: on a tablet it blocks the main thread long enough to
+ * drop touch input, and it replaces the score's SVG nodes mid-gesture. So a
+ * pinch only moves a CSS transform preview (written straight to the DOM,
+ * once per frame, scaled from the point between the fingers) and commits a
+ * single re-layout when the fingers lift. Wheel zoom has no "lift", so it
+ * commits after the wheel has been idle for WHEEL_COMMIT_MS.
  *
  * Owns its own callback ref rather than taking a plain useRef: the container
  * <div> doesn't exist yet while the score is still loading, so a normal
  * useRef + useEffect(..., [ref]) would fire once against a null node and
  * never re-attach once the real element showed up (a ref object's identity
  * never changes, so it can't be an effect dependency that triggers a rerun). */
-function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean) {
-  const [previewScale, setPreviewScale] = useState(1);
+function useEngravingZoom(onCommit: (zoom: number, focus: ZoomFocus | null) => void, disableZoom: boolean) {
   const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const committedZoom = useRef(1);
+  const previewScale = useRef(1);
+  const focus = useRef<ZoomFocus | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const pinchStart = useRef<{ dist: number; zoom: number } | null>(null);
-  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pinchStart = useRef<{ dist: number } | null>(null);
+  const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frame = useRef<number | null>(null);
   const lastTap = useRef(0);
 
   const clampZoom = (z: number) => Math.min(MAX_ENGRAVING_ZOOM, Math.max(MIN_ENGRAVING_ZOOM, z));
 
-  const commit = (zoom: number, immediate: boolean) => {
-    if (commitTimer.current) clearTimeout(commitTimer.current);
-    const run = () => {
-      commitTimer.current = null;
-      committedZoom.current = zoom;
-      setPreviewScale(1);
-      onCommit(zoom);
-    };
-    if (immediate) run();
-    else commitTimer.current = setTimeout(run, COMMIT_DEBOUNCE_MS);
+  const paintPreview = () => {
+    if (frame.current !== null) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      const node = previewRef.current;
+      if (node) node.style.transform = previewScale.current !== 1 ? `scale(${previewScale.current})` : "";
+    });
+  };
+
+  /** Pins the preview's transform origin to a screen point and remembers
+   * where in the score that point falls, before any scaling is applied. */
+  const beginPreview = (clientX: number, clientY: number) => {
+    const node = previewRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    node.style.transformOrigin = `${clientX - rect.left}px ${clientY - rect.top}px`;
+    focus.current = { ratio: rect.height ? (clientY - rect.top) / rect.height : 0, clientY };
+  };
+
+  const setPreview = (zoom: number) => {
+    previewScale.current = clampZoom(zoom) / committedZoom.current;
+    paintPreview();
+  };
+
+  const commit = () => {
+    if (wheelTimer.current) clearTimeout(wheelTimer.current);
+    wheelTimer.current = null;
+    const zoom = clampZoom(committedZoom.current * previewScale.current);
+    const f = focus.current;
+    focus.current = null;
+    // The preview transform is cleared by the caller's re-render effect via
+    // `clearPreview`, in the same frame the new layout lands, so the score
+    // never flashes back to its old size in between.
+    if (Math.abs(zoom - committedZoom.current) < 0.001) {
+      clearPreview();
+      return;
+    }
+    committedZoom.current = zoom;
+    onCommit(zoom, f);
+  };
+
+  const clearPreview = () => {
+    previewScale.current = 1;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    if (previewRef.current) previewRef.current.style.transform = "";
   };
 
   const reset = () => {
-    setPreviewScale(1);
-    commit(1, true);
+    previewScale.current = 1 / committedZoom.current;
+    focus.current = null;
+    commit();
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
+    // A primary pointer starts a brand-new touch sequence, so anything still
+    // tracked is a finger whose up/cancel never arrived. Left in place it
+    // would pair with the next single finger as a phantom pinch.
+    if (e.isPrimary) {
+      pointers.current.clear();
+      pinchStart.current = null;
+    }
     try {
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      // Captured on the container, which survives re-renders; capturing on
+      // e.target (an SVG node inside the score) lost the up/cancel event
+      // whenever OSMD replaced that node.
+      e.currentTarget.setPointerCapture?.(e.pointerId);
     } catch {
       // Capture is a nice-to-have (keeps tracking a finger dragged off the
       // element) — its failure shouldn't stop gesture tracking itself.
@@ -145,7 +208,8 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
-      pinchStart.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: committedZoom.current };
+      pinchStart.current = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
+      beginPreview((a.x + b.x) / 2, (a.y + b.y) / 2);
     } else if (pointers.current.size === 1) {
       const now = Date.now();
       if (now - lastTap.current < 320) {
@@ -164,23 +228,19 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
     if (pointers.current.size === 2 && pinchStart.current) {
       const [a, b] = [...pointers.current.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      const target = clampZoom(pinchStart.current.zoom * (dist / pinchStart.current.dist));
-      setPreviewScale(target / committedZoom.current);
-      commit(target, false);
+      setPreview(committedZoom.current * (dist / pinchStart.current.dist));
+      if (focus.current) focus.current.clientY = (a.y + b.y) / 2;
     }
   };
 
   const endPointer = (e: React.PointerEvent) => {
     e.stopPropagation();
     pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) pinchStart.current = null;
-    // Finalize right away once every finger has lifted, instead of waiting
-    // out the debounce — a gesture that's clearly over shouldn't leave the
-    // CSS preview sitting there for another ~100ms before the real layout
-    // catches up.
-    if (pointers.current.size === 0 && commitTimer.current) {
-      const target = committedZoom.current * previewScale;
-      commit(clampZoom(target), true);
+    // The pinch is over as soon as it's no longer two fingers — commit the
+    // one real re-layout now rather than waiting for the last finger.
+    if (pinchStart.current && pointers.current.size < 2) {
+      pinchStart.current = null;
+      commit();
     }
   };
 
@@ -195,9 +255,10 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
       if (!e.ctrlKey && Math.abs(e.deltaY) < 1) return;
       e.preventDefault();
       e.stopPropagation();
-      const target = clampZoom(committedZoom.current * Math.exp(-e.deltaY * 0.01));
-      setPreviewScale(target / committedZoom.current);
-      commit(target, false);
+      if (!wheelTimer.current) beginPreview(e.clientX, e.clientY);
+      setPreview(committedZoom.current * previewScale.current * Math.exp(-e.deltaY * 0.01));
+      if (wheelTimer.current) clearTimeout(wheelTimer.current);
+      wheelTimer.current = setTimeout(commit, WHEEL_COMMIT_MS);
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
@@ -214,11 +275,43 @@ function useEngravingZoom(onCommit: (zoom: number) => void, disableZoom: boolean
     if (!disableZoom) return;
     pointers.current.clear();
     pinchStart.current = null;
-    if (commitTimer.current) clearTimeout(commitTimer.current);
-    commitTimer.current = null;
+    focus.current = null;
+    if (wheelTimer.current) clearTimeout(wheelTimer.current);
+    wheelTimer.current = null;
+    clearPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disableZoom]);
 
-  return { previewScale, el, containerRef: setEl, onPointerDown, onPointerMove, onPointerUp: endPointer, onPointerCancel: endPointer, onDoubleClick: reset, reset };
+  useEffect(
+    () => () => {
+      if (wheelTimer.current) clearTimeout(wheelTimer.current);
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    },
+    []
+  );
+
+  return {
+    el,
+    containerRef: setEl,
+    previewRef,
+    clearPreview,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: endPointer,
+    onPointerCancel: endPointer,
+    onDoubleClick: reset,
+    reset,
+  };
+}
+
+/** Nearest ancestor that actually scrolls vertically — Live Stage's chart
+ * pane, in practice. */
+function scrollParentOf(node: HTMLElement): HTMLElement | null {
+  for (let p = node.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
 }
 
 export interface ScoreInstrument {
@@ -274,7 +367,11 @@ export const MxlScore = forwardRef<
   const unitInPixelsRef = useRef(10);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [engravingZoom, setEngravingZoom] = useState(1);
-  const ez = useEngravingZoom(setEngravingZoom, disableZoom);
+  const pendingFocus = useRef<ZoomFocus | null>(null);
+  const ez = useEngravingZoom((zoom, focus) => {
+    pendingFocus.current = focus;
+    setEngravingZoom(zoom);
+  }, disableZoom);
 
   useImperativeHandle(
     ref,
@@ -399,6 +496,17 @@ export const MxlScore = forwardRef<
     osmd.Zoom = engravingZoom;
     osmd.updateGraphic();
     osmd.render();
+    ez.clearPreview();
+    // Scroll so the part of the score the gesture was aimed at lands back
+    // under the fingers, instead of wherever the reflow happened to put it.
+    const focus = pendingFocus.current;
+    pendingFocus.current = null;
+    const host = hostRef.current;
+    const scroller = host && focus ? scrollParentOf(host) : null;
+    if (host && focus && scroller) {
+      const rect = host.getBoundingClientRect();
+      scroller.scrollTop += rect.top + focus.ratio * rect.height - focus.clientY;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engravingZoom, status]);
 
@@ -436,7 +544,7 @@ export const MxlScore = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ez.el, status]);
 
-  const zoomedOffDefault = Math.abs(engravingZoom * ez.previewScale - 1) > 0.02;
+  const zoomedOffDefault = Math.abs(engravingZoom - 1) > 0.02;
 
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
@@ -461,6 +569,8 @@ export const MxlScore = forwardRef<
           width: "100%",
           touchAction: "pan-y",
           borderRadius: 8,
+          // Clips the pinch preview, which scales past the container's edges.
+          overflow: "hidden",
           // Real sheet music is printed on white paper regardless of the
           // app's theme — like a PDF viewer, the page stays white/black even
           // in Stage Dark, rather than trying to re-theme the engraving.
@@ -478,10 +588,11 @@ export const MxlScore = forwardRef<
       >
         {/* The preview scale is a stand-in for the next real layout, not a
             substitute for it — it stretches the CURRENT (soon-to-be-stale)
-            render from its own center so a gesture still feels continuous
-            between the ~110ms-apart real re-layouts, then snaps back to
-            transform:none the instant that real layout lands. */}
-        <div style={{ transform: ez.previewScale !== 1 ? `scale(${ez.previewScale})` : undefined, transformOrigin: "50% 0" }}>
+            render from the point between the fingers while the gesture is in
+            flight, then is cleared the instant the real layout lands. Its
+            transform is written directly by useEngravingZoom, not via React
+            state, so a pinch doesn't re-render this component every frame. */}
+        <div ref={ez.previewRef} style={{ willChange: "transform" }}>
           <div ref={hostRef} />
         </div>
       </div>
