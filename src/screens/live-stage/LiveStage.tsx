@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useStore, activeSetlistSongIds } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
@@ -21,6 +22,40 @@ const SWIPE_THRESHOLD = 50;
 const TAP_SLOP = 10;
 // Matches the double-tap window PdfPages/MxlScore use to reset zoom.
 const DOUBLE_TAP_MS = 320;
+
+/** The chart pane's width in portrait, kept when the device turns to
+ * landscape (the extra width becomes margin either side). Marks sit at
+ * pixel positions over the chart, and a PDF/photo scales with its width
+ * while a score or chord chart reflows to it, so a chart that followed the
+ * screen width would change size under its marks on every rotation. Also
+ * returns the pane's current width, the most room there is to lay out in.
+ * Native reads the physical screen rather than the web view, which shrinks
+ * when the on-screen keyboard opens (typing a text mark). */
+function usePortraitWidth(scrollRef: React.RefObject<HTMLDivElement | null>, mounted: boolean) {
+  const [widths, setWidths] = useState<{ portrait: number; pane: number } | null>(null);
+  useLayoutEffect(() => {
+    const pane = scrollRef.current;
+    if (!pane) return;
+    const device = pane.closest<HTMLElement>(".device") ?? document.documentElement;
+    const measure = () => {
+      const shortSide = Capacitor.isNativePlatform()
+        ? Math.min(window.screen.width, window.screen.height)
+        : Math.min(device.clientWidth, device.clientHeight);
+      const paneWidth = pane.clientWidth;
+      const portrait = Math.round(Math.min(shortSide, paneWidth));
+      setWidths((prev) =>
+        portrait > 0 && (prev?.portrait !== portrait || prev.pane !== paneWidth) ? { portrait, pane: paneWidth } : prev
+      );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(device);
+    ro.observe(pane);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
+  return widths;
+}
 
 export function LiveStage() {
   const { state, dispatch } = useStore();
@@ -46,9 +81,17 @@ export function LiveStage() {
 
   const dockOpen = stage.drawer === "annotate";
   const annotationView: AnnotationView = stage.view === "chords" ? "chords" : activeKind ?? "chords";
-  // The chart's scroll container: its width is the content width marks
-  // are laid out against (see Song.annotationWidths).
+  // The chart's scroll container. The chart inside it is laid out at
+  // `layoutWidth`, the content width marks are placed against (see
+  // Song.annotationWidths).
   const chartScrollRef = useRef<HTMLDivElement | null>(null);
+  const paneWidths = usePortraitWidth(chartScrollRef, Boolean(song));
+  // A view marked before the chart kept its portrait width (e.g. in
+  // landscape on a tablet) stays at the width it was marked at while that
+  // fits, so those marks keep lining up too.
+  const markedWidth = song?.annotationWidths?.[annotationView];
+  const layoutWidth =
+    paneWidths && markedWidth && markedWidth <= paneWidths.pane ? markedWidth : paneWidths?.portrait ?? null;
   const annotateSession = useAnnotateSession({
     song: song ?? null,
     open: dockOpen,
@@ -57,7 +100,7 @@ export function LiveStage() {
     // fallback in `content` below — there's no real chart to attribute
     // marks to then.
     noAnnotationTarget: stage.view === "sheet" && activeKind === undefined,
-    contentWidth: () => chartScrollRef.current?.clientWidth ?? null,
+    contentWidth: () => layoutWidth,
     onClose: () => dispatch({ type: "STAGE_OPEN_DRAWER", drawer: null }),
   });
 
@@ -125,9 +168,9 @@ export function LiveStage() {
   // is the best guess, recorded once so export can place them.
   useEffect(() => {
     if (!song) return;
-    const synced = syncAnnotationWidths(song, chartScrollRef.current?.clientWidth ?? null);
+    const synced = syncAnnotationWidths(song, layoutWidth);
     if (synced !== song) dispatch({ type: "UPDATE_SONG", song: synced });
-  }, [song, dispatch]);
+  }, [song, layoutWidth, dispatch]);
 
   if (!song) {
     return (
@@ -392,15 +435,17 @@ export function LiveStage() {
         onPointerDown={onChartPointerDown}
         onPointerUp={onChartPointerUp}
       >
-        <AnnotateCanvas
-          {...(dockOpen
-            ? annotateSession.canvasProps
-            : { annotations: persistedAnnotations, interactive: false, onCommit: () => {}, onReproject: onReprojectPersisted })}
-          scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
-          reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
-        >
-          {content}
-        </AnnotateCanvas>
+        <div style={{ width: layoutWidth ?? "100%", margin: "0 auto" }}>
+          <AnnotateCanvas
+            {...(dockOpen
+              ? annotateSession.canvasProps
+              : { annotations: persistedAnnotations, interactive: false, onCommit: () => {}, onReproject: onReprojectPersisted })}
+            scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
+            reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
+          >
+            {content}
+          </AnnotateCanvas>
+        </div>
       </div>
 
       {dockOpen ? (

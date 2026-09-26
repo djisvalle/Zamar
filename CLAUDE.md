@@ -92,7 +92,9 @@ the tension rather than silently picking one.
   type; `Song.notes` is the per-song "Cues" text. Annotate is an overlay on the persistent
   Live Stage (`AnnotateOverlay.tsx` + `components/AnnotateCanvas.tsx`, helpers in
   `utils/annotations.ts`). See `docs/superpowers/specs/2026-09-23-annotate-as-overlay-design.md`
-  and `docs/annotate-mode-roadmap.md`.
+  and `docs/annotate-mode-roadmap.md`. Marks are pixel positions, so Live Stage lays the chart
+  out at the device's portrait width in both orientations (`usePortraitWidth` in
+  `LiveStage.tsx`); landscape adds side margins instead of rescaling or reflowing the chart.
 
 ## Screens (`src/screens/<area>/`)
 
