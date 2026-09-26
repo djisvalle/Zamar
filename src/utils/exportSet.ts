@@ -339,7 +339,7 @@ const STAGE_SIDE = 14;
 const STAGE_TOP = 24;
 /** The photo's 1px border on stage, inside its width. */
 const STAGE_IMAGE_BORDER = 1;
-/** Gap under each PDF page on stage (PdfPages.tsx). */
+/** Gap between PDF pages on stage (`.pdf-page` in theme.css). */
 const STAGE_PDF_GAP = 8;
 
 /** A song's marks on one view, and the content width they were made at. */
