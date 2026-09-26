@@ -17,6 +17,10 @@ import { AnnotateToolbar, useAnnotateSession } from "./AnnotateOverlay";
 
 const IDLE_MS = 6000;
 const SWIPE_THRESHOLD = 50;
+// A tap that drifts further than this is a scroll/drag, not a tap.
+const TAP_SLOP = 10;
+// Matches the double-tap window PdfPages/MxlScore use to reset zoom.
+const DOUBLE_TAP_MS = 320;
 
 export function LiveStage() {
   const { state, dispatch } = useStore();
@@ -31,6 +35,8 @@ export function LiveStage() {
   const [reprojectTick, setReprojectTick] = useState(0);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const swipeStartX = useRef<number | null>(null);
+  const tapStart = useRef<{ x: number; y: number } | null>(null);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const song = stage.songId ? state.songs.find((s) => s.id === stage.songId) : null;
   const hasChords = Boolean(song && song.chordpro.trim());
@@ -109,6 +115,7 @@ export function LiveStage() {
     resetIdle();
     return () => {
       if (idleTimer.current) clearTimeout(idleTimer.current);
+      if (tapTimer.current) clearTimeout(tapTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage.songId, stage.drawer]);
@@ -221,8 +228,49 @@ export function LiveStage() {
     goToSongOffset(dx < 0 ? 1 : -1);
   };
 
-  const onScreenClick = () => {
-    resetIdle();
+  const hideChromeNow = () => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    dispatch({ type: "STAGE_SET_CHROME_HIDDEN", hidden: true });
+  };
+
+  // Recorded in the capture phase: PdfPages/MxlScore stop propagation of
+  // their own pan/pinch pointer events, and a tap still needs its start.
+  const onChartPointerDownCapture = (e: React.PointerEvent) => {
+    tapStart.current = { x: e.clientX, y: e.clientY };
+  };
+
+  // Tapping empty chart space toggles the chrome (tab bar, music toolbar)
+  // right away, like iOS Photos, instead of waiting out IDLE_MS. Any other
+  // tap on the screen just wakes it.
+  const onScreenClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const start = tapStart.current;
+    tapStart.current = null;
+    const onChart = chartScrollRef.current?.contains(target) ?? false;
+    const onControl = Boolean(target.closest("button, a, input, textarea, select, [role='button']"));
+    const moved = start ? Math.hypot(e.clientX - start.x, e.clientY - start.y) > TAP_SLOP : false;
+    if (!onChart || onControl || dockOpen || moved) {
+      resetIdle();
+      return;
+    }
+    const toggle = () => {
+      tapTimer.current = null;
+      if (stage.chromeHidden) resetIdle();
+      else hideChromeNow();
+    };
+    // A PDF or score resets its zoom on double-tap; wait out that window so
+    // a double-tap doesn't also flash the chrome off and on.
+    const doubleTapZooms = stage.view === "sheet" && (activeKind === "pdf" || activeKind === "musicxml");
+    if (!doubleTapZooms) {
+      toggle();
+      return;
+    }
+    if (tapTimer.current) {
+      clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      return;
+    }
+    tapTimer.current = setTimeout(toggle, DOUBLE_TAP_MS);
   };
 
   // The one chart instance on Live Stage. It sits at the same place in the
@@ -340,6 +388,7 @@ export function LiveStage() {
         ref={chartScrollRef}
         className="flex-1 hidden-scroll scroll-under-tabs no-tab-spacer"
         style={{ paddingBottom: 150, touchAction: "pan-y" }}
+        onPointerDownCapture={onChartPointerDownCapture}
         onPointerDown={onChartPointerDown}
         onPointerUp={onChartPointerUp}
       >
