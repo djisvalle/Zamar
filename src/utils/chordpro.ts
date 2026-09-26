@@ -8,6 +8,8 @@ export { keySemitoneShift, noteIndex, type KeyChange } from "./keys";
  * unchanged; findChordProIssues reports those in the editor so they don't
  * get skipped silently. */
 export function transposeChord(chord: string, change: KeyChange): string {
+  // A passing move written as one symbol ("Bb/F-F") moves each chord.
+  if (chord.includes("-")) return chord.split("-").map((part) => transposeChord(part, change)).join("-");
   const m = chord.match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/);
   if (!m) return chord;
   const root = transposeNote(m[1], change);
@@ -46,13 +48,21 @@ const CHORD_TOKEN_RE = /^[A-G][#b]?(?:maj|min|dim|aug|sus|add|m)?\d{0,2}(?:[#b]\
 const SECTION_LABEL_RE =
   /^(verse|chorus|pre-?chorus|bridge|tag|intro|outro|interlude|refrain|ending|coda|vamp|instrumental|breakdown)\s*\d*:?\s*$/i;
 
+const BAR_RE = /^\|+$/;
+
+/** One token of a chord line: a chord symbol, chords joined by "-" for a
+ * passing move ("Bb/F-F"), or a bar line ("|"). */
+function isChordToken(tok: string): boolean {
+  return BAR_RE.test(tok) || tok.split("-").every((part) => CHORD_TOKEN_RE.test(part));
+}
+
 /** A "chords over lyrics" chord line: every whitespace-separated token
- * looks like a chord symbol (e.g. "G       D       Em"), as opposed to a
- * bracketed ChordPro line or a plain lyric line. */
+ * looks like a chord symbol (e.g. "G       D       Em", or "C  |  F" with a
+ * bar line), as opposed to a bracketed ChordPro line or a plain lyric line. */
 export function isChordLine(line: string): boolean {
   const trimmed = line.trim();
-  if (!trimmed) return false;
-  return trimmed.split(/\s+/).every((tok) => CHORD_TOKEN_RE.test(tok));
+  if (!trimmed || BAR_RE.test(trimmed)) return false;
+  return trimmed.split(/\s+/).every(isChordToken);
 }
 
 /** A standalone structural keyword line — "Verse", "Verse 1", "Chorus",
@@ -114,6 +124,8 @@ export function extractChordLineChords(text: string): string[] {
     line
       .trim()
       .split(/\s+/)
+      .filter((tok) => !BAR_RE.test(tok))
+      .flatMap((tok) => tok.split("-"))
       .forEach((tok) => {
         if (!seen.includes(tok)) seen.push(tok);
       });

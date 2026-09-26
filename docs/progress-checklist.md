@@ -218,8 +218,11 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] "Sheet music" declaration path is fully real end-to-end (file stored and rendered later
       on Live Stage, no simulation involved)
 - [x] "Chords & lyrics" conversion is real (`utils/chartImport.ts`): pdf.js reads a PDF's text
-      layer; photos and scanned PDFs go through bundled, offline Tesseract OCR, with chord rows
-      re-read using a chord-only character set. Header fills title/artist/key/tempo/time.
+      layer; photos and scanned PDFs go through bundled, offline Tesseract OCR. Small images
+      are upscaled and stretched to high-contrast grey first (colored chords, highlighted
+      section labels), chord rows are re-read using a chord-only character set, and any chord
+      or chord row still missing is re-read patch by patch. Chord lines may carry bar lines
+      ("C | F") and passing moves ("Bb/F-F"). Header fills title/artist/key/tempo/time.
       No-text files get a real error with "keep it as a PDF/photo". Sheet-vs-chords is still
       declared by the user, not detected.
 
