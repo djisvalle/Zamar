@@ -29,21 +29,18 @@ export function syncAnnotationWidths(song: Song, width: number | null): Song {
   return { ...song, annotationWidths: next };
 }
 
-/** Draws a smoothed polyline through `pts` (quadratic curves through the
- * midpoints), the way finished pen and highlighter strokes are shown. */
-export function traceSmooth(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+/** Draws a pen or highlighter stroke through exactly the points it was
+ * drawn with. Strokes are recorded from every touch sample and then
+ * reduced to within STROKE_SIMPLIFY_TOLERANCE of that path, so straight
+ * segments between the kept points are faithful to the hand. Curving
+ * through the midpoints instead (as this used to) rounded off every corner,
+ * since after reduction the kept points are mostly the corners. */
+export function tracePath(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
-  if (pts.length < 3) {
-    for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
-    return;
-  }
-  for (let i = 1; i < pts.length - 1; i++) {
-    const mid = { x: (pts[i].x + pts[i + 1].x) / 2, y: (pts[i].y + pts[i + 1].y) / 2 };
-    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
-  }
-  const last = pts[pts.length - 1];
-  ctx.lineTo(last.x, last.y);
+  // A tap leaves one point; a zero-length segment still draws a round dot.
+  if (pts.length === 1) ctx.lineTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
 }
 export const ERASE_RADIUS = 14;
 /** Pin badges are bigger than a stroke's hit radius (see `AnnotateCanvas.tsx`'s

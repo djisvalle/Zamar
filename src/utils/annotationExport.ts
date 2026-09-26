@@ -1,5 +1,5 @@
 import type { AnnotationObject, MusicalAnchor, Pin, ShapeMark, Stroke, TextMark } from "../state/types";
-import { isLineShape, isPin, isShapeMark, isStroke, noteBox, SHAPE_ASPECT, stickyColor, STICKY_TEXT_COLOR, STROKE_WIDTH, traceSmooth } from "./annotations";
+import { isLineShape, isPin, isShapeMark, isStroke, noteBox, SHAPE_ASPECT, stickyColor, STICKY_TEXT_COLOR, STROKE_WIDTH, tracePath } from "./annotations";
 import { notationSymbol, SMUFL_SIZE_SCALE } from "./notation";
 
 /** Draws a song's marks onto an export canvas the way Live Stage shows
@@ -64,7 +64,7 @@ function paintStroke(g: CanvasRenderingContext2D, s: Stroke, map: PointMap, scal
     const [a, b] = pts;
     g.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   } else {
-    traceSmooth(g, pts);
+    tracePath(g, pts);
     g.stroke();
   }
   g.restore();

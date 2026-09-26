@@ -27,7 +27,7 @@ import {
   stickyColor,
   STROKE_WIDTH,
   textMarkHalfExtents,
-  traceSmooth,
+  tracePath,
   translateObject,
   unionBounds,
   type Bounds,
@@ -130,9 +130,7 @@ function marksOf(annotations: AnnotationObject[]): (TextMark | ShapeMark)[] {
   return annotations.filter(isMark);
 }
 
-/** Traces a freehand polyline as quadratic curves through the midpoints
- * between samples (each sample is the control point), so a simplified
- * stroke still reads as a smooth line instead of visible straight segments. */
+/** Draws a stroke (see tracePath for why it goes through its exact points). */
 function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvasElement, offset?: { x: number; y: number }) {
   ctx.strokeStyle = s.color ?? resolveAccentColor(canvas);
   ctx.lineWidth = s.size ?? STROKE_WIDTH;
@@ -145,7 +143,7 @@ function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTMLCanvas
     const [a, b] = pts;
     ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   } else if (pts.length > 0) {
-    traceSmooth(ctx, pts);
+    tracePath(ctx, pts);
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
@@ -170,7 +168,7 @@ function drawSelectionHalo(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTM
     const [a, b] = pts;
     ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   } else if (pts.length > 0) {
-    traceSmooth(ctx, pts);
+    tracePath(ctx, pts);
     ctx.stroke();
   }
   ctx.restore();
@@ -311,7 +309,13 @@ export function AnnotateCanvas({
   children: ReactNode;
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Holds only the stroke being drawn, so each finger movement repaints one
+  // stroke instead of every stroke on the page.
+  const liveRef = useRef<HTMLCanvasElement | null>(null);
+  const liveFrame = useRef<number | null>(null);
+  const liveBounds = useRef<Bounds | null>(null);
   const draft = useRef<Stroke | null>(null);
   const activePointer = useRef<number | null>(null);
   // The Select tool's gesture in progress: a press on one or more stacked
@@ -372,13 +376,20 @@ export function AnnotateCanvas({
   // exempt from the lock (it reprojects instead) and can itself change a
   // score's line-wrap height, so staying attached also keeps the canvas
   // sized correctly across a transpose, not just at mount.
+  //
+  // Measures the wrapped content alone. Measuring the wrapper's scrollHeight
+  // counted this canvas too, so the canvas could grow but never shrink: after
+  // a score was zoomed in and back out it stayed at the taller height,
+  // leaving a long blank area to scroll through below the last system.
   useEffect(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
-    const measure = () => setSize({ width: el.clientWidth, height: el.scrollHeight });
+    const wrap = wrapperRef.current;
+    const content = contentRef.current;
+    if (!wrap || !content) return;
+    const measure = () => setSize({ width: wrap.clientWidth, height: content.offsetHeight });
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(wrap);
+    ro.observe(content);
     return () => ro.disconnect();
   }, []);
 
@@ -391,12 +402,14 @@ export function AnnotateCanvas({
       if (selection.includes(s.id)) drawSelectionHalo(ctx, s, canvas, offsetFor(s.id));
     }
     for (const s of strokesOf(annotations)) drawStroke(ctx, s, canvas, offsetFor(s.id));
-    if (draft.current) drawStroke(ctx, draft.current, canvas);
-    // draft.current is a ref (mutated imperatively by the pointer handlers
-    // below, not React state) so it isn't itself a dependency — this effect
-    // re-runs whenever `annotations`/`size`/`dragPreview`/`selectedId` change,
-    // and the handlers call the canvas's 2D context directly for the
-    // in-progress preview in between.
+    // The stroke in progress lives on the live layer (see paintLive). Once
+    // it's committed it's drawn above with the rest, so the live layer is
+    // cleared in the same frame and the stroke never flickers.
+    if (!draft.current) {
+      const live = liveRef.current;
+      if (live) beginPaint(live);
+      liveBounds.current = null;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annotations, size, dragPreview, selectedId, multiSelectedIds]);
 
@@ -531,6 +544,18 @@ export function AnnotateCanvas({
       eraseAt(p);
       return;
     }
+    // Tapping an existing note with the Sticky note tool, or existing text
+    // with the Text tool, types into it rather than starting a new one on
+    // top of it.
+    if (tool === "pin" || tool === "text") {
+      const hit = annotations.find((a) => a.id === hitsAt(p, annotations, SELECT_HIT_RADIUS)[0]);
+      const editable = hit && (tool === "pin" ? (isPin(hit) ? hit : null) : isFreeText(hit) ? hit : null);
+      if (editable) {
+        e.preventDefault();
+        startInlineEdit(editable);
+        return;
+      }
+    }
     if (tool === "pin") {
       e.preventDefault();
       const x = Math.max(0, Math.min(p.x, size.width - NOTE_WIDTH));
@@ -598,21 +623,54 @@ export function AnnotateCanvas({
     }
     capture(e);
     activePointer.current = e.pointerId;
-    // All-or-nothing per stroke: if the very first point can't anchor (the
-    // score isn't ready yet), the whole stroke stays pixel-only rather than
-    // a partially-anchored array — mixing anchored and unanchored points
-    // within one stroke isn't a state reprojection needs to handle.
-    const firstAnchor = scoreRef?.current?.anchorAtClientPoint(e.clientX, e.clientY);
     const style = tool === "highlighter" ? highlighterStyle : penStyle;
+    // Anchors to the score's measures are worked out once, on release (see
+    // anchorStroke) — per point while drawing, the measure search made every
+    // movement slower.
     draft.current = {
       id: `stroke-${Date.now()}`,
       tool,
       points: [p],
-      anchors: firstAnchor ? [firstAnchor] : undefined,
       color: style.color,
       size: style.size,
       opacity: style.opacity,
     };
+    paintLive();
+  };
+
+  /** Repaints the live layer with the stroke in progress, at most once per
+   * frame. */
+  const paintLive = () => {
+    if (liveFrame.current !== null) return;
+    liveFrame.current = requestAnimationFrame(() => {
+      liveFrame.current = null;
+      const live = liveRef.current;
+      const d = draft.current;
+      const ctx = live?.getContext("2d");
+      if (!live || !ctx || !d) return;
+      // Clear only around the stroke (and where a rectangle stroke was last
+      // frame): wiping the whole page-sized layer every frame is most of the
+      // cost on a high-density tablet screen.
+      const pad = (d.size ?? STROKE_WIDTH) + 4;
+      const b = objectBounds(d);
+      const area = unionBounds([{ left: b.left - pad, top: b.top - pad, right: b.right + pad, bottom: b.bottom + pad }, ...(liveBounds.current ? [liveBounds.current] : [])])!;
+      liveBounds.current = area;
+      const scale = live.width / Math.max(live.clientWidth, 1);
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      ctx.clearRect(area.left, area.top, area.right - area.left, area.bottom - area.top);
+      drawStroke(ctx, d, live);
+    });
+  };
+
+  /** Gives a finished stroke on a score one measure anchor per point, so
+   * it follows the music through a transpose. All-or-nothing: if any point
+   * can't anchor (the score isn't ready), the stroke stays pixel-only. */
+  const anchorStroke = (stroke: Stroke): Stroke => {
+    const handle = scoreRef?.current;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!handle || !rect) return stroke;
+    const anchors = stroke.points.map((pt) => handle.anchorAtClientPoint(rect.left + pt.x, rect.top + pt.y));
+    return anchors.every((a) => a) ? { ...stroke, anchors: anchors as NonNullable<Stroke["anchors"]> } : stroke;
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -648,7 +706,14 @@ export function AnnotateCanvas({
       if (leadObj && isMark(leadObj) && leadObj.kind === "text") {
         d.dy = snapY(leadObj.position.y + d.dy, textMarkHalfExtents(leadObj).halfH) - leadObj.position.y;
       }
-      setDragPreview({ ids: d.ids, dx: d.dx, dy: d.dy });
+      // Moving a selection repaints the canvas, so do it once per frame.
+      if (liveFrame.current === null) {
+        liveFrame.current = requestAnimationFrame(() => {
+          liveFrame.current = null;
+          const g = selectGesture.current;
+          if (g && g.kind === "drag") setDragPreview({ ids: g.ids, dx: g.dx, dy: g.dy });
+        });
+      }
       return;
     }
     if (tool === "notation") {
@@ -656,30 +721,23 @@ export function AnnotateCanvas({
       return;
     }
     if (tool === "shapes") return;
-    if (!draft.current) return;
-    // A later point failing to anchor (point strayed off any measure and
-    // findNearestMeasureAnchor still found *something* nearest, so this
-    // really only happens if the score dropped out of "ready" mid-gesture)
-    // drops anchoring for the whole stroke rather than leaving a gap in the
-    // array — same all-or-nothing reasoning as the first point above.
-    const anchor = draft.current.anchors && scoreRef?.current?.anchorAtClientPoint(e.clientX, e.clientY);
-    draft.current =
-      tool === "square"
-        ? { ...draft.current, points: [draft.current.points[0], p], anchors: anchor ? [draft.current.anchors![0], anchor] : undefined }
-        : {
-            ...draft.current,
-            points: [...draft.current.points, p],
-            anchors: anchor ? [...draft.current.anchors!, anchor] : undefined,
-          };
-    // Repaint immediately for a live preview of the in-progress stroke —
-    // `annotations`/`size` haven't changed, so the effect above won't
-    // re-run on its own until the gesture finishes.
-    const canvas = canvasRef.current;
-    const ctx = canvas && beginPaint(canvas);
-    if (canvas && ctx && draft.current) {
-      for (const s of strokesOf(annotations)) drawStroke(ctx, s, canvas);
-      drawStroke(ctx, draft.current, canvas);
+    const d = draft.current;
+    if (!d) return;
+    if (tool === "square") {
+      d.points = [d.points[0], p];
+    } else {
+      // Every sample the screen reported since the last event, not just the
+      // latest: a fast stroke otherwise keeps one point per frame, and the
+      // curve through those sparse points cuts corners.
+      const rect = canvasRef.current!.getBoundingClientRect();
+      const samples = e.nativeEvent.getCoalescedEvents?.() ?? [];
+      if (samples.length > 0) {
+        for (const c of samples) d.points.push({ x: c.clientX - rect.left, y: c.clientY - rect.top });
+      } else {
+        d.points.push(p);
+      }
     }
+    paintLive();
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -787,10 +845,14 @@ export function AnnotateCanvas({
       return;
     }
 
-    if (draft.current && draft.current.points.length > 0) {
-      onCommit([...annotations, simplifyStroke(draft.current)]);
-    }
+    const finished = draft.current;
     draft.current = null;
+    if (finished && finished.points.length > 0) {
+      onCommit([...annotations, anchorStroke(simplifyStroke(finished))]);
+    } else if (liveRef.current) {
+      beginPaint(liveRef.current);
+      liveBounds.current = null;
+    }
   };
 
   // ---------- sticky notes and text fields ----------
@@ -954,7 +1016,7 @@ export function AnnotateCanvas({
 
   return (
     <div ref={wrapperRef} style={{ position: "relative" }}>
-      {children}
+      <div ref={contentRef}>{children}</div>
       <canvas
         ref={canvasRef}
         width={Math.round(size.width * pixelScale)}
@@ -972,6 +1034,12 @@ export function AnnotateCanvas({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+      />
+      <canvas
+        ref={liveRef}
+        width={Math.round(size.width * pixelScale)}
+        height={Math.round(size.height * pixelScale)}
+        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: size.height, pointerEvents: "none" }}
       />
       {/* Placement/select tools still need to know where on the chart was
           tapped, even though the canvas itself ignores pointer events while
