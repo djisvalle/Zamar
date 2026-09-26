@@ -36,6 +36,7 @@ import type { MxlScoreHandle } from "./MxlScore";
 import { Icon, type IconName } from "./Icon";
 import { SmuflGlyph } from "./SmuflGlyph";
 import { notationSymbol, SMUFL_SIZE_SCALE } from "../utils/notation";
+import { screenScaleOf } from "../utils/screenScale";
 
 export type AnnotateTool = "select" | "pen" | "highlighter" | "square" | "pin" | "text" | "notation" | "shapes" | "eraser";
 
@@ -179,10 +180,11 @@ function drawSelectionHalo(ctx: CanvasRenderingContext2D, s: Stroke, canvas: HTM
  * limits and render nothing at all. */
 const MAX_CANVAS_EDGE = 16384;
 
-/** Backing-store pixels per CSS pixel: the screen's density, scaled down
- * only as far as needed to keep both edges under MAX_CANVAS_EDGE. */
-function canvasScale(size: { width: number; height: number }): number {
-  const dpr = Math.max(window.devicePixelRatio || 1, 1);
+/** Backing-store pixels per CSS pixel: the screen's density (times any
+ * magnification of the chart, see `screenScaleOf`), scaled down only as
+ * far as needed to keep both edges under MAX_CANVAS_EDGE. */
+function canvasScale(size: { width: number; height: number }, screenScale: number): number {
+  const dpr = Math.max(window.devicePixelRatio || 1, 1) * screenScale;
   const longest = Math.max(size.width, size.height, 1);
   return Math.min(dpr, MAX_CANVAS_EDGE / longest);
 }
@@ -222,6 +224,7 @@ export function AnnotateCanvas({
   scrollMode = false,
   scoreRef,
   reprojectSignal,
+  screenScale = 1,
   penStyle = { color: PALETTE_PAGES[0][0], size: STROKE_WIDTH, opacity: 1 },
   highlighterStyle = { color: PALETTE_PAGES[0][2], size: 16, opacity: 0.3 },
   markStyle = { color: PALETTE_PAGES[0][3], size: 20 },
@@ -292,6 +295,10 @@ export function AnnotateCanvas({
   /** Changes value whenever the score behind `scoreRef` just re-rendered
    * from a transpose — triggers a reprojection pass via `onReproject`. */
   reprojectSignal?: number;
+  /** How far the chart (this layer included) is magnified on screen — see
+   * screenScaleOf. Pointer input measures it from the DOM; this copy only
+   * sizes the ink canvases' backing stores so magnified ink stays sharp. */
+  screenScale?: number;
   /** Style newly drawn pen/square strokes pick up. */
   penStyle?: InkStyle;
   highlighterStyle?: InkStyle;
@@ -417,7 +424,28 @@ export function AnnotateCanvas({
       liveBounds.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotations, size, dragPreview, selectedId, multiSelectedIds]);
+  }, [annotations, size, screenScale, dragPreview, selectedId, multiSelectedIds]);
+
+  // Client (screen) and content coordinates differ by the chart's
+  // magnification as well as its offset — see screenScaleOf.
+  const clientToContent = (clientX: number, clientY: number): { x: number; y: number } => {
+    const wrap = wrapperRef.current!;
+    const rect = wrap.getBoundingClientRect();
+    const k = screenScaleOf(wrap);
+    return { x: (clientX - rect.left) / k, y: (clientY - rect.top) / k };
+  };
+  const contentToClient = (p: { x: number; y: number }): { clientX: number; clientY: number } => {
+    const wrap = wrapperRef.current!;
+    const rect = wrap.getBoundingClientRect();
+    const k = screenScaleOf(wrap);
+    return { clientX: rect.left + p.x * k, clientY: rect.top + p.y * k };
+  };
+  const anchorAtContent = (p: { x: number; y: number }) => {
+    const handle = scoreRef?.current;
+    if (!handle || !wrapperRef.current) return undefined;
+    const c = contentToClient(p);
+    return handle.anchorAtClientPoint(c.clientX, c.clientY) ?? undefined;
+  };
 
   // Reprojection: silently re-derives every anchored pin/mark/stroke's
   // on-screen position from the score's current layout after a
@@ -428,8 +456,7 @@ export function AnnotateCanvas({
     const handle = scoreRef?.current;
     const wrapperEl = wrapperRef.current;
     if (!handle || !wrapperEl || reprojectSignal === undefined) return;
-    const rect = wrapperEl.getBoundingClientRect();
-    const toContent = (client: { clientX: number; clientY: number }) => ({ x: client.clientX - rect.left, y: client.clientY - rect.top });
+    const toContent = (client: { clientX: number; clientY: number }) => clientToContent(client.clientX, client.clientY);
     let changed = false;
     const next = annotations.map((a) => {
       if (isPin(a) || isMark(a)) {
@@ -453,18 +480,12 @@ export function AnnotateCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reprojectSignal]);
 
-  const toContentPoint = (e: React.PointerEvent): { x: number; y: number } => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
+  const toContentPoint = (e: React.PointerEvent): { x: number; y: number } => clientToContent(e.clientX, e.clientY);
 
   // Same conversion as toContentPoint, but from raw client coordinates
   // rather than a PointerEvent — ShapeHandles' rotate handle needs this to
   // compute an angle from the shape's center, not just a delta.
-  const toContent = (clientX: number, clientY: number): { x: number; y: number } => {
-    const rect = wrapperRef.current!.getBoundingClientRect();
-    return { x: clientX - rect.left, y: clientY - rect.top };
-  };
+  const toContent = (clientX: number, clientY: number): { x: number; y: number } => clientToContent(clientX, clientY);
 
   const eraseAt = (p: { x: number; y: number }) => {
     const kept = annotations.filter((a) => !hitTestAnnotation(a, p, eraserSize));
@@ -501,10 +522,11 @@ export function AnnotateCanvas({
     const wrap = wrapperRef.current;
     if (!wrap || !snapToLyrics) return [];
     const top = wrap.getBoundingClientRect().top;
+    const k = screenScaleOf(wrap);
     return Array.from(wrap.querySelectorAll<HTMLElement>(".chart-line")).flatMap((line) => {
       const r = line.getBoundingClientRect();
-      const under = r.bottom - top;
-      const over = r.top - top;
+      const under = (r.bottom - top) / k;
+      const over = (r.top - top) / k;
       return [
         { centerY: under + SNAP_GAP + halfH, guideY: under },
         { centerY: over - SNAP_GAP - halfH, guideY: over },
@@ -700,10 +722,8 @@ export function AnnotateCanvas({
    * it follows the music through a transpose. All-or-nothing: if any point
    * can't anchor (the score isn't ready), the stroke stays pixel-only. */
   const anchorStroke = (stroke: Stroke): Stroke => {
-    const handle = scoreRef?.current;
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!handle || !rect) return stroke;
-    const anchors = stroke.points.map((pt) => handle.anchorAtClientPoint(rect.left + pt.x, rect.top + pt.y));
+    if (!scoreRef?.current || !wrapperRef.current) return stroke;
+    const anchors = stroke.points.map((pt) => anchorAtContent(pt));
     return anchors.every((a) => a) ? { ...stroke, anchors: anchors as NonNullable<Stroke["anchors"]> } : stroke;
   };
 
@@ -719,14 +739,13 @@ export function AnnotateCanvas({
     if (tool === "pin") {
       const x = Math.max(0, Math.min(p.x, size.width - NOTE_WIDTH));
       const y = Math.max(0, Math.min(p.y, size.height - NOTE_HEIGHT));
-      const wrapRect = wrapperRef.current?.getBoundingClientRect();
       const draft: Pin = {
         id: `pin-${Date.now()}`,
         kind: "pin",
         position: { x, y },
         text: "",
         color: noteColor,
-        anchor: (wrapRect && scoreRef?.current?.anchorAtClientPoint(wrapRect.left + x, wrapRect.top + y)) ?? undefined,
+        anchor: anchorAtContent({ x, y }),
       };
       openNote({ id: draft.id, isNew: true, draft });
       return;
@@ -817,10 +836,9 @@ export function AnnotateCanvas({
       // Every sample the screen reported since the last event, not just the
       // latest: a fast stroke otherwise keeps one point per frame, and the
       // curve through those sparse points cuts corners.
-      const rect = canvasRef.current!.getBoundingClientRect();
       const samples = e.nativeEvent.getCoalescedEvents?.() ?? [];
       if (samples.length > 0) {
-        for (const c of samples) d.points.push({ x: c.clientX - rect.left, y: c.clientY - rect.top });
+        for (const c of samples) d.points.push(clientToContent(c.clientX, c.clientY));
       } else {
         d.points.push(p);
       }
@@ -864,16 +882,14 @@ export function AnnotateCanvas({
       }
       if (g.kind === "drag") {
         if (Math.hypot(g.dx, g.dy) <= TAP_THRESHOLD) return;
-        const wrapRect = wrapperRef.current?.getBoundingClientRect();
         onCommit(
           annotations.map((a) => {
             if (!g.ids.includes(a.id)) return a;
             const moved = translateObject(a, g.dx, g.dy);
             // Marks and notes on a score re-anchor to the measure under their
             // new spot; strokes stay pixel-positioned once moved.
-            if ((isMark(moved) || isPin(moved)) && scoreRef?.current && wrapRect) {
-              const anchor = scoreRef.current.anchorAtClientPoint(wrapRect.left + moved.position.x, wrapRect.top + moved.position.y) ?? undefined;
-              return { ...moved, anchor };
+            if ((isMark(moved) || isPin(moved)) && scoreRef?.current) {
+              return { ...moved, anchor: anchorAtContent(moved.position) };
             }
             return moved;
           })
@@ -922,8 +938,7 @@ export function AnnotateCanvas({
       if (!start) return;
       if (tool === "shapes" && Math.hypot(p.x - start.x, p.y - start.y) > TAP_THRESHOLD) return;
       const at = tool === "shapes" ? start : ghost ?? p;
-      const wrapRect = wrapperRef.current?.getBoundingClientRect();
-      const anchor = (wrapRect && scoreRef?.current?.anchorAtClientPoint(wrapRect.left + at.x, wrapRect.top + at.y)) ?? undefined;
+      const anchor = anchorAtContent(at);
       const id = `mark-${Date.now()}`;
       if (tool === "shapes") {
         const mark: ShapeMark = { id, kind: "shape", position: start, shapeId: armedShape, color: shapeStyle.color, size: shapeStyle.size, anchor };
@@ -993,12 +1008,8 @@ export function AnnotateCanvas({
       if (!text) return;
       // Centre the mark on the field as it was drawn, so it lands exactly
       // where it was typed.
-      const wrapRect = wrapperRef.current?.getBoundingClientRect();
-      const at =
-        rect && wrapRect
-          ? { x: rect.left + rect.width / 2 - wrapRect.left, y: rect.top + rect.height / 2 - wrapRect.top }
-          : { x: edit.x, y: edit.y };
-      const anchor = (wrapRect && scoreRef?.current?.anchorAtClientPoint(wrapRect.left + at.x, wrapRect.top + at.y)) ?? undefined;
+      const at = rect && wrapperRef.current ? clientToContent(rect.left + rect.width / 2, rect.top + rect.height / 2) : { x: edit.x, y: edit.y };
+      const anchor = anchorAtContent(at);
       const mark: TextMark = { id: edit.id, kind: "text", position: at, text, color: edit.color, size: edit.size, anchor };
       onCommit([...annotations, mark]);
       return;
@@ -1107,7 +1118,7 @@ export function AnnotateCanvas({
   }, [tool, interactive, scrollMode]);
 
   const wrapWidth = wrapperRef.current?.clientWidth ?? size.width;
-  const pixelScale = canvasScale(size);
+  const pixelScale = canvasScale(size, screenScale);
   // Canvas ignores pointer events for tools that place/select via the
   // transparent overlay below (pin/select/text/notation/shapes) so it
   // doesn't also try to start an ink stroke.
@@ -1410,8 +1421,8 @@ function ShapeHandles({
   onRotate: (rotation: number) => void;
 }) {
   const resizeDrag = useRef<{
-    startClientX: number;
-    startClientY: number;
+    startX: number;
+    startY: number;
     startWidth: number;
     startSize: number;
     rotation: number;
@@ -1502,9 +1513,10 @@ function ShapeHandles({
       <div
         onPointerDown={(e) => {
           e.stopPropagation();
+          const start = toContent(e.clientX, e.clientY);
           resizeDrag.current = {
-            startClientX: e.clientX,
-            startClientY: e.clientY,
+            startX: start.x,
+            startY: start.y,
             startWidth: halfW * 2,
             startSize: mark.size,
             rotation,
@@ -1517,8 +1529,9 @@ function ShapeHandles({
         onPointerMove={(e) => {
           const d = resizeDrag.current;
           if (!d) return;
-          const rawDx = e.clientX - d.startClientX;
-          const rawDy = e.clientY - d.startClientY;
+          const p = toContent(e.clientX, e.clientY);
+          const rawDx = p.x - d.startX;
+          const rawDy = p.y - d.startY;
           const local = d.isLine ? rotateAround({ x: rawDx, y: rawDy }, { x: 0, y: 0 }, -d.rotation) : { x: rawDx, y: rawDy };
           const nextWidth = Math.max(16, d.startWidth + local.x * 2);
           const nextSize = d.isLine ? d.startSize : Math.max(16, d.startSize + local.y * 2);
@@ -1634,7 +1647,7 @@ function NoteHandle({
   onPreview: (size: { width: number; height: number } | null) => void;
   onResize: (width: number, height: number) => void;
 }) {
-  const drag = useRef<{ x: number; y: number; width: number; height: number; current: { width: number; height: number } } | null>(null);
+  const drag = useRef<{ x: number; y: number; k: number; width: number; height: number; current: { width: number; height: number } } | null>(null);
   const b = noteBox(pin);
   return (
     <div
@@ -1643,14 +1656,17 @@ function NoteHandle({
       style={{ left: b.left + b.width, top: b.top + b.height }}
       onPointerDown={(e) => {
         e.stopPropagation();
-        drag.current = { x: e.clientX, y: e.clientY, width: b.width, height: b.height, current: { width: b.width, height: b.height } };
+        // Pointer travel is in screen pixels; the note is sized in content
+        // pixels (see screenScaleOf).
+        const k = screenScaleOf(e.currentTarget.offsetParent as HTMLElement | null);
+        drag.current = { x: e.clientX, y: e.clientY, k, width: b.width, height: b.height, current: { width: b.width, height: b.height } };
         e.currentTarget.setPointerCapture?.(e.pointerId);
       }}
       onPointerMove={(e) => {
         const d = drag.current;
         if (!d) return;
-        const width = Math.max(NOTE_MIN_WIDTH, Math.min(d.width + e.clientX - d.x, Math.max(NOTE_MIN_WIDTH, maxRight - b.left)));
-        const height = Math.max(NOTE_MIN_HEIGHT, Math.min(d.height + e.clientY - d.y, Math.max(NOTE_MIN_HEIGHT, maxBottom - b.top)));
+        const width = Math.max(NOTE_MIN_WIDTH, Math.min(d.width + (e.clientX - d.x) / d.k, Math.max(NOTE_MIN_WIDTH, maxRight - b.left)));
+        const height = Math.max(NOTE_MIN_HEIGHT, Math.min(d.height + (e.clientY - d.y) / d.k, Math.max(NOTE_MIN_HEIGHT, maxBottom - b.top)));
         d.current = { width, height };
         onPreview(d.current);
       }}

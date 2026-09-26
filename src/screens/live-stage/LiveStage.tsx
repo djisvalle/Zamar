@@ -23,13 +23,12 @@ const TAP_SLOP = 10;
 // Matches the double-tap window PdfPages/MxlScore use to reset zoom.
 const DOUBLE_TAP_MS = 320;
 
-/** The chart pane's width in portrait, kept when the device turns to
- * landscape (the extra width becomes margin either side). Marks sit at
- * pixel positions over the chart, and a PDF/photo scales with its width
- * while a score or chord chart reflows to it, so a chart that followed the
- * screen width would change size under its marks on every rotation. Also
- * returns the pane's current width, the most room there is to lay out in.
- * Native reads the physical screen rather than the web view, which shrinks
+/** The chart pane's width in portrait, which the chart is laid out at in
+ * both orientations, plus the pane's current width, which it's magnified to
+ * fill. Marks sit at pixel positions over the chart, and a score or chord
+ * chart reflows to its width, so a chart laid out at the screen width would
+ * change under its marks on every rotation; magnifying one fixed layout
+ * keeps the page and its marks together, like zooming a page. Native reads the physical screen rather than the web view, which shrinks
  * when the on-screen keyboard opens (typing a text mark). */
 function usePortraitWidth(scrollRef: React.RefObject<HTMLDivElement | null>, mounted: boolean) {
   const [widths, setWidths] = useState<{ portrait: number; pane: number } | null>(null);
@@ -83,15 +82,29 @@ export function LiveStage() {
   const annotationView: AnnotationView = stage.view === "chords" ? "chords" : activeKind ?? "chords";
   // The chart's scroll container. The chart inside it is laid out at
   // `layoutWidth`, the content width marks are placed against (see
-  // Song.annotationWidths).
+  // Song.annotationWidths), then magnified by `chartScale` to fill the pane.
   const chartScrollRef = useRef<HTMLDivElement | null>(null);
   const paneWidths = usePortraitWidth(chartScrollRef, Boolean(song));
-  // A view marked before the chart kept its portrait width (e.g. in
-  // landscape on a tablet) stays at the width it was marked at while that
-  // fits, so those marks keep lining up too.
+  // A marked view keeps the width it was marked at (a landscape tablet, or
+  // another device), scaled up or down to this pane like any other chart.
   const markedWidth = song?.annotationWidths?.[annotationView];
-  const layoutWidth =
-    paneWidths && markedWidth && markedWidth <= paneWidths.pane ? markedWidth : paneWidths?.portrait ?? null;
+  const layoutWidth = markedWidth ?? paneWidths?.portrait ?? null;
+  const rawScale = paneWidths && layoutWidth ? paneWidths.pane / layoutWidth : 1;
+  // Snaps near-1 to exactly 1, so portrait isn't a hair off and blurred.
+  const chartScale = Math.abs(rawScale - 1) < 0.005 ? 1 : rawScale;
+  // The magnification is a transform, which doesn't change layout, so the
+  // pane's scroll height comes from the chart's measured height instead.
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const [chartHeight, setChartHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = chartRef.current;
+    if (!el) return;
+    const measure = () => setChartHeight(el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [Boolean(song)]);
   const annotateSession = useAnnotateSession({
     song: song ?? null,
     open: dockOpen,
@@ -435,16 +448,26 @@ export function LiveStage() {
         onPointerDown={onChartPointerDown}
         onPointerUp={onChartPointerUp}
       >
-        <div style={{ width: layoutWidth ?? "100%", margin: "0 auto" }}>
-          <AnnotateCanvas
-            {...(dockOpen
-              ? annotateSession.canvasProps
-              : { annotations: persistedAnnotations, interactive: false, onCommit: () => {}, onReproject: onReprojectPersisted })}
-            scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
-            reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
+        <div style={chartScale !== 1 && chartHeight !== null ? { height: chartHeight * chartScale, overflow: "hidden" } : undefined}>
+          <div
+            ref={chartRef}
+            style={{
+              width: layoutWidth ?? "100%",
+              transform: chartScale !== 1 ? `scale(${chartScale})` : undefined,
+              transformOrigin: "0 0",
+            }}
           >
-            {content}
-          </AnnotateCanvas>
+            <AnnotateCanvas
+              {...(dockOpen
+                ? annotateSession.canvasProps
+                : { annotations: persistedAnnotations, interactive: false, onCommit: () => {}, onReproject: onReprojectPersisted })}
+              scoreRef={annotationView === "musicxml" ? mxlScoreRef : undefined}
+              reprojectSignal={annotationView === "musicxml" ? reprojectTick : undefined}
+              screenScale={chartScale}
+            >
+              {content}
+            </AnnotateCanvas>
+          </div>
         </div>
       </div>
 

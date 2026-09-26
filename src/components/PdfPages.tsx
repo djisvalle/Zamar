@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+import { screenScaleOf } from "../utils/screenScale";
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
@@ -52,11 +53,17 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
         break;
       }
     }
-    const top = Math.max(0, viewTop - frameTop);
-    const bottom = Math.min(height, viewBottom - frameTop);
+    const k = frameScale();
+    const top = Math.max(0, (viewTop - frameTop) / k);
+    const bottom = Math.min(height, (viewBottom - frameTop) / k);
     const min = bottom - s * height;
     return Math.min(top, Math.max(min, y));
   };
+  /** Screen pixels per pixel of the page stack's own layout — more than 1
+   * where Live Stage magnifies the chart (see screenScaleOf). Pan and the
+   * pane bounds come in screen pixels; `translate` is in layout pixels.
+   * Measured on the frame, which the zoom transform doesn't touch. */
+  const frameScale = () => screenScaleOf(hostRef.current?.parentElement);
   const clampT = (t: { x: number; y: number }, s: number) => ({ x: clampX(t.x, s), y: clampY(t.y, s) });
 
   const reset = () => {
@@ -113,7 +120,8 @@ function usePanZoom(hostRef: React.RefObject<HTMLDivElement | null>, disableZoom
       setScale(next);
       setTranslate((t) => clampT(t, next));
     } else if (pointers.current.size === 1 && panStart.current) {
-      const next = { x: panStart.current.tx + (e.clientX - panStart.current.x), y: panStart.current.ty + (e.clientY - panStart.current.y) };
+      const k = frameScale();
+      const next = { x: panStart.current.tx + (e.clientX - panStart.current.x) / k, y: panStart.current.ty + (e.clientY - panStart.current.y) / k };
       setTranslate(clampT(next, scale));
     }
   };

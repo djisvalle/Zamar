@@ -93,8 +93,10 @@ the tension rather than silently picking one.
   Live Stage (`AnnotateOverlay.tsx` + `components/AnnotateCanvas.tsx`, helpers in
   `utils/annotations.ts`). See `docs/superpowers/specs/2026-09-23-annotate-as-overlay-design.md`
   and `docs/annotate-mode-roadmap.md`. Marks are pixel positions, so Live Stage lays the chart
-  out at the device's portrait width in both orientations (`usePortraitWidth` in
-  `LiveStage.tsx`); landscape adds side margins instead of rescaling or reflowing the chart.
+  out at one fixed width (the portrait width, or the width a view was marked at; `usePortraitWidth`
+  in `LiveStage.tsx`) and magnifies it with a CSS transform to fill the pane in either
+  orientation. Code inside the chart that turns pointer coordinates into content coordinates
+  must divide by `screenScaleOf` (`utils/screenScale.ts`).
 
 ## Screens (`src/screens/<area>/`)
 
