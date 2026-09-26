@@ -275,7 +275,10 @@ export function LiveStage() {
 
   return (
     <div className="screen" onClick={onScreenClick}>
-      <div className={"hdr" + (setlist ? " tinted" : "")} />
+      {/* Clears the status bar on device (0 in the dev frame, which draws its
+          own). No 44pt bar below it: Live Stage has no nav-bar content, and
+          the next-song line and progress bar already mark setlist mode. */}
+      <div style={{ flex: "none", height: "env(safe-area-inset-top, 0px)" }} />
 
       {setlist && (
         <div style={{ padding: "8px 14px 0" }}>
