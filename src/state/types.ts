@@ -150,7 +150,7 @@ export interface Song {
   title: string;
   artist: string;
   defaultKey: string;
-  tempo: number;
+  tempo: number; // BPM; 0 when not given
   timeSig: string;
   durationSec: number;
   favourite: boolean;

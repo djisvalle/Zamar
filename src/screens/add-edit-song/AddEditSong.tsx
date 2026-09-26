@@ -51,7 +51,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const initialMeta = readChartMeta(initialChordpro);
   const [title, setTitle] = useState(initialMeta.title ?? prefillTitle ?? existing?.title ?? "");
   const [artist, setArtist] = useState(initialMeta.artist ?? prefillArtist ?? existing?.artist ?? "");
-  const [tempo, setTempo] = useState(initialMeta.tempo ?? prefillTempo ?? (existing ? String(existing.tempo) : ""));
+  const [tempo, setTempo] = useState(initialMeta.tempo ?? prefillTempo ?? (existing?.tempo ? String(existing.tempo) : ""));
   const [timeSig, setTimeSig] = useState(initialMeta.timeSig ?? prefillTimeSig ?? existing?.timeSig ?? "4/4");
   const [manualKey, setManualKey] = useState(initialMeta.key ?? prefillManualKey ?? existing?.defaultKey ?? "");
   const [chordpro, setChordpro] = useState(initialChordpro);
@@ -173,9 +173,11 @@ export function AddEditSong({ songId }: { songId?: string }) {
     const song: Song = {
       id: existing?.id ?? `song-${Date.now()}`,
       title: title.trim(),
-      artist: artist.trim() || "Unknown",
+      // Artist and BPM stay blank when not given (0 = no tempo); only the
+      // time signature has a sensible default.
+      artist: artist.trim(),
       defaultKey: canonicalKey(effectiveKey || "C"),
-      tempo: Number(tempo) || 80,
+      tempo: Number(tempo) || 0,
       timeSig: timeSig.trim() || "4/4",
       durationSec: existing?.durationSec ?? 240,
       favourite: existing?.favourite ?? false,

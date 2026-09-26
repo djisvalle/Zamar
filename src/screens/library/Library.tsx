@@ -163,7 +163,7 @@ export function Library() {
                           <span>{s.title}</span>
                           <span className="key-chip">{s.defaultKey}</span>
                         </div>
-                        <div className="row-sub">{s.artist}</div>
+                        {s.artist && <div className="row-sub">{s.artist}</div>}
                       </div>
                       {!selectMode && (
                         <span
@@ -205,7 +205,7 @@ export function Library() {
         <Sheet onClose={() => setSheetFor(null)}>
           <div className="sheet-title">{sheetFor.title}</div>
           <div className="sheet-sub">
-            {sheetFor.artist} · {sheetFor.defaultKey}
+            {[sheetFor.artist, sheetFor.defaultKey].filter(Boolean).join(" · ")}
           </div>
           <div className="sheet-group">
           <button className="sheet-row" onClick={() => { openSong(sheetFor.id); setSheetFor(null); }}>

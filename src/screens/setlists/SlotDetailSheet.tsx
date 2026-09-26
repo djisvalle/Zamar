@@ -33,7 +33,7 @@ export function SlotDetailSheet({
       <div>
         <div className="sheet-title">{song.title}</div>
         <div className="sheet-sub" style={{ marginTop: 2 }}>
-          Slot {slotIndex + 1} · {song.artist} · library key {song.defaultKey}
+          {[`Slot ${slotIndex + 1}`, song.artist, `library key ${song.defaultKey}`].filter(Boolean).join(" · ")}
         </div>
       </div>
 

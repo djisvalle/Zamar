@@ -154,7 +154,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                       <span>{song.title}</span>
                     </div>
                     <div className="row-sub">
-                      {song.artist} · {song.tempo} BPM · {song.timeSig}
+                      {[song.artist, `${song.tempo || "N/A"} BPM`, song.timeSig].filter(Boolean).join(" · ")}
                     </div>
                     {item.note && (
                       <div className="row-note">

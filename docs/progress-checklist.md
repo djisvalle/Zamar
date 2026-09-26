@@ -169,6 +169,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Chord/Sheet toggle renders the real attached file — MusicXML via OpenSheetMusicDisplay,
       or photo/PDF via `<img>`/`PdfPages.tsx` (pdf.js) — with real pinch-to-zoom and drag-to-pan
 - [x] Setlist-mode next-song preview and progress bar in the stage header
+- [x] Each song opens at the top of its chart (the scroll position and PDF zoom no longer
+      carry over from the previous song), and a reprise's next-song line and progress bar
+      follow the slot on stage rather than the song's first slot
 
 ### Library
 - [x] A–Z grouped list, live search, filter chips
@@ -180,6 +183,8 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       events, so it works with touch in the iOS/Android web views; `useDragReorder.ts`).
       Attachment versions in Add/Edit Song reorder the same way
 - [x] Per-slot key/note override sheet, Add-to-set sheet (was a side drawer)
+- [x] Artist and BPM stay blank when not given (no more "Unknown"/80; tempo 0 = none),
+      time signature still defaults to 4/4; the run sheet shows "N/A BPM" for a blank tempo
 - [x] Drag a section's header grip to reorder sections (`MOVE_SECTION`), or Move up/down
       from its `⋯` sheet; songs keep their order within it and a live set stays on its song
 - [x] Adding lives in the detail toolbar ("+" → Add songs / Add section) so it stays in
