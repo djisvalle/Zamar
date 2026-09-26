@@ -198,6 +198,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Undo/redo for the chart text (↶ ↷ in the same bar, and Ctrl/⌘+Z, Ctrl/⌘+Shift+Z or
       Ctrl+Y): typing undoes in bursts, chip inserts and field-driven directive rewrites
       one at a time (`useTextHistory.ts`). History is per visit; it resets after Import
+- [x] Expand button in the same bar hides the tabs, song fields and format/Import row so
+      the chart editor fills the screen (quick-insert chips and Cancel/Save stay); a Save
+      with invalid fields collapses it again to show them
 - [x] Sheet Music tab appears once a song has an attachment, with remove-attachment action
 
 ### Import

@@ -61,6 +61,9 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [tab, setTab] = useState<"source" | "preview" | "notes" | AttachmentKind>("source");
   const [showErrors, setShowErrors] = useState(false);
+  // Chords/Lyrics editor expanded: the tabs, song fields and format/Import
+  // row are hidden so the chart gets nearly the whole screen.
+  const [expanded, setExpanded] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [importMethodOpen, setImportMethodOpen] = useState(false);
   const [versionSheetFor, setVersionSheetFor] = useState<{ kind: AttachmentKind; id: string; label: string } | null>(null);
@@ -164,6 +167,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
   const save = () => {
     if (!titleValid || !keyValid) {
       setShowErrors(true);
+      setExpanded(false);
       return;
     }
     const song: Song = {
@@ -215,6 +219,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
         </button>
       </div>
 
+      {!(expanded && tab === "source") && (
       <div className="chip-row" style={{ padding: "6px 16px 10px" }}>
         <button className={"chip" + (tab === "source" ? " active" : "")} onClick={() => setTab("source")}>
           Chords/Lyrics
@@ -231,6 +236,7 @@ export function AddEditSong({ songId }: { songId?: string }) {
           </button>
         ))}
       </div>
+      )}
 
       {tab === "source" && (
         <div className="flex-1 hidden-scroll" style={{ padding: "0 16px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -244,6 +250,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
               </div>
             </div>
           )}
+          {!expanded && (
+          <>
           <div style={{ flex: "none" }}>
             <div className="list-group">
               <div className="form-row">
@@ -315,6 +323,8 @@ export function AddEditSong({ songId }: { songId?: string }) {
               Import
             </button>
           </div>
+          </>
+          )}
           <div className="chip-row">
             {chartFormat === "chordpro" &&
               CHORDPRO_DIRECTIVES.map((name) => (
@@ -407,6 +417,17 @@ export function AddEditSong({ songId }: { songId?: string }) {
                 aria-label="Redo"
               >
                 <Icon name="redo" size={20} strokeWidth={2.2} />
+              </button>
+              <button
+                type="button"
+                className="editor-key"
+                onPointerDown={(e) => e.preventDefault()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setExpanded((v) => !v)}
+                aria-label={expanded ? "Show song details" : "Expand editor"}
+                aria-pressed={expanded}
+              >
+                <Icon name={expanded ? "collapse" : "expand"} size={18} strokeWidth={2.2} />
               </button>
             </div>
             <CaretKeys target={chartRef} />

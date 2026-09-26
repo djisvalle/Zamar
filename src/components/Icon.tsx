@@ -34,6 +34,8 @@ export type IconName =
   | "bow-down"
   | "undo"
   | "redo"
+  | "expand"
+  | "collapse"
   | "chevron-up-down"
   | "queue";
 
@@ -244,6 +246,22 @@ const ICON_PATHS: Record<IconName, JSX.Element> = {
     <>
       <path d="m15 14 5-5-5-5" />
       <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+    </>
+  ),
+  expand: (
+    <>
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </>
+  ),
+  collapse: (
+    <>
+      <polyline points="4 14 10 14 10 20" />
+      <polyline points="20 10 14 10 14 4" />
+      <line x1="14" y1="10" x2="21" y2="3" />
+      <line x1="3" y1="21" x2="10" y2="14" />
     </>
   ),
   /* iOS's pop-up button glyph: a menu picker's value opens a list. */
