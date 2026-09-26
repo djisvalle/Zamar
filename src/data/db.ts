@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from "@capacitor-community/sqlite";
 
 const DB_NAME = "zamar";
-const DB_VERSION = 10;
+const DB_VERSION = 11;
 
 // v1 shape — kept only so `addUpgradeStatement`'s v1 step still creates the
 // original schema for a from-scratch install running the full upgrade
@@ -196,6 +196,15 @@ async function openDb(): Promise<SQLiteDBConnection> {
         "ALTER TABLE settings ADD COLUMN notationFavorites_json TEXT NOT NULL DEFAULT '[]';",
         "ALTER TABLE songs ADD COLUMN annotationWidths_json TEXT;",
       ],
+    },
+    {
+      // Attachment bytes move out of songs.attachments_json into their own
+      // rows, keyed by version id, so saving or loading a song no longer
+      // carries its files (see data/attachmentData.ts). This only creates
+      // the table: songsRepo.loadAll moves existing bytes in code, because
+      // unpacking the JSON in SQL needs the JSON1 extension on every engine.
+      toVersion: 11,
+      statements: ["CREATE TABLE IF NOT EXISTS attachment_data (version_id TEXT PRIMARY KEY, data TEXT NOT NULL);"],
     },
   ]);
 

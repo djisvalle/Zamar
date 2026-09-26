@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { getDb, persist } from "./db";
 import type { Attachments, Song } from "../state/types";
 
 interface SongRow {
@@ -82,8 +82,42 @@ export function buildDeleteStatements(songId: string): Statement[] {
   ];
 }
 
+/** Bytes left inside `attachments_json` by a version from before
+ * attachment_data existed. */
+type LegacyAttachments = Record<string, { versions: { id: string; dataUrl?: string }[] } | undefined>;
+
+/** Reads every song's metadata. The first time it runs after the v11
+ * upgrade, it also moves any attachment bytes still inside a row's
+ * `attachments_json` into attachment_data, in one transaction. Safe to
+ * repeat if interrupted: a moved row has no bytes left in it, and bytes
+ * already copied are skipped. */
 export async function loadAll(): Promise<Song[]> {
   const db = await getDb();
   const result = await db.query("SELECT * FROM songs");
-  return ((result.values ?? []) as SongRow[]).map(rowToSong);
+  const rows = (result.values ?? []) as SongRow[];
+  const moves: Statement[] = [];
+  for (const row of rows) {
+    const attachments = JSON.parse(row.attachments_json || "{}") as LegacyAttachments;
+    let moved = false;
+    for (const bucket of Object.values(attachments)) {
+      for (const version of bucket?.versions ?? []) {
+        if (version.dataUrl === undefined) continue;
+        moves.push({
+          statement: "INSERT OR IGNORE INTO attachment_data (version_id, data) VALUES (?, ?)",
+          values: [version.id, version.dataUrl],
+        });
+        delete version.dataUrl;
+        moved = true;
+      }
+    }
+    if (moved) {
+      row.attachments_json = JSON.stringify(attachments);
+      moves.push({ statement: "UPDATE songs SET attachments_json = ? WHERE id = ?", values: [row.attachments_json, row.id] });
+    }
+  }
+  if (moves.length > 0) {
+    await db.executeSet(moves);
+    await persist();
+  }
+  return rows.map(rowToSong);
 }

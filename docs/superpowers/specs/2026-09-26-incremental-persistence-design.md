@@ -182,8 +182,8 @@ both awkward cases without special code:
 
 - **Unsaved imports.** An import inside Add/Edit Song only puts bytes in the
   cache. Nothing is written until Save puts a song referencing the version
-  into state. A cancelled draft leaves only a pending cache entry, dropped when
-  the draft is discarded (or at worst at the end of the session).
+  into state. A cancelled draft leaves only a pending cache entry in memory
+  for the rest of the session; it's never written.
 - **Duplicated songs.** `DUPLICATE_SONG` copies attachments with the same
   version ids, so two songs share one row. It's deleted only when neither
   references it.

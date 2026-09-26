@@ -48,8 +48,8 @@ reference.
 - DB v11: `attachment_data`.
 - `AttachmentVersion` drops `dataUrl`.
 - `attachmentData.ts`: `getAttachmentData`, `putAttachmentData`, `prefetchAttachmentData`,
-  `discardPending`, `useAttachmentData`, and `buildAttachmentStatements(persistedSongs,
-  currentSongs)` plus `markWritten(ids)` for the save.
+  `useAttachmentData`, and `buildAttachmentStatements(persistedSongs, currentSongs)` plus
+  `settleAttachmentData(inserted, deleted)` for the save.
 
 ### Task B2: Load and migrate (`songsRepo.ts`)
 

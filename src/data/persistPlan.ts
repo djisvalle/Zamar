@@ -3,6 +3,7 @@ import * as songsRepo from "./songsRepo";
 import * as setlistsRepo from "./setlistsRepo";
 import * as settingsRepo from "./settingsRepo";
 import type { Statement } from "./songsRepo";
+import { buildAttachmentStatements } from "./attachmentData";
 
 /** What's on disk as of the last successful save. `settings` is null when
  * there's no settings row yet (first run, or data recovered without one). */
@@ -18,8 +19,13 @@ export const EMPTY_SNAPSHOT: PersistedSnapshot = { songs: [], setlists: [], sett
  * FK-safe order: removed setlists, removed songs (with any slots still
  * pointing at them), song upserts, rewritten setlists, then settings. The
  * reducer never mutates in place, so an object that's still `===` its
- * persisted copy hasn't changed and isn't written. */
-export function buildSaveStatements(persisted: PersistedSnapshot, current: PersistedSnapshot): Statement[] {
+ * persisted copy hasn't changed and isn't written. Attachment bytes ride
+ * along (see buildAttachmentStatements); `inserted`/`deleted` are their
+ * version ids, for settleAttachmentData once the save commits. */
+export function buildSaveStatements(
+  persisted: PersistedSnapshot,
+  current: PersistedSnapshot
+): { statements: Statement[]; inserted: string[]; deleted: string[] } {
   const statements: Statement[] = [];
 
   const currentSetlistIds = new Set(current.setlists.map((sl) => sl.id));
@@ -46,5 +52,8 @@ export function buildSaveStatements(persisted: PersistedSnapshot, current: Persi
     statements.push(settingsRepo.buildUpsertStatement(current.settings));
   }
 
-  return statements;
+  if (current.songs === persisted.songs) return { statements, inserted: [], deleted: [] };
+  const attachments = buildAttachmentStatements(persisted.songs, current.songs);
+  statements.push(...attachments.statements);
+  return { statements, inserted: attachments.inserted, deleted: attachments.deleted };
 }

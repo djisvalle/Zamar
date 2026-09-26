@@ -72,7 +72,9 @@ the tension rather than silently picking one.
 - **One global reducer, persisted to SQLite.** `src/state/store.ts` is one `useReducer`
   (`songs`, `setlists`, `settings`, `stage`, `viewport`). `songs`/`setlists`/`settings` are
   written to the DB via `src/data/{db,songsRepo,setlistsRepo,settingsRepo}.ts` in one
-  debounced, atomic `executeSet`. `main.tsx` loads persisted state on boot, seeds from
+  debounced, atomic `executeSet` holding only the rows that changed: the store diffs against a
+  snapshot of what's on disk by object identity (`src/data/persistPlan.ts`), so reducers must
+  never mutate in place. `main.tsx` loads persisted state on boot, seeds from
   `src/state/mockData.ts` only when nothing is stored, and runs in-memory only (persistence
   off) if the read throws, so it never overwrites real data with seed data. `stage` and
   `viewport` are session UI state and are not persisted. No sync or backend.
@@ -95,7 +97,11 @@ the tension rather than silently picking one.
   `renameVersion`, `selectVersion`). Imports are additive at the version level. Live
   Stage's category/version choice is local state; only Add/Edit Song's "Use this version"
   changes the persisted default. Rationale:
-  `docs/superpowers/specs/2026-09-20-attachment-categories-design.md`.
+  `docs/superpowers/specs/2026-09-20-attachment-categories-design.md`. A version holds no
+  file: the bytes live in the `attachment_data` table by version id, read on demand (and
+  prefetched for the next setlist song) through `src/data/attachmentData.ts`; a new import
+  is held there until a save writes it for a song that references it. See
+  `docs/superpowers/specs/2026-09-26-incremental-persistence-design.md`.
 - **Annotations and cues.** `Song.annotations` holds ink, sticky notes (stored as `Pin`),
   text, notation stamps and shapes per view type; `Song.notes` is the per-song "Cues" text. Annotate is an overlay on the persistent
   Live Stage (`AnnotateOverlay.tsx` + `components/AnnotateCanvas.tsx`, helpers in

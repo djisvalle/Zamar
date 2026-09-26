@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
-import { useStore, activeSetlistSlots, activeSetlistSongIds } from "../../state/store";
+import { useStore, activeSetlistSlots, activeSetlistSongIds, resolveDefaultView } from "../../state/store";
 import { useNavigator } from "../../navigation/Navigator";
 import { ChordChart } from "../../components/ChordChart";
 import { MxlScore, type MxlScoreHandle, type ScoreInstrument } from "../../components/MxlScore";
@@ -10,12 +10,14 @@ import { Icon } from "../../components/Icon";
 import { syncAnnotationWidths } from "../../utils/annotations";
 import { activeKeyChange, keySemitoneShift } from "../../utils/keys";
 import { CATEGORY_PRIORITY, firstAvailableCategory, selectedVersion } from "../../utils/attachments";
-import type { AnnotationObject, AnnotationView, AttachmentKind } from "../../state/types";
+import type { AnnotationObject, AnnotationView, AttachmentKind, Song } from "../../state/types";
 import { AddSongSheet } from "./AddSongSheet";
 import { QuickEditSheet } from "./QuickEditSheet";
 import { MusicToolbar } from "./MusicToolbar";
 import { StageToolsSheet } from "./StageToolsSheet";
 import { AnnotateToolbar, useAnnotateSession } from "./AnnotateOverlay";
+import { AttachmentPlaceholder } from "../../components/AttachmentPlaceholder";
+import { prefetchAttachmentData, useAttachmentData } from "../../data/attachmentData";
 
 const IDLE_MS = 6000;
 const SWIPE_THRESHOLD = 50;
@@ -57,6 +59,16 @@ function usePortraitWidth(scrollRef: React.RefObject<HTMLDivElement | null>, mou
   return widths;
 }
 
+/** The attachment version a song opens to on stage, if it opens to one:
+ * its saved default kind while still attached, else the highest-priority
+ * one, and that bucket's default version (as the effect in LiveStage picks). */
+function openingVersionId(song: Song | undefined): string | undefined {
+  if (!song || resolveDefaultView(song) !== "sheet") return undefined;
+  const saved = song.defaultView && song.defaultView !== "chords" ? song.defaultView : undefined;
+  const kind = saved && song.attachments[saved] ? saved : firstAvailableCategory(song.attachments);
+  return kind ? selectedVersion(song.attachments[kind]!).id : undefined;
+}
+
 export function LiveStage() {
   const { state, dispatch } = useStore();
   const nav = useNavigator();
@@ -81,6 +93,9 @@ export function LiveStage() {
   const setlist = stage.setlistId ? state.setlists.find((sl) => sl.id === stage.setlistId) : null;
   const setlistSongIds = activeSetlistSongIds(setlist);
   const setlistSlots = activeSetlistSlots(setlist);
+  const activeBucket = song && activeKind ? song.attachments[activeKind] : undefined;
+  const activeVersion = activeBucket ? activeBucket.versions.find((v) => v.id === activeVersionId) ?? selectedVersion(activeBucket) : undefined;
+  const attachmentData = useAttachmentData(stage.view === "sheet" ? activeVersion?.id : undefined);
 
   const dockOpen = stage.drawer === "annotate";
   const annotationView: AnnotationView = stage.view === "chords" ? "chords" : activeKind ?? "chords";
@@ -132,6 +147,14 @@ export function LiveStage() {
     setActiveKind(kind);
     setActiveVersionId(kind ? selectedVersion(attachments[kind]!).id : undefined);
   }, [song?.id]);
+
+  // The next song in the set loads its file ahead of time, so moving on to
+  // it doesn't wait on storage.
+  const nextSong = setlist ? state.songs.find((s) => s.id === setlistSongIds[stage.setlistIndex + 1]) : undefined;
+  useEffect(() => {
+    prefetchAttachmentData([openingVersionId(nextSong)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextSong?.id]);
 
   // Each song opens at the top of its chart. The scroll container stays
   // mounted between songs, so without this the next song showed wherever
@@ -242,8 +265,6 @@ export function LiveStage() {
   const slotNote = setlistSlots[songIndex]?.note?.trim();
   const nextSlotNote = setlistSlots[songIndex + 1]?.note?.trim();
   const availableKinds = CATEGORY_PRIORITY.filter((k) => song.attachments[k]);
-  const activeBucket = activeKind ? song.attachments[activeKind] : undefined;
-  const activeVersion = activeBucket ? activeBucket.versions.find((v) => v.id === activeVersionId) ?? selectedVersion(activeBucket) : undefined;
 
   const chordsAnnotated = Boolean(song.annotations.chords?.length);
   const musicxmlAnnotated = Boolean(song.annotations.musicxml?.length);
@@ -368,16 +389,18 @@ export function LiveStage() {
         />
       ) : activeKind && activeVersion ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0" }}>
-          {activeKind === "image" ? (
+          {attachmentData.data === undefined ? (
+            <AttachmentPlaceholder status={attachmentData.status} />
+          ) : activeKind === "image" ? (
             <img
-              src={activeVersion.dataUrl}
+              src={attachmentData.data}
               alt={activeVersion.name}
               style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }}
             />
           ) : activeKind === "musicxml" ? (
             <MxlScore
               ref={mxlScoreRef}
-              src={activeVersion.dataUrl}
+              src={attachmentData.data}
               transpose={semitones}
               targetKey={displayKey}
               hiddenParts={hiddenParts}
@@ -391,7 +414,7 @@ export function LiveStage() {
               // A fresh instance per song/version, so pinch-zoom and pan
               // don't carry over from the previous chart.
               key={`${song.id}:${stage.setlistIndex}:${activeVersion.id}`}
-              src={activeVersion.dataUrl}
+              src={attachmentData.data}
               disableZoom={dockOpen}
             />
           )}

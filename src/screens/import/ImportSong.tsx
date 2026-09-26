@@ -9,6 +9,7 @@ import { PdfPages } from "../../components/PdfPages";
 import { MxlScore } from "../../components/MxlScore";
 import type { AttachmentKind, AttachmentVersion, Attachments, ChartFormat, Song } from "../../state/types";
 import { ATTACHMENT_LABEL, addVersion } from "../../utils/attachments";
+import { putAttachmentData } from "../../data/attachmentData";
 import { NoChartTextError, convertChartFile, type ConvertedChart } from "../../utils/chartImport";
 
 export type ImportMethod = "pdf" | "photo" | "musicxml";
@@ -99,12 +100,13 @@ export function ImportSong({ method, target, formDraft }: { method: ImportMethod
   const isAppend = hasExistingChart && mergeStrategy === "append";
   const mergedChordpro = isAppend ? `${formDraft!.chordpro.trimEnd()}\n\n${importedChart}` : importedChart;
 
-  const buildVersion = (): AttachmentVersion => ({
-    id: `att-${Date.now()}`,
-    label: versionLabel.trim() || file!.name,
-    dataUrl: file!.dataUrl,
-    name: file!.name,
-  });
+  // The file goes in the attachment cache, not the version; it's written to
+  // disk only once a saved song references it (see data/attachmentData.ts).
+  const buildVersion = (): AttachmentVersion => {
+    const id = `att-${Date.now()}`;
+    putAttachmentData(id, file!.dataUrl);
+    return { id, label: versionLabel.trim() || file!.name, name: file!.name };
+  };
 
   const onFilePicked: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const picked = e.target.files?.[0];

@@ -3,6 +3,7 @@ import type { AnnotateRecents, Setlist, SetlistItem, Settings, Song, StageState,
 import { setlists as seedSetlists, songs as seedSongs } from "./mockData";
 import { getDb, persist } from "../data/db";
 import { buildSaveStatements, type PersistedSnapshot } from "../data/persistPlan";
+import { settleAttachmentData } from "../data/attachmentData";
 import { canonicalKey } from "../utils/keys";
 
 export interface AppState {
@@ -18,7 +19,7 @@ export interface AppState {
  * chosen attachment kind is still attached); otherwise falls back to the
  * automatic guess — chords if the song has any, else its first available
  * attachment, matching the behavior before per-song defaults existed. */
-function resolveDefaultView(song: Song | undefined): StageState["view"] {
+export function resolveDefaultView(song: Song | undefined): StageState["view"] {
   if (!song) return "chords";
   if (song.defaultView === "chords" && song.chordpro.trim()) return "chords";
   if (song.defaultView && song.defaultView !== "chords" && song.attachments[song.defaultView]) return "sheet";
@@ -483,7 +484,7 @@ export function StoreProvider({
         // row that disagrees with the songs/setlists actually on disk (see main.tsx's first-run
         // recovery logic, which exists to handle exactly that mismatch from before this was
         // atomic).
-        const statements = buildSaveStatements(snapshot.current, current);
+        const { statements, inserted, deleted } = buildSaveStatements(snapshot.current, current);
         if (statements.length === 0) return;
         try {
           const db = await getDb();
@@ -496,6 +497,7 @@ export function StoreProvider({
         // Only a committed save moves the snapshot, so after a failure the
         // next save still carries every change since the last good one.
         snapshot.current = current;
+        settleAttachmentData(inserted, deleted);
         try {
           await persist();
           setStorageProblem((p) => (p === "write" ? null : p));

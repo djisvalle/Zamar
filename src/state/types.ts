@@ -10,8 +10,9 @@ export interface AttachmentVersion {
   /** User-facing name, e.g. "Violin", "Jazz arrangement". Defaults to the
    * original filename when the person doesn't type one at import time. */
   label: string;
-  dataUrl: string;
   name: string; // original filename, always preserved regardless of label
+  // The file itself isn't here: it's in the attachment_data table, read
+  // through data/attachmentData.ts by this version's id.
 }
 
 export interface AttachmentBucket {
