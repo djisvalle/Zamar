@@ -1,5 +1,5 @@
 import type { ITransposeCalculator, KeyInstruction, Pitch } from "opensheetmusicdisplay";
-import { keyFifths, keyFromFifths, letterSteps, parseNote, spellInKey } from "./keys";
+import { keyFromFifths, keySignatureFifths, letterSteps, parseNote, spellInKey } from "./keys";
 
 type Osmd = typeof import("opensheetmusicdisplay");
 
@@ -56,7 +56,7 @@ export class KeyAwareTransposeCalculator implements ITransposeCalculator {
    * picked spelling of the same key; any other key stays as written. */
   private transposedFifths(originalFifths: number, halftones: number): number {
     const pitch = mod(originalFifths * 7 + halftones, 12);
-    const picked = this.targetKey ? keyFifths(this.targetKey) : null;
+    const picked = this.targetKey ? keySignatureFifths(this.targetKey) : null;
     if (picked !== null && mod(picked * 7, 12) === pitch) return picked;
     return halftones % 12 === 0 ? originalFifths : DEFAULT_FIFTHS[pitch];
   }

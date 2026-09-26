@@ -47,14 +47,16 @@ working tree on 2026-09-19.
       and re-renders whenever the `transpose` prop changes, driven by the same semitone value
       `LiveStage.tsx` computes from the selected key — genuine OSMD re-engraving in the new
       key (e.g. C → Eb), not a cosmetic shift.
-- [x] **Enharmonic keys.** The key chips list all 15 key-signature keys (C♯ and D♭, F♯ and
-      G♭, B and C♭), each with its relative minor, and the chip picked sets the spelling.
+- [x] **Enharmonic keys.** The key chips list 17 keys, both names for every black key (C♯/D♭,
+      D♯/E♭, F♯/G♭, G♯/A♭, A♯/B♭) plus the naturals, each with its relative minor, and the
+      chip picked sets the spelling. C♭ was dropped (old C♭ keys load as B); D♯, G♯ and A♯
+      have no real signature, so scores in them use E♭, A♭ and B♭'s.
       Chords keep the right letter (`utils/keys.ts`: F in G → C is B♭, not A♯), and odd
       spellings (E♯, B♯, F♭, C♭, doubles) are simplified unless they name the key, or with
       Settings → Keys "Strict spelling", unless they're in its scale. Key moves go the
       nearest way (−5…+6). Scores use `utils/scoreTranspose.ts` in place of OSMD's
-      calculator, so the key signature follows the chip and notes match it. Old `A#`/`D#`/`G#`
-      keys load as B♭/E♭/A♭. Offsets on the chips are off by default (Settings → Keys).
+      calculator, so the key signature follows the chip and notes match it.
+      Offsets on the chips are off by default (Settings → Keys).
       Spec: `docs/superpowers/specs/2026-09-25-enharmonic-key-picker-design.md`. A pure
       respelling (C♯ → D♭) re-spells a score too: OSMD skips transposing at 0 semitones,
       so `KeyAwareTransposeCalculator.apply` hands it an octave and takes it back out.

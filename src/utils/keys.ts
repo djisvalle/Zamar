@@ -11,40 +11,42 @@ export interface KeyInfo {
   minor: string;
 }
 
-/** Every major key with a key signature, in pitch order. Within an
- * enharmonic pair the sharp (or natural) name comes first: C#/Db, F#/Gb,
- * B/Cb. */
+/** The keys on the picker, in pitch order: every sharp and flat name for
+ * the five black-key pitches (sharp first: C#/Db, D#/Eb, F#/Gb, G#/Ab,
+ * A#/Bb) plus the naturals. D#, G# and A# have no real key signature, so
+ * their relative minors are shown by their common flat-side names, and
+ * scores take the enharmonic signature (see keySignatureFifths). */
 export const KEYS: KeyInfo[] = [
   { name: "C", minor: "Am" },
   { name: "C#", minor: "A#m" },
   { name: "Db", minor: "Bbm" },
   { name: "D", minor: "Bm" },
+  { name: "D#", minor: "Cm" },
   { name: "Eb", minor: "Cm" },
   { name: "E", minor: "C#m" },
   { name: "F", minor: "Dm" },
   { name: "F#", minor: "D#m" },
   { name: "Gb", minor: "Ebm" },
   { name: "G", minor: "Em" },
+  { name: "G#", minor: "Fm" },
   { name: "Ab", minor: "Fm" },
   { name: "A", minor: "F#m" },
+  { name: "A#", minor: "Gm" },
   { name: "Bb", minor: "Gm" },
   { name: "B", minor: "G#m" },
-  { name: "Cb", minor: "Abm" },
 ];
 
 /** Keys whose signature has flats. Everything else spells with sharps. */
 const FLAT_KEYS = new Set(["F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"]);
 
 /** Root spellings that have no chip, mapped to the chip for the same pitch.
- * Applied when state loads and when a key is saved, so older sharps-only
- * keys (A#, D#, G#) show up on the picker. */
+ * Applied when state loads and when a key is saved, so keys saved before
+ * the Cb chip was removed show up on the picker as B. */
 const KEY_RENAMES: Record<string, string> = {
-  "A#": "Bb",
-  "D#": "Eb",
-  "G#": "Ab",
   "E#": "F",
   "B#": "C",
   Fb: "E",
+  Cb: "B",
 };
 
 export function canonicalKey(key: string): string {
@@ -171,6 +173,15 @@ export function keyFifths(key: string): number | null {
   if (!n) return null;
   // Each natural's fifths position (C0 D2 E4 F-1 G1 A3 B5); a sharp adds 7.
   return [0, 2, 4, -1, 1, 3, 5][n.letter] + 7 * n.accidental;
+}
+
+/** The key signature a score takes for a picked key. Keys past seven
+ * sharps or flats (D#, G#, A#) have no real signature, so they use their
+ * enharmonic one (Eb, Ab, Bb). */
+export function keySignatureFifths(key: string): number | null {
+  const f = keyFifths(key);
+  if (f === null) return null;
+  return f > 7 ? f - 12 : f < -7 ? f + 12 : f;
 }
 
 /** The major key name for a circle-of-fifths position (inverse of keyFifths). */

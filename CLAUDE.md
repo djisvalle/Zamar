@@ -77,7 +77,7 @@ the tension rather than silently picking one.
   Barlow / Barlow Condensed, steel-blue accent.
 - **ChordPro and transposition are real.** `src/utils/chordpro.ts` parses both `[C]lyric`
   ChordPro and chords-over-lyrics, positions chords from real offsets, and transposes
-  letter-aware between two keys (`utils/keys.ts`: the 15 key-signature keys, nearest-way
+  letter-aware between two keys (`utils/keys.ts`: 17 key chips (every sharp and flat name for the black keys, no C♭), nearest-way
   `keySemitoneShift`, spelling rules). `MxlScore.tsx` re-engraves MusicXML in the display
   key via OSMD with `utils/scoreTranspose.ts` in place of OSMD's own transpose calculator.
 - **Attachments are categorized, versioned buckets.** `Song.attachments`
