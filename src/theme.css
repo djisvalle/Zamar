@@ -1642,7 +1642,8 @@ button.sheet-row:active:not(:disabled) {
    chart), scaled with the text size. Only one gap when both apply. */
 .chord-section-label,
 .chart-stanza-start {
-  margin-top: 0.75em;
+  /* One empty line (1.2em, the chart line height) on top of the base gap. */
+  margin-top: 1.95em;
 }
 .chord-chart > :first-child {
   margin-top: 0;
