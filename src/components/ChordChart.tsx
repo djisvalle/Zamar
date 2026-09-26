@@ -13,21 +13,27 @@ export function ChordChart({
   fontScale?: number;
   hideChords?: boolean;
 }) {
-  const lines = parseChordPro(chordpro, keyChange).filter((l) => !l.isDirective);
+  // Blank lines split the chart into stanzas (the parser itself drops them);
+  // the first line of each stanza gets a gap above it.
+  const lines = chordpro.split(/\n\s*\n/).flatMap((block) =>
+    parseChordPro(block, keyChange)
+      .filter((l) => !l.isDirective)
+      .map((l, i) => ({ ...l, stanzaStart: i === 0 }))
+  );
   const lyricSize = 17 * fontScale;
   return (
     <div className="chord-chart">
       {lines.map((l, i) =>
         l.isSection ? (
-          <div key={i} className="chord-section-label" style={{ fontSize: lyricSize }}>
+          <div key={i} className={"chord-section-label" + (l.stanzaStart ? " chart-stanza-start" : "")} style={{ fontSize: lyricSize }}>
             {l.lyric}
           </div>
         ) : !hideChords && l.chords.length > 0 ? (
-          <div key={i} className={"chart-line chart-line--chorded" + (l.lyric.trim() ? "" : " chart-line--chords-only")} style={{ fontSize: lyricSize }}>
+          <div key={i} className={"chart-line chart-line--chorded" + (l.lyric.trim() ? "" : " chart-line--chords-only") + (l.stanzaStart ? " chart-stanza-start" : "")} style={{ fontSize: lyricSize }}>
             {renderChordedLine(l.lyric, l.chords, 14 * fontScale)}
           </div>
         ) : (
-          <div key={i} className="chart-line lyric-line" style={{ fontSize: lyricSize }}>
+          <div key={i} className={"chart-line lyric-line" + (l.stanzaStart ? " chart-stanza-start" : "")} style={{ fontSize: lyricSize }}>
             {l.lyric}
           </div>
         )

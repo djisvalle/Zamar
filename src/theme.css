@@ -1637,9 +1637,14 @@ button.sheet-row:active:not(:disabled) {
   font-weight: 700;
   line-height: 1.2;
   color: var(--acc-deep);
-  margin-top: 12px;
 }
-.chord-section-label:first-child {
+/* A gap before each section label and each stanza (a blank line in the
+   chart), scaled with the text size. Only one gap when both apply. */
+.chord-section-label,
+.chart-stanza-start {
+  margin-top: 0.75em;
+}
+.chord-chart > :first-child {
   margin-top: 0;
 }
 
