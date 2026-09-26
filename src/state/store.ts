@@ -517,3 +517,10 @@ export function activeSetlistSongIds(setlist: Setlist | undefined | null): strin
   if (!setlist) return [];
   return flattenSongIds(setlist);
 }
+
+/** The set's song slots in stage order, one per `activeSetlistSongIds` entry,
+ * so `stage.setlistIndex` indexes both. Live Stage reads each slot's note. */
+export function activeSetlistSlots(setlist: Setlist | undefined | null): SetlistItem[] {
+  if (!setlist) return [];
+  return setlist.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song"));
+}

@@ -1644,6 +1644,51 @@ button.sheet-row:active:not(:disabled) {
   margin-top: 4px;
 }
 
+/* ---- Live Stage setlist strip ---- */
+/* "Next: <title> · <its note>" above the progress bar. One line, so the
+   chart below never moves; the title comes first so it's what survives. */
+.stage-next {
+  margin-bottom: 4px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.stage-next-note {
+  font-weight: 400;
+  font-style: italic;
+}
+/* The slot's "Note for the band" under the progress bar, styled like the
+   run sheet's .row-note. One line until tapped; tapping again collapses it. */
+.stage-slot-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  padding: 6px 0 2px;
+  border: 0;
+  background: none;
+  color: var(--acc-deep);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+}
+.stage-slot-note svg {
+  flex: none;
+  margin-top: 3px;
+}
+.stage-slot-note span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.stage-slot-note[aria-expanded="true"] span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* ---- chord chart ---- */
 /* Chord charts (ChordChart.tsx). Font sizes are set inline from the text
    size setting; line heights here keep lines single-spaced. */

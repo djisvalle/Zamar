@@ -103,7 +103,7 @@ the tension rather than silently picking one.
 | Area | Reached from | Notable pieces |
 |---|---|---|
 | `onboarding/` | app boot | Splash only; auto-advances (650ms) into Live Stage |
-| `live-stage/` | tab | chords or attachment view, key chips + Stage Tools sheet (Add to Setlist, Quick edit, Annotate, view/version picker, capo/lyrics/zoom), idle auto-hide chrome (6s) plus tap-empty-space to toggle it, per-song default view |
+| `live-stage/` | tab | chords or attachment view, key chips + Stage Tools sheet (Add to Setlist, Quick edit, Annotate, view/version picker, capo/lyrics/zoom), idle auto-hide chrome (6s) plus tap-empty-space to toggle it, per-song default view, setlist strip (next song, progress, slot notes) |
 | `library/` | tab | A–Z list, search, filter chips, multi-select delete, row context sheet, header "+" menu (New song / Import a chart) |
 | `setlists/` | tab | Upcoming/Past/Templates, run-sheet detail (sections, derived start times, per-slot overrides), Add-to-set sheet, Set-details sheet |
 | `add-edit-song/` | Library "+" / row sheet | one screen for New and Edit; metadata in two compact rows, chord/lyrics editor kept ≥ ~50% of device height, quick-insert chips, Chords/Lyrics + Preview tabs plus one tab per attachment category present, "Import" button |
