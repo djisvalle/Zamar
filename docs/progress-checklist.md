@@ -156,6 +156,9 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       verified with an actual Xcode build
 - [x] SQLite persistence for songs, setlists, and settings (survives reload, native + web
       sql.js/jeep-sqlite fallback)
+- [x] Screens keep clear of the bottom safe area when no bottom tab bar is showing (modal
+      screens, and every screen on a tablet), so Android's navigation bar no longer covers
+      the end of the app (`--screen-bottom` in `theme.css`). Needs an on-device recheck
 
 ### Live Stage
 - [x] Chord chart rendering with real transpose math (not hand-placed spacing)
@@ -167,6 +170,11 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] Chord/Sheet toggle renders the real attached file — MusicXML via OpenSheetMusicDisplay,
       or photo/PDF via `<img>`/`PdfPages.tsx` (pdf.js) — with real pinch-to-zoom and drag-to-pan
 - [x] Setlist-mode next-song preview and progress bar in the stage header
+- [x] Each song opens at the top of its chart (the scroll position and PDF zoom no longer
+      carry over from the previous song), and a reprise's next-song line and progress bar
+      follow the slot on stage rather than the song's first slot
+- [x] Swiping between songs works over sheet music and PDFs too: the score and PDF views
+      keep a gesture only when it's a pinch (or a pan on a zoomed-in PDF)
 
 ### Library
 - [x] A–Z grouped list, live search, filter chips
@@ -178,12 +186,30 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
       events, so it works with touch in the iOS/Android web views; `useDragReorder.ts`).
       Attachment versions in Add/Edit Song reorder the same way
 - [x] Per-slot key/note override sheet, Add-to-set sheet (was a side drawer)
+- [x] Artist and BPM stay blank when not given (no more "Unknown"/80; tempo 0 = none),
+      time signature still defaults to 4/4; the run sheet shows "N/A BPM" for a blank tempo
+      and songs saved with the old "Unknown" artist load with it blank (`hydrateState`)
+- [x] Drag a section's header grip to reorder sections (`MOVE_SECTION`), or Move up/down
+      from its `⋯` sheet; songs keep their order within it and a live set stays on its song
+- [x] Adding lives in the detail toolbar ("+" → Add songs / Add section) so it stays in
+      reach on a long set; an empty section's row is an "Add songs here" button, and a
+      section's `⋯` sheet can add songs to that section
+- [x] The set loaded on Live Stage shows "Resume Set" instead of "Start Set"; its `⋯` menu
+      adds "Restart set from the top" and "Stop set"
 
 ### Add/Edit Song
 - [x] Combined new/edit screen, ChordPro-vs-Chords-over-Lyrics editing
 - [x] Chart-problem banner in the editor: unbalanced `[`/`]`, unclosed `{directive}`, and
       chord symbols transposition can't move (`findChordProIssues`)
 - [x] Live `{key: ...}` directive detection, format-aware quick-insert chips, live Preview tab
+- [x] ◀ ▶ caret keys under the chart editor move the cursor one character (repeat on hold)
+      without dismissing the keyboard, as in OnSong (`CaretKeys.tsx`)
+- [x] Undo/redo for the chart text (↶ ↷ in the same bar, and Ctrl/⌘+Z, Ctrl/⌘+Shift+Z or
+      Ctrl+Y): typing undoes in bursts, chip inserts and field-driven directive rewrites
+      one at a time (`useTextHistory.ts`). History is per visit; it resets after Import
+- [x] Expand button in the same bar hides the tabs, song fields and format/Import row so
+      the chart editor fills the screen (quick-insert chips and Cancel/Save stay); a Save
+      with invalid fields collapses it again to show them
 - [x] Sheet Music tab appears once a song has an attachment, with remove-attachment action
 
 ### Import
@@ -193,8 +219,11 @@ Not core functionality, not scheduled — flagged here so they don't get lost.
 - [x] "Sheet music" declaration path is fully real end-to-end (file stored and rendered later
       on Live Stage, no simulation involved)
 - [x] "Chords & lyrics" conversion is real (`utils/chartImport.ts`): pdf.js reads a PDF's text
-      layer; photos and scanned PDFs go through bundled, offline Tesseract OCR, with chord rows
-      re-read using a chord-only character set. Header fills title/artist/key/tempo/time.
+      layer; photos and scanned PDFs go through bundled, offline Tesseract OCR. Small images
+      are upscaled and stretched to high-contrast grey first (colored chords, highlighted
+      section labels), chord rows are re-read using a chord-only character set, and any chord
+      or chord row still missing is re-read patch by patch. Chord lines may carry bar lines
+      ("C | F") and passing moves ("Bb/F-F"). Header fills title/artist/key/tempo/time.
       No-text files get a real error with "keep it as a PDF/photo". Sheet-vs-chords is still
       declared by the user, not detected.
 

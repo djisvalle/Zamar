@@ -16,21 +16,28 @@ export interface DropTarget {
  * dropped into by rendering a placeholder with `emptyGroupProps(group)`.
  * The grip gets `handleProps(id)`. On release, `onDrop(id, target)` is
  * called if the row actually moved.
+ *
+ * `ns` names the data attributes the rows are found by, so two lists can
+ * nest (setlist sections, and the songs inside them) without one drag
+ * picking up the other's rows.
  */
-export function useDragReorder(onDrop: (id: string, target: DropTarget) => void) {
+export function useDragReorder(onDrop: (id: string, target: DropTarget) => void, ns = "drag") {
+  const ID = `data-${ns}-id`;
+  const GROUP = `data-${ns}-group`;
+  const EMPTY = `data-${ns}-empty`;
   const [dragId, setDragId] = useState<string | null>(null);
   const [target, setTarget] = useState<DropTarget | null>(null);
   const start = useRef<{ y: number; group: string; index: number } | null>(null);
   const moved = useRef(false);
 
   const candidates = (id: string) => {
-    const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-drag-group]"));
+    const rows = Array.from(document.querySelectorAll<HTMLElement>(`[${GROUP}]`));
     const perGroup = new Map<string, number>();
     return rows
-      .filter((el) => el.dataset.dragId !== id)
+      .filter((el) => el.getAttribute(ID) !== id)
       .map((el) => {
-        const group = el.dataset.dragGroup!;
-        const empty = el.dataset.dragEmpty === "true";
+        const group = el.getAttribute(GROUP)!;
+        const empty = el.getAttribute(EMPTY) === "true";
         const index = perGroup.get(group) ?? 0;
         if (!empty) perGroup.set(group, index + 1);
         const r = el.getBoundingClientRect();
@@ -58,11 +65,11 @@ export function useDragReorder(onDrop: (id: string, target: DropTarget) => void)
     onClick: (e: ReactMouseEvent) => e.stopPropagation(),
     onPointerDown: (e: ReactPointerEvent<HTMLElement>) => {
       e.stopPropagation();
-      const row = e.currentTarget.closest<HTMLElement>("[data-drag-id]");
+      const row = e.currentTarget.closest<HTMLElement>(`[${ID}]`);
       if (!row) return;
       e.currentTarget.setPointerCapture(e.pointerId);
-      const group = row.dataset.dragGroup!;
-      const siblings = Array.from(document.querySelectorAll<HTMLElement>("[data-drag-id]")).filter((el) => el.dataset.dragGroup === group);
+      const group = row.getAttribute(GROUP)!;
+      const siblings = Array.from(document.querySelectorAll<HTMLElement>(`[${ID}]`)).filter((el) => el.getAttribute(GROUP) === group);
       start.current = { y: e.clientY, group, index: Math.max(0, siblings.indexOf(row)) };
       moved.current = false;
       setDragId(id);
@@ -105,16 +112,16 @@ export function useDragReorder(onDrop: (id: string, target: DropTarget) => void)
       else if (target.index === size && pos === size - 1) cls += " drop-after";
     }
     return {
-      "data-drag-id": id,
-      "data-drag-group": group,
+      [ID]: id,
+      [GROUP]: group,
       className: cls,
     };
   };
 
   /** Placeholder row for an empty group, so something can be dropped into it. */
   const emptyGroupProps = (group: string) => ({
-    "data-drag-group": group,
-    "data-drag-empty": "true",
+    [GROUP]: group,
+    [EMPTY]: "true",
     className: dragId && target?.group === group && moved.current ? "drag-row drop-before" : undefined,
   });
 

@@ -276,7 +276,7 @@ export function AnnotateCanvas({
   onMultiSelect?: (ids: string[]) => void;
   /** Snap text/notation marks to the chart's lyric lines while placing or
    * dragging them. Only meaningful on the chords view, whose ChordChart
-   * renders `.lyric-line`/`.chord-line` rows. */
+   * renders `.chart-line` rows. */
   snapToLyrics?: boolean;
   /** true pauses drawing so the wrapped content can be scrolled with a
    * normal single-finger drag instead — a single finger can't both draw
@@ -385,19 +385,17 @@ export function AnnotateCanvas({
   // score's line-wrap height, so staying attached also keeps the canvas
   // sized correctly across a transpose, not just at mount.
   //
-  // Measures the wrapped content alone. Measuring the wrapper's scrollHeight
-  // counted this canvas too, so the canvas could grow but never shrink: after
-  // a score was zoomed in and back out it stayed at the taller height,
-  // leaving a long blank area to scroll through below the last system.
+  // Measures the content box, not the wrapper: the wrapper's scrollHeight
+  // includes the canvas itself, so the canvas could only ever grow — a
+  // taller earlier layout (another viewport, a mid-engrave score) left a
+  // screen or more of blank space below the chart.
   useEffect(() => {
-    const wrap = wrapperRef.current;
-    const content = contentRef.current;
-    if (!wrap || !content) return;
-    const measure = () => setSize({ width: wrap.clientWidth, height: content.offsetHeight });
+    const el = contentRef.current;
+    if (!el) return;
+    const measure = () => setSize({ width: el.clientWidth, height: el.offsetHeight });
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(wrap);
-    ro.observe(content);
+    ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
@@ -503,11 +501,10 @@ export function AnnotateCanvas({
     const wrap = wrapperRef.current;
     if (!wrap || !snapToLyrics) return [];
     const top = wrap.getBoundingClientRect().top;
-    return Array.from(wrap.querySelectorAll<HTMLElement>(".lyric-line")).flatMap((lyric) => {
-      const r = lyric.getBoundingClientRect();
-      const above = lyric.previousElementSibling?.classList.contains("chord-line") ? lyric.previousElementSibling.getBoundingClientRect() : r;
+    return Array.from(wrap.querySelectorAll<HTMLElement>(".chart-line")).flatMap((line) => {
+      const r = line.getBoundingClientRect();
       const under = r.bottom - top;
-      const over = above.top - top;
+      const over = r.top - top;
       return [
         { centerY: under + SNAP_GAP + halfH, guideY: under },
         { centerY: over - SNAP_GAP - halfH, guideY: over },

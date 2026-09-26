@@ -3,19 +3,20 @@ import { SongPickerSheet } from "../../components/SongPickerSheet";
 import { Icon } from "../../components/Icon";
 import type { Setlist } from "../../state/types";
 
-export function AddToSetSheet({ setlist, onClose }: { setlist: Setlist; onClose: () => void }) {
+/** Adds songs to `sectionId`, or to the set's last section when none is given. */
+export function AddToSetSheet({ setlist, sectionId, onClose }: { setlist: Setlist; sectionId?: string; onClose: () => void }) {
   const { dispatch } = useStore();
 
   const inSetIds = new Set(
     setlist.sections.flatMap((sec) => sec.items.filter((i) => i.kind === "song").map((i) => i.songId))
   );
-  const lastSection = setlist.sections[setlist.sections.length - 1];
+  const target = setlist.sections.find((sec) => sec.id === sectionId) ?? setlist.sections[setlist.sections.length - 1];
 
   const add = (songId: string) => {
     dispatch({
       type: "ADD_ITEM",
       setlistId: setlist.id,
-      sectionId: lastSection.id,
+      sectionId: target.id,
       item: { id: `${songId}-${Date.now()}`, kind: "song", songId },
     });
   };
@@ -24,7 +25,7 @@ export function AddToSetSheet({ setlist, onClose }: { setlist: Setlist; onClose:
     <SongPickerSheet
       title="Add to set"
       onClose={onClose}
-      subtitle={`Adds to ${lastSection.label}`}
+      subtitle={`Adds to ${target.label}`}
       trailing={(s) => {
         const inSet = inSetIds.has(s.id);
         return (

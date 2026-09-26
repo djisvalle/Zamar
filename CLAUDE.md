@@ -136,9 +136,11 @@ Shared primitives are in `src/components/`.
   `jeep-sqlite` before. Verify `npm run dev` still boots persistence before changing it.
 - **`vite.config.ts` ignores `.playwright-mcp/**`** so browser-automation snapshots don't
   trigger reloads that wipe in-memory state.
-- **Tesseract's model keeps its file name.** `vite.config.ts` emits
-  `eng.traineddata.gz` unhashed under `assets/ocr/`, because Tesseract builds that URL from a
-  folder plus the fixed name. Don't fold it into the hashed asset pattern.
+- **Tesseract's model keeps its file name.** `vite.config.ts` emits the model unhashed as
+  `assets/ocr/eng.traineddata`, because Tesseract builds that URL from a folder plus the fixed
+  name. Don't fold it into the hashed asset pattern. It deliberately drops the `.gz` suffix
+  (the data is still gzipped; Tesseract detects that) because a `.gz` asset left Android OCR
+  stuck on "Preparing text recognition…".
 - **No lint/test tooling.** `npm run build` is the only check; a clean build is the bar.
 
 ## Feature workflow

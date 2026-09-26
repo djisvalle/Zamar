@@ -8,6 +8,7 @@ import { Icon } from "../../components/Icon";
 import { LargeTitle, Section, SearchField } from "../../components/List";
 import { OrderByMenu, groupSongs, type SortBy } from "../../components/SongPickerSheet";
 import type { Song } from "../../state/types";
+import { writeChartMeta } from "../../utils/chordpro";
 
 type Filter = "all" | "favourites" | "recent";
 
@@ -162,7 +163,7 @@ export function Library() {
                           <span>{s.title}</span>
                           <span className="key-chip">{s.defaultKey}</span>
                         </div>
-                        <div className="row-sub">{s.artist}</div>
+                        {s.artist && <div className="row-sub">{s.artist}</div>}
                       </div>
                       {!selectMode && (
                         <span
@@ -204,7 +205,7 @@ export function Library() {
         <Sheet onClose={() => setSheetFor(null)}>
           <div className="sheet-title">{sheetFor.title}</div>
           <div className="sheet-sub">
-            {sheetFor.artist} · {sheetFor.defaultKey}
+            {[sheetFor.artist, sheetFor.defaultKey].filter(Boolean).join(" · ")}
           </div>
           <div className="sheet-group">
           <button className="sheet-row" onClick={() => { openSong(sheetFor.id); setSheetFor(null); }}>
@@ -413,7 +414,7 @@ export function Library() {
           <KeyChips
             active={keySheetFor.defaultKey}
             onSelect={(k) => {
-              dispatch({ type: "UPDATE_SONG", song: { ...keySheetFor, defaultKey: k } });
+              dispatch({ type: "UPDATE_SONG", song: { ...keySheetFor, defaultKey: k, chordpro: writeChartMeta(keySheetFor.chordpro, "key", k) } });
               setKeySheetFor(null);
             }}
           />

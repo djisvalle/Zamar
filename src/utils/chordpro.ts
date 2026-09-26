@@ -8,6 +8,8 @@ export { keySemitoneShift, noteIndex, type KeyChange } from "./keys";
  * unchanged; findChordProIssues reports those in the editor so they don't
  * get skipped silently. */
 export function transposeChord(chord: string, change: KeyChange): string {
+  // A passing move written as one symbol ("Bb/F-F") moves each chord.
+  if (chord.includes("-")) return chord.split("-").map((part) => transposeChord(part, change)).join("-");
   const m = chord.match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/);
   if (!m) return chord;
   const root = transposeNote(m[1], change);
@@ -46,19 +48,45 @@ const CHORD_TOKEN_RE = /^[A-G][#b]?(?:maj|min|dim|aug|sus|add|m)?\d{0,2}(?:[#b]\
 const SECTION_LABEL_RE =
   /^(verse|chorus|pre-?chorus|bridge|tag|intro|outro|interlude|refrain|ending|coda|vamp|instrumental|breakdown)\s*\d*:?\s*$/i;
 
+const BAR_RE = /^\|+$/;
+
+/** One token of a chord line: a chord symbol, chords joined by "-" for a
+ * passing move ("Bb/F-F"), or a bar line ("|"). */
+function isChordToken(tok: string): boolean {
+  return BAR_RE.test(tok) || tok.split("-").every((part) => CHORD_TOKEN_RE.test(part));
+}
+
 /** A "chords over lyrics" chord line: every whitespace-separated token
- * looks like a chord symbol (e.g. "G       D       Em"), as opposed to a
- * bracketed ChordPro line or a plain lyric line. */
+ * looks like a chord symbol (e.g. "G       D       Em", or "C  |  F" with a
+ * bar line), as opposed to a bracketed ChordPro line or a plain lyric line. */
 export function isChordLine(line: string): boolean {
   const trimmed = line.trim();
-  if (!trimmed) return false;
-  return trimmed.split(/\s+/).every((tok) => CHORD_TOKEN_RE.test(tok));
+  if (!trimmed || BAR_RE.test(trimmed)) return false;
+  return trimmed.split(/\s+/).every(isChordToken);
 }
 
 /** A standalone structural keyword line — "Verse", "Verse 1", "Chorus",
  * "Tag", etc. — the plain-text equivalent of a ChordPro section directive. */
 function isSectionLabel(line: string): boolean {
   return SECTION_LABEL_RE.test(line.trim());
+}
+
+const COMMENT_DIRECTIVE_RE = /^\{\s*(?:comment|c|comment_italic|ci|comment_box|cb|highlight)\s*:\s*(.*?)\s*\}$/i;
+const START_SECTION_RE = /^\{\s*(?:start_of_(verse|chorus|bridge|tab|grid)|(sov|soc|sob|sot|sog))\s*(?::\s*(.*?))?\s*\}$/i;
+const SECTION_SHORTHAND: Record<string, string> = { sov: "verse", soc: "chorus", sob: "bridge", sot: "tab", sog: "grid" };
+
+/** The section label a ChordPro directive stands for, or null for directives
+ * that aren't one (metadata, `{end_of_chorus}` and the like). A comment
+ * (`{comment: Verse 1}`, `{c: ...}`) shows its text; `{start_of_chorus}` /
+ * `{soc}` shows its own label if it has one, else the section's name. */
+function directiveSectionLabel(directive: string): string | null {
+  const comment = directive.match(COMMENT_DIRECTIVE_RE);
+  if (comment) return comment[1] || null;
+  const start = directive.match(START_SECTION_RE);
+  if (!start) return null;
+  if (start[3]) return start[3];
+  const kind = (start[1] ?? SECTION_SHORTHAND[start[2].toLowerCase()]).toLowerCase();
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 /** Merges a standalone chord line with the lyric line beneath it (or an
@@ -96,6 +124,8 @@ export function extractChordLineChords(text: string): string[] {
     line
       .trim()
       .split(/\s+/)
+      .filter((tok) => !BAR_RE.test(tok))
+      .flatMap((tok) => tok.split("-"))
       .forEach((tok) => {
         if (!seen.includes(tok)) seen.push(tok);
       });
@@ -142,7 +172,10 @@ export function parseChordPro(text: string, change: KeyChange | null = null): Ch
       continue;
     }
     if (DIRECTIVE_RE.test(line.trim())) {
-      result.push({ lyric: line, chords: [], isDirective: true, isSection: false });
+      const label = directiveSectionLabel(line.trim());
+      result.push(
+        label ? { lyric: label, chords: [], isDirective: false, isSection: true } : { lyric: line, chords: [], isDirective: true, isSection: false }
+      );
       i++;
       continue;
     }
@@ -152,7 +185,7 @@ export function parseChordPro(text: string, change: KeyChange | null = null): Ch
       continue;
     }
     if (isSectionLabel(line)) {
-      result.push({ lyric: line.trim(), chords: [], isDirective: false, isSection: true });
+      result.push({ lyric: line.trim().replace(/\s*:$/, ""), chords: [], isDirective: false, isSection: true });
       i++;
       continue;
     }
@@ -228,4 +261,41 @@ export function findChordProIssues(text: string): ChordProIssue[] {
     }
   });
   return issues;
+}
+
+/** Song fields a chart can carry as ChordPro metadata directives. */
+export type ChartMetaField = "title" | "artist" | "key" | "tempo" | "timeSig";
+
+const META_DIRECTIVE_NAMES: Record<ChartMetaField, string[]> = {
+  title: ["title", "t"],
+  artist: ["artist"],
+  key: ["key"],
+  tempo: ["tempo"],
+  timeSig: ["time"],
+};
+
+function metaDirectiveRe(field: ChartMetaField): RegExp {
+  return new RegExp(`^([ \\t]*\\{[ \\t]*(?:${META_DIRECTIVE_NAMES[field].join("|")})[ \\t]*:)([^}\\n]*)(\\}[ \\t]*)$`, "im");
+}
+
+/** The metadata directives (`{title: ...}`, `{artist: ...}`, `{key: ...}`,
+ * `{tempo: ...}`, `{time: ...}`) a chart carries, first occurrence of each.
+ * A directive with an empty value is left out, so inserting a bare
+ * `{title: }` doesn't blank the song's title. */
+export function readChartMeta(text: string): Partial<Record<ChartMetaField, string>> {
+  const meta: Partial<Record<ChartMetaField, string>> = {};
+  (Object.keys(META_DIRECTIVE_NAMES) as ChartMetaField[]).forEach((field) => {
+    const m = text.match(metaDirectiveRe(field));
+    const value = m?.[2].trim();
+    if (!value) return;
+    meta[field] = field === "tempo" ? value.match(/\d+/)?.[0] ?? value : value;
+  });
+  return meta;
+}
+
+/** Rewrites the value of a metadata directive the chart already has, so an
+ * edit to the song's field and the chart's header stay the same. A chart
+ * without that directive is returned unchanged; one isn't added. */
+export function writeChartMeta(text: string, field: ChartMetaField, value: string): string {
+  return text.replace(metaDirectiveRe(field), (_all, open: string, _old: string, close: string) => `${open} ${value.trim()}${close}`);
 }

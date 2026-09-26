@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useStore } from "../../state/store";
 import { Sheet, SheetNav } from "../../components/Overlays";
+import { readChartMeta } from "../../utils/chordpro";
+import { canonicalKey } from "../../utils/keys";
 
 export function QuickEditSheet({ songId, onClose }: { songId: string; onClose: () => void }) {
   const { state, dispatch } = useStore();
@@ -9,7 +11,16 @@ export function QuickEditSheet({ songId, onClose }: { songId: string; onClose: (
   const [expanded, setExpanded] = useState(false);
 
   const save = () => {
-    dispatch({ type: "UPDATE_SONG", song: { ...song, chordpro: text } });
+    // Metadata directives in the chart update the song's own fields, the
+    // same as in Add/Edit Song.
+    const meta = readChartMeta(text);
+    const next = { ...song, chordpro: text };
+    if (meta.title) next.title = meta.title;
+    if (meta.artist) next.artist = meta.artist;
+    if (meta.key && /^[A-G](#|b)?$/.test(meta.key)) next.defaultKey = canonicalKey(meta.key);
+    if (meta.tempo && Number(meta.tempo)) next.tempo = Number(meta.tempo);
+    if (meta.timeSig) next.timeSig = meta.timeSig;
+    dispatch({ type: "UPDATE_SONG", song: next });
     onClose();
   };
 

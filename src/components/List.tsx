@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { Icon } from "./Icon";
 
 /** The 34pt title at the top of a root screen's scroll area. Pair it with
@@ -12,13 +12,17 @@ export function LargeTitle({ children }: { children: ReactNode }) {
  * optional footer. */
 export function Section({
   header,
+  headerLeading,
   headerAccessory,
   footer,
   footerError,
   tight,
+  rootProps,
   children,
 }: {
   header?: ReactNode;
+  /** A small control before the header text (e.g. a reorder grip). */
+  headerLeading?: ReactNode;
   /** A small control at the trailing end of the header (e.g. a "more" button). */
   headerAccessory?: ReactNode;
   footer?: ReactNode;
@@ -26,13 +30,18 @@ export function Section({
   footerError?: boolean;
   /** Less space above, for a section that follows a title or search field. */
   tight?: boolean;
+  /** Extra attributes for the section element (e.g. drag-reorder props);
+   * its className is added to the section's own. */
+  rootProps?: HTMLAttributes<HTMLElement> & Record<string, unknown>;
   children: ReactNode;
 }) {
+  const { className: extraClass, ...rest } = rootProps ?? {};
   return (
-    <section className={"list-section" + (tight ? " list-section--tight" : "")}>
-      {(header || headerAccessory) && (
+    <section {...rest} className={"list-section" + (tight ? " list-section--tight" : "") + (extraClass ? " " + extraClass : "")}>
+      {(header || headerLeading || headerAccessory) && (
         <div className="list-section-header">
-          <span>{header}</span>
+          {headerLeading}
+          <span className="list-section-title">{header}</span>
           {headerAccessory}
         </div>
       )}

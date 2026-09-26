@@ -17,7 +17,9 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const nav = useNavigator();
   const setlist = state.setlists.find((sl) => sl.id === setlistId);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
+  // Which section "Add songs" targets; undefined means the set's last section.
+  const [addFor, setAddFor] = useState<{ sectionId?: string } | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(Boolean((nav.top.params as any)?.openDetails));
   // openDetails is a one-shot request from "New setlist": drop it from the
   // frame so coming back to this screen (from Export, or another tab)
@@ -36,6 +38,10 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
   const [confirmDeleteSet, setConfirmDeleteSet] = useState(false);
   const drag = useDragReorder((itemId, to) =>
     dispatch({ type: "MOVE_ITEM", setlistId, itemId, toSectionId: to.group, toIndex: to.index })
+  );
+  const sectionDrag = useDragReorder(
+    (sectionId, to) => dispatch({ type: "MOVE_SECTION", setlistId, sectionId, toIndex: to.index }),
+    "section-drag"
   );
 
   if (!setlist) {
@@ -56,6 +62,12 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
     dispatch({ type: "STAGE_LOAD", songId: songEntries[0].song!.id, setlistId: setlist.id, setlistIndex: 0 });
     nav.resetTab("live-stage");
   };
+  // This set is the one loaded on Live Stage: go back to where it left off
+  // rather than starting over from the first song.
+  const isLive = state.stage.setlistId === setlist.id;
+  const resumeSet = () => nav.resetTab("live-stage");
+  const moveSection = (sectionId: string, toIndex: number) =>
+    dispatch({ type: "MOVE_SECTION", setlistId: setlist.id, sectionId, toIndex });
 
   let songSlotIndex = -1;
 
@@ -81,6 +93,18 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
             key={section.id}
             tight={si === 0}
             header={section.label}
+            rootProps={sectionDrag.rowProps(section.id, "sections", si, setlist.sections.length)}
+            headerLeading={
+              setlist.sections.length > 1 && (
+                <span
+                  className="list-section-grip"
+                  {...sectionDrag.handleProps(section.id)}
+                  aria-label={`Reorder ${section.label}`}
+                >
+                  <Icon name="grip" size={18} strokeWidth={1.8} />
+                </span>
+              )
+            }
             headerAccessory={
               <button onClick={() => setSectionSheetFor(section)} aria-label={`${section.label} options`}>
                 <Icon name="more" size={18} strokeWidth={2} />
@@ -88,9 +112,16 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
             }
           >
             {section.items.length === 0 && (
-              <div {...drag.emptyGroupProps(section.id)} className={"sheet-row " + (drag.emptyGroupProps(section.id).className ?? "")} style={{ fontSize: 15, color: "var(--mut)" }}>
-                No songs in this section yet.
-              </div>
+              <button
+                {...drag.emptyGroupProps(section.id)}
+                className={"sheet-row action sheet-row--lead " + (drag.emptyGroupProps(section.id).className ?? "")}
+                onClick={() => setAddFor({ sectionId: section.id })}
+              >
+                <span className="row-lead">
+                  <Icon name="plus" size={18} strokeWidth={2.2} />
+                </span>
+                <span>Add songs here</span>
+              </button>
             )}
             {section.items.map((item, i) => {
               const entry = flat.find((e) => e.item.id === item.id)!;
@@ -123,7 +154,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
                       <span>{song.title}</span>
                     </div>
                     <div className="row-sub">
-                      {song.artist} · {song.tempo} BPM · {song.timeSig}
+                      {[song.artist, `${song.tempo || "N/A"} BPM`, song.timeSig].filter(Boolean).join(" · ")}
                     </div>
                     {item.note && (
                       <div className="row-note">
@@ -138,35 +169,78 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
             })}
           </Section>
         ))}
-
-        <Section>
-          <button className="sheet-row action sheet-row--lead" onClick={() => setAddOpen(true)}>
-            <span className="row-lead">
-              <Icon name="plus" size={18} strokeWidth={2.2} />
-            </span>
-            <span>Add song or item</span>
-          </button>
-          <button className="sheet-row action sheet-row--lead" onClick={() => setAddSectionOpen(true)}>
-            <span className="row-lead">
-              <Icon name="plus" size={18} strokeWidth={2.2} />
-            </span>
-            <span>Add section</span>
-          </button>
-        </Section>
       </div>
 
+      {/* Adding lives in the toolbar, not at the end of the list, so it stays
+          in reach however long the set gets. */}
       <div className="toolbar">
-        <button className="btn btn-primary" style={{ flex: 1 }} onClick={startSong} disabled={songEntries.length === 0}>
+        <button className="btn" style={{ width: 44, padding: 0 }} onClick={() => setAddMenuOpen(true)} aria-label="Add songs or a section">
+          <Icon name="plus" size={18} strokeWidth={2.2} />
+        </button>
+        <button
+          className="btn btn-primary"
+          style={{ flex: 1 }}
+          onClick={isLive ? resumeSet : startSong}
+          disabled={songEntries.length === 0}
+        >
           <Icon name="play" size={14} />
-          Start Set
+          {isLive ? "Resume Set" : "Start Set"}
         </button>
         <button className="btn" style={{ width: 44, padding: 0 }} onClick={() => nav.push("export", { setlistId })} aria-label="Export setlist">
           <Icon name="share" size={18} strokeWidth={2} />
         </button>
       </div>
 
+      {addMenuOpen && (
+        <Sheet onClose={() => setAddMenuOpen(false)}>
+          <div className="sheet-group">
+          {setlist.sections.length > 0 && (
+            <button
+              className="sheet-row"
+              onClick={() => {
+                setAddMenuOpen(false);
+                setAddFor({});
+              }}
+            >
+              Add songs
+            </button>
+          )}
+          <button
+            className="sheet-row"
+            onClick={() => {
+              setAddMenuOpen(false);
+              setAddSectionOpen(true);
+            }}
+          >
+            Add section
+          </button>
+          </div>
+        </Sheet>
+      )}
       {menuOpen && (
         <Sheet onClose={() => setMenuOpen(false)}>
+          {isLive && (
+            <div className="sheet-group">
+            <button
+              className="sheet-row"
+              onClick={() => {
+                setMenuOpen(false);
+                startSong();
+              }}
+            >
+              Restart set from the top
+            </button>
+            <button
+              className="sheet-row destructive"
+              onClick={() => {
+                setMenuOpen(false);
+                dispatch({ type: "STAGE_EXIT" });
+              }}
+            >
+              Stop set
+            </button>
+            </div>
+          )}
           <div className="sheet-group">
           <button
             className="sheet-row"
@@ -200,7 +274,7 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
           </div>
         </Sheet>
       )}
-      {addOpen && <AddToSetSheet setlist={setlist} onClose={() => setAddOpen(false)} />}
+      {addFor && <AddToSetSheet setlist={setlist} sectionId={addFor.sectionId} onClose={() => setAddFor(null)} />}
       {detailsOpen && <SetDetailsSheet setlist={setlist} onClose={() => setDetailsOpen(false)} />}
       {slot && (
         <SlotDetailSheet
@@ -215,6 +289,46 @@ export function SetlistDetail({ setlistId }: { setlistId: string }) {
       {sectionSheetFor && (
         <Sheet onClose={() => setSectionSheetFor(null)}>
           <div className="sheet-title">{sectionSheetFor.label}</div>
+          <div className="sheet-group">
+          <button
+            className="sheet-row"
+            onClick={() => {
+              const sec = sectionSheetFor;
+              setSectionSheetFor(null);
+              setAddFor({ sectionId: sec.id });
+            }}
+          >
+            <span>Add songs to this section</span>
+          </button>
+          </div>
+          {setlist.sections.length > 1 && (
+            <div className="sheet-group">
+            {setlist.sections[0].id !== sectionSheetFor.id && (
+              <button
+                className="sheet-row"
+                onClick={() => {
+                  const sec = sectionSheetFor;
+                  setSectionSheetFor(null);
+                  moveSection(sec.id, setlist.sections.findIndex((x) => x.id === sec.id) - 1);
+                }}
+              >
+                <span>Move up</span>
+              </button>
+            )}
+            {setlist.sections[setlist.sections.length - 1].id !== sectionSheetFor.id && (
+              <button
+                className="sheet-row"
+                onClick={() => {
+                  const sec = sectionSheetFor;
+                  setSectionSheetFor(null);
+                  moveSection(sec.id, setlist.sections.findIndex((x) => x.id === sec.id) + 1);
+                }}
+              >
+                <span>Move down</span>
+              </button>
+            )}
+            </div>
+          )}
           <div className="sheet-group">
           <button
             className="sheet-row"

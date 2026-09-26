@@ -130,6 +130,10 @@ function useEngravingZoom(onCommit: (zoom: number, focus: ZoomFocus | null) => v
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frame = useRef<number | null>(null);
   const lastTap = useRef(0);
+  // Whether the gesture now in progress has become a two-finger pinch.
+  // Only a pinch is kept from the stage: a one-finger horizontal drag has to
+  // reach Live Stage's song-to-song swipe, which listens on an ancestor.
+  const pinched = useRef(false);
 
   const clampZoom = (z: number) => Math.min(MAX_ENGRAVING_ZOOM, Math.max(MIN_ENGRAVING_ZOOM, z));
 
@@ -188,13 +192,13 @@ function useEngravingZoom(onCommit: (zoom: number, focus: ZoomFocus | null) => v
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    e.stopPropagation();
     // A primary pointer starts a brand-new touch sequence, so anything still
     // tracked is a finger whose up/cancel never arrived. Left in place it
     // would pair with the next single finger as a phantom pinch.
     if (e.isPrimary) {
       pointers.current.clear();
       pinchStart.current = null;
+      pinched.current = false;
     }
     try {
       // Captured on the container, which survives re-renders; capturing on
@@ -207,6 +211,7 @@ function useEngravingZoom(onCommit: (zoom: number, focus: ZoomFocus | null) => v
     }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2) {
+      pinched.current = true;
       const [a, b] = [...pointers.current.values()];
       pinchStart.current = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
       beginPreview((a.x + b.x) / 2, (a.y + b.y) / 2);
@@ -223,7 +228,7 @@ function useEngravingZoom(onCommit: (zoom: number, focus: ZoomFocus | null) => v
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!pointers.current.has(e.pointerId)) return;
-    e.stopPropagation();
+    if (pinched.current) e.stopPropagation();
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2 && pinchStart.current) {
       const [a, b] = [...pointers.current.values()];
@@ -234,8 +239,10 @@ function useEngravingZoom(onCommit: (zoom: number, focus: ZoomFocus | null) => v
   };
 
   const endPointer = (e: React.PointerEvent) => {
-    e.stopPropagation();
+    // A pinch's fingers lifting mustn't read as a swipe to the next song.
+    if (pinched.current) e.stopPropagation();
     pointers.current.delete(e.pointerId);
+    if (pointers.current.size === 0) pinched.current = false;
     // The pinch is over as soon as it's no longer two fingers — commit the
     // one real re-layout now rather than waiting for the last finger.
     if (pinchStart.current && pointers.current.size < 2) {
@@ -275,6 +282,7 @@ function useEngravingZoom(onCommit: (zoom: number, focus: ZoomFocus | null) => v
     if (!disableZoom) return;
     pointers.current.clear();
     pinchStart.current = null;
+    pinched.current = false;
     focus.current = null;
     if (wheelTimer.current) clearTimeout(wheelTimer.current);
     wheelTimer.current = null;

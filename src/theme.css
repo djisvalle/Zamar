@@ -105,14 +105,12 @@ body {
 }
 #root {
   flex: 1;
+  /* Without this, #root (a flex item of body) grows to its widest content,
+     e.g. a scrolling chip row's full length, so on native the whole screen
+     runs past the right edge instead of that row scrolling. */
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  /* A flex item's default min-width is its content's min-content width, and
-     a nowrap chip row's min-content is every chip side by side (its own
-     overflow-x: auto doesn't change that). Without this, a long row on Add/
-     Edit Song widened the whole app past the screen on a real device, pushing
-     Save off to the right and making the page scroll sideways. */
-  min-width: 0;
 }
 button {
   font: inherit;
@@ -491,17 +489,31 @@ button {
 .device.has-tab-bar {
   --tab-clear: calc(var(--tab-bottom) + var(--tab-h) + 8px);
 }
-.device.has-tab-bar .screen {
-  padding-bottom: var(--tab-clear);
+/* What every screen keeps clear at the bottom: the bottom tab bar while it
+   shows, otherwise the bottom safe area (home indicator, or Android's
+   navigation bar, which draws over the web view edge-to-edge). Without the
+   fallback, modal screens and every screen on a tablet (tabs on top) ran
+   under Android's navigation buttons. */
+.device {
+  --screen-bottom: 0px;
 }
-.device.has-tab-bar .scroll-under-tabs {
-  margin-bottom: calc(-1 * var(--tab-clear));
+.device--native {
+  --screen-bottom: env(safe-area-inset-bottom, 0px);
 }
-.device.has-tab-bar .scroll-under-tabs:not(.no-tab-spacer)::after {
+.device.has-tab-bar {
+  --screen-bottom: var(--tab-clear);
+}
+.screen {
+  padding-bottom: var(--screen-bottom);
+}
+.scroll-under-tabs {
+  margin-bottom: calc(-1 * var(--screen-bottom));
+}
+.scroll-under-tabs:not(.no-tab-spacer)::after {
   content: "";
   display: block;
   flex: none;
-  height: var(--tab-clear);
+  height: var(--screen-bottom);
 }
 .tab-bar {
   position: absolute;
@@ -640,6 +652,20 @@ button {
   justify-content: center;
   color: var(--acc-deep);
   text-transform: none;
+}
+.list-section-title {
+  flex: 1;
+  min-width: 0;
+}
+/* Reorder grip before a section's header text (setlist sections). */
+.list-section-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin: -6px -4px -6px -8px;
+  color: var(--tertiary);
 }
 .list-section-footer {
   padding: 7px 16px 0;
@@ -954,6 +980,40 @@ button {
 }
 .toolbar-btn.destructive {
   color: var(--danger-fg);
+}
+
+/* ---- editor keys: undo/redo and ◀ ▶ caret keys under the chart editor
+   (AddEditSong.tsx, CaretKeys.tsx) ---- */
+.editor-keys {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.editor-key-group {
+  display: flex;
+  gap: 8px;
+}
+.editor-key {
+  width: 56px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: var(--tint);
+  color: var(--acc-deep);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.editor-key:active {
+  background: var(--fill);
+}
+.editor-key:disabled {
+  opacity: 0.35;
 }
 
 /* ---- chips ---- */
@@ -1585,35 +1645,69 @@ button.sheet-row:active:not(:disabled) {
 }
 
 /* ---- chord chart ---- */
-.chord-line {
+/* Chord charts (ChordChart.tsx). Font sizes are set inline from the text
+   size setting; line heights here keep lines single-spaced. */
+.chart-line {
+  line-height: 1.2;
+}
+.chart-line--chorded {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.chord-word {
+  display: flex;
+  align-items: flex-end;
+}
+.chord-seg {
+  display: flex;
+  flex-direction: column;
+}
+.chord-seg-chords {
   font-family: ui-monospace, monospace;
-  font-size: 14px;
   font-weight: 700;
   white-space: pre;
-  line-height: 1.9;
+  line-height: 1.2;
+  /* Room for the chip's own side padding plus a gap, so the next chord
+     can't run into this one. */
+  padding-right: 1.1em;
+  margin-bottom: 2px;
+}
+.chord-seg-chords:empty {
+  display: none;
+}
+.chord-seg-text {
+  white-space: pre;
+}
+.chart-line--chords-only .chord-seg-text {
+  height: 0;
+  overflow: hidden;
 }
 .chord-chip {
   background: var(--tint);
   color: var(--acc-deep);
   border-radius: 5px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 1px 6px;
   margin: 0 -6px;
   display: inline-block;
 }
-.lyric-line {
-  font-size: 17px;
-  line-height: 1.45;
+.chord-chip + .chord-chip {
+  margin-left: 16px;
 }
 .chord-section-label {
-  font-family: var(--font-heading);
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  line-height: 1.2;
   color: var(--acc-deep);
-  margin-top: 12px;
 }
-.chord-section-label:first-child {
+/* A gap before each section label and each stanza (a blank line in the
+   chart), scaled with the text size. Only one gap when both apply. */
+.chord-section-label,
+.chart-stanza-start {
+  /* One empty line (1.2em, the chart line height) on top of the base gap. */
+  margin-top: 1.95em;
+}
+.chord-chart > :first-child {
   margin-top: 0;
 }
 
